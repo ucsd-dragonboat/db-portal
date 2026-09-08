@@ -10,6 +10,7 @@ import MonthView from "./month-view";
 import WeekView from "./week-view";
 import AgendaView from "./agenda-view";
 import MiniMonth from "./mini-month";
+import FeedDialog from "./feed-dialog";
 
 export type CalEvent = Event & { rsvps: { user_id: string; status: string }[]; group: { name: string } | null };
 
@@ -29,7 +30,7 @@ export const ATTACHMENTS: { key: Attachment; label: string; icon: IconName; colo
 const emptySub = () => () => {};
 const VIEWS: CalView[] = ["week", "month", "agenda"];
 
-export default function CalendarShell({ events, attach, userId, isAdmin = false, view, date, today: teamToday }: {
+export default function CalendarShell({ events, attach, userId, isAdmin = false, view, date, today: teamToday, feedToken = null }: {
   events: CalEvent[];
   attach: AttachMap;
   userId: string;
@@ -37,6 +38,7 @@ export default function CalendarShell({ events, attach, userId, isAdmin = false,
   view: CalView;
   date: string;
   today: string; // today in TEAM_TZ (SSR-stable)
+  feedToken?: string | null;
 }) {
   // Two-pass timezone (same trick as <LocalTime>): SSR/team tz first, viewer tz after mount.
   const mounted = useSyncExternalStore(emptySub, () => true, () => false);
@@ -106,9 +108,7 @@ export default function CalendarShell({ events, attach, userId, isAdmin = false,
           </ul>
           <p className="mt-1 px-2 text-[11px]" style={{ color: "var(--g-grey-600)" }}>Filled icon = only events that have one.</p>
         </div>
-        <Link href="/profile#calendar-feed" className="btn-text -ml-3 text-sm" style={{ color: "var(--g-blue)" }}>
-          <Icon name="calendar" /> Calendar feed
-        </Link>
+        <FeedDialog token={feedToken} />
       </aside>
     </div>
   );

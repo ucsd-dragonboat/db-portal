@@ -1,4 +1,5 @@
 import { requireOrg } from "@/lib/session";
+import { getOrCreateCalendarToken } from "@/lib/calendar-token";
 import { createClient } from "@/lib/supabase/server";
 import { TEAM_TZ } from "@/lib/format";
 import { addDays, addMonths, dayKey, firstOfMonth } from "@/lib/calendar-dates";
@@ -43,5 +44,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   for (const r of lus ?? []) if (r.event_id && attach[r.event_id]) attach[r.event_id].lineup = true;
   for (const r of cps ?? []) if (attach[r.event_id]) attach[r.event_id].carpool = true;
 
-  return <CalendarShell events={(events ?? []) as CalEvent[]} attach={attach} userId={userId} isAdmin={isAdmin} view={view} date={date} today={today} />;
+  let feedToken: string | null = null;
+  try { feedToken = await getOrCreateCalendarToken(userId); } catch { /* migration 0020 not run yet */ }
+
+  return <CalendarShell events={(events ?? []) as CalEvent[]} attach={attach} userId={userId} isAdmin={isAdmin} view={view} date={date} today={today} feedToken={feedToken} />;
 }
