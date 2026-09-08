@@ -16,7 +16,7 @@ const KIND_LABEL: Record<Kind, string> = { practice: "Practice", race: "Race", s
  * "Add days" widget: pick dates, type start/end times, one event is created per date.
  * Used standalone on Admin → Events and inline in the form editor (onCreated links them to the form).
  */
-export default function EventBatchForm({ onCreated, compact = false, groupId = null }: { onCreated?: (ids: string[], groupId: string | null) => void; compact?: boolean; groupId?: string | null }) {
+export default function EventBatchForm({ onCreated, compact = false, groupId = null, folderId = null }: { onCreated?: (ids: string[], groupId: string | null) => void; compact?: boolean; groupId?: string | null; folderId?: string | null }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>("practice");
   const [title, setTitle] = useState("");
@@ -64,7 +64,7 @@ export default function EventBatchForm({ onCreated, compact = false, groupId = n
     const items = dates.map((d) => ({ title: titleFor(d), starts_at: combineLocal(d, start)!, ends_at: end ? combineLocal(d, end) : null, rsvp_deadline: dl }));
     run(async () => {
       const r = await createEventsBatch({ kind, items, location_name: loc.name.trim() || null, location_lat: loc.lat ? Number(loc.lat) : null, location_lon: loc.lon ? Number(loc.lon) : null, notes: notes.trim() || null,
-        groupId, groupName: groupId ? null : (groupName.trim() || defaultGroupName()) });
+        groupId, groupName: groupId ? null : (groupName.trim() || defaultGroupName()), folderId });
       if (r.error) { setError(r.error); return; }
       onCreated?.(r.ids ?? [], r.groupId ?? null);
       setDates([]); setNotes("");

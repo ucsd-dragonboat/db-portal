@@ -130,13 +130,15 @@ export async function createEventsBatch(input: {
   groupName?: string | null;
   /** Or attach the new days to an existing group. */
   groupId?: string | null;
+  /** Folder for a newly created group (Drive-style organization). */
+  folderId?: string | null;
 }): Promise<{ ids?: string[]; groupId?: string | null; error?: string }> {
   const { org, userId } = await requireAdmin();
   if (!input.items.length) return { error: "Add at least one date" };
   const supabase = await createClient();
   let groupId: string | null = input.groupId ?? null;
   if (!groupId && input.groupName) {
-    const { data: g, error: ge } = await supabase.from("event_groups").insert({ org_id: org.id, name: input.groupName.trim(), kind: input.kind, created_by: userId }).select("id").single();
+    const { data: g, error: ge } = await supabase.from("event_groups").insert({ org_id: org.id, name: input.groupName.trim(), kind: input.kind, folder_id: input.folderId ?? null, created_by: userId }).select("id").single();
     if (ge) return { error: ge.message };
     groupId = g.id;
   }
@@ -168,6 +170,41 @@ export async function updateEventDay(input: {
   revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events"); revalidatePath(`/events/${input.id}`);
   if (ev?.group_id) revalidatePath(`/groups/${ev.group_id}`);
   return { ok: true };
+}
+
+// ---------- Drive-style event folders ----------
+
+export async function createFolder(fd: FormData) {
+  const { org } = await requireAdmin();
+  const supabase = await createClient();
+  const name = String(fd.get("name") ?? "").trim();
+  if (name) await supabase.from("event_folders").insert({ org_id: org.id, name });
+  revalidatePath("/admin/events");
+}
+
+export async function renameFolder(fd: FormData) {
+  const { org } = await requireAdmin();
+  const supabase = await createClient();
+  const name = String(fd.get("name") ?? "").trim();
+  if (name) await supabase.from("event_folders").update({ name }).eq("id", String(fd.get("id"))).eq("org_id", org.id);
+  revalidatePath("/admin/events");
+}
+
+/** Deleting a folder keeps its events — their folder_id resets via the FK. */
+export async function deleteFolder(fd: FormData) {
+  const { org } = await requireAdmin();
+  const supabase = await createClient();
+  await supabase.from("event_folders").delete().eq("id", String(fd.get("id"))).eq("org_id", org.id);
+  revalidatePath("/admin/events");
+  redirect("/admin/events");
+}
+
+export async function moveGroupToFolder(fd: FormData) {
+  const { org } = await requireAdmin();
+  const supabase = await createClient();
+  const folderId = String(fd.get("folder_id") ?? "");
+  await supabase.from("event_groups").update({ folder_id: folderId || null }).eq("id", String(fd.get("group_id"))).eq("org_id", org.id);
+  revalidatePath("/admin/events");
 }
 
 export async function renameGroup(fd: FormData) {
