@@ -28,5 +28,20 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     .lte("starts_at", `${fetchEnd}T23:59:59Z`)
     .order("starts_at");
 
-  return <CalendarShell events={(events ?? []) as CalEvent[]} userId={userId} isAdmin={isAdmin} view={view} date={date} today={today} />;
+  // What each event has attached — RLS scopes visibility (members: published only).
+  const ids = (events ?? []).map((e) => e.id);
+  const [{ data: fes }, { data: lus }, { data: cps }] = ids.length
+    ? await Promise.all([
+        supabase.from("form_events").select("event_id").in("event_id", ids),
+        supabase.from("lineups").select("event_id").in("event_id", ids),
+        supabase.from("carpools").select("event_id").in("event_id", ids),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }];
+  const attach: Record<string, { form: boolean; lineup: boolean; carpool: boolean }> = {};
+  for (const id of ids) attach[id] = { form: false, lineup: false, carpool: false };
+  for (const r of fes ?? []) if (attach[r.event_id]) attach[r.event_id].form = true;
+  for (const r of lus ?? []) if (r.event_id && attach[r.event_id]) attach[r.event_id].lineup = true;
+  for (const r of cps ?? []) if (attach[r.event_id]) attach[r.event_id].carpool = true;
+
+  return <CalendarShell events={(events ?? []) as CalEvent[]} attach={attach} userId={userId} isAdmin={isAdmin} view={view} date={date} today={today} />;
 }
