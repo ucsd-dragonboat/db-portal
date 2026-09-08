@@ -108,6 +108,13 @@ export type EventFolder = {
   created_at: string;
 };
 
+/** Secret for a member's personal iCal feed — service-role-only table. */
+export type UserCalendarToken = {
+  user_id: string;
+  token: string;
+  created_at: string;
+};
+
 export type Event = {
   id: string;
   org_id: string;
@@ -259,6 +266,14 @@ export type Database = {
         Update: Partial<PickupLocation>;
         Relationships: [
           { foreignKeyName: "pickup_locations_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
+        ];
+      };
+      user_calendar_tokens: {
+        Row: Row<UserCalendarToken>;
+        Insert: Insert<UserCalendarToken, "created_at">;
+        Update: Partial<UserCalendarToken>;
+        Relationships: [
+          { foreignKeyName: "user_calendar_tokens_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ];
       };
       event_folders: {
