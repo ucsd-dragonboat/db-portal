@@ -96,7 +96,15 @@ export type EventGroup = {
   org_id: string;
   name: string;
   kind: EventKind;
+  folder_id: string | null; // Drive-style folder in the admin events tab
   created_by: string | null;
+  created_at: string;
+};
+
+export type EventFolder = {
+  id: string;
+  org_id: string;
+  name: string;
   created_at: string;
 };
 
@@ -253,9 +261,17 @@ export type Database = {
           { foreignKeyName: "pickup_locations_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
         ];
       };
+      event_folders: {
+        Row: Row<EventFolder>;
+        Insert: Insert<EventFolder, "id" | "created_at">;
+        Update: Partial<EventFolder>;
+        Relationships: [
+          { foreignKeyName: "event_folders_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
+        ];
+      };
       event_groups: {
         Row: Row<EventGroup>;
-        Insert: Insert<EventGroup, "id" | "kind" | "created_by" | "created_at">;
+        Insert: Insert<EventGroup, "id" | "kind" | "folder_id" | "created_by" | "created_at">;
         Update: Partial<EventGroup>;
         Relationships: [
           { foreignKeyName: "event_groups_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },

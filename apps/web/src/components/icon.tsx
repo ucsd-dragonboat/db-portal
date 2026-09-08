@@ -3,7 +3,7 @@ import {
   faArrowDown, faArrowUp, faBars, faCakeCandles, faCalendarDays, faCar, faChair, faCheck, faChevronRight,
   faCircleCheck, faCircleExclamation, faCircleQuestion, faCircleXmark, faClipboardList, faClone, faCrown,
   faEllipsisVertical,
-  faBullhorn, faDragon, faEye, faFileLines, faFlagCheckered, faGear, faHand, faHouse, faLink, faLocationDot,
+  faBullhorn, faDragon, faEye, faFileLines, faFlagCheckered, faFolder, faGear, faHand, faHouse, faLink, faLocationDot,
   faMagnifyingGlass, faMoon, faPen, faPhone, faPlus, faSailboat, faSun, faTableCells, faThumbtack, faTrashCan,
   faTriangleExclamation, faUser, faUsers, faWeightScale, faXmark,
 } from "@fortawesome/free-solid-svg-icons";
@@ -25,6 +25,7 @@ export const ICONS = {
   due: faCircleExclamation,   // ‼ due
   eye: faEye,                 // 👁 preview
   file: faFileLines,          // 🧾
+  folder: faFolder,           // 📁 Drive-style event folders
   form: faClipboardList,      // 📝 forms
   gear: faGear,               // ⚙️
   hand: faHand,               // 🙋 needs a ride
