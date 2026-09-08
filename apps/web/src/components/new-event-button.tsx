@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Icon from "@/components/icon";
 import EventBatchForm from "@/components/event-batch-form";
 
-/** ➕ in the top app bar (Docs-style), shown on the admin Events page. Opens the New-event dialog. */
+/** ➕ in the top app bar (Docs-style), shown on the admin Events page and the calendar. Opens the New-event dialog. */
 export default function NewEventButton() {
   return (
     <Suspense fallback={null}>
@@ -19,7 +19,7 @@ function Inner() {
   const router = useRouter();
   const folderId = useSearchParams().get("folder");
   const [open, setOpen] = useState(false);
-  if (path !== "/admin/events") return null;
+  if (path !== "/admin/events" && path !== "/calendar") return null;
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} title="New event" aria-label="New event"
