@@ -11,7 +11,10 @@ import WeekView from "./week-view";
 import AgendaView from "./agenda-view";
 import MiniMonth from "./mini-month";
 
-export type CalEvent = Event & { rsvps: { user_id: string; status: string }[] };
+export type CalEvent = Event & { rsvps: { user_id: string; status: string }[]; group: { name: string } | null };
+
+/** Day rows carry auto-generated titles ("Saturday 9/12"); the real name is the group's. */
+export const eventLabel = (e: CalEvent) => e.group?.name ?? e.title;
 export type CalView = "month" | "week" | "agenda";
 export type Attachment = "form" | "lineup" | "carpool";
 export type AttachMap = Record<string, { form: boolean; lineup: boolean; carpool: boolean }>;

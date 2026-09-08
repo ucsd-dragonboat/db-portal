@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { fmtTime } from "@/lib/format";
 import { addDays, dayKey, KIND_COLORS, minutesOfDay, startOfWeek } from "@/lib/calendar-dates";
-import type { CalEvent } from "./calendar-shell";
+import { eventLabel, type CalEvent } from "./calendar-shell";
 
 const START_MIN = 6 * 60;   // 6 AM
 const END_MIN = 22 * 60;    // 10 PM
@@ -62,11 +62,11 @@ export default function WeekView({ date, today, tz, events, userId }: {
                 const c = KIND_COLORS[e.kind];
                 const going = e.rsvps.some((r) => r.user_id === userId && r.status === "yes");
                 return (
-                  <Link key={e.id} href={`/events/${e.id}`} title={e.title}
+                  <Link key={e.id} href={`/events/${e.id}`} title={eventLabel(e)}
                     className="absolute overflow-hidden rounded px-1 py-0.5 text-[11px] leading-tight"
                     style={{ top, height, left: `${2 + idx * 6}%`, right: "2%", background: c.soft, borderLeft: `3px solid ${c.color}`, zIndex: idx + 1 }}>
                     <div className="font-medium">{fmtTime(e.starts_at, tz)}{going && " ✓"}</div>
-                    <div className="truncate">{e.title}</div>
+                    <div className="truncate">{eventLabel(e)}</div>
                   </Link>
                 );
               })}
