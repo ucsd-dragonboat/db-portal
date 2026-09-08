@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/server";
 import LocalTime from "@/components/local-time";
 import { createFolder, deleteEvent, deleteFolder, deleteGroup, moveGroupToFolder, renameFolder } from "../actions";
 import { createFormForGroup } from "../forms/actions";
-import EventBatchForm from "@/components/event-batch-form";
 import ConfirmForm from "@/components/confirm-form";
 import type { EventFolder, EventGroup } from "@/lib/database.types";
 
@@ -36,15 +35,7 @@ export default async function AdminEventsPage({ searchParams }: { searchParams: 
   const countIn = (f: EventFolder) => (groups ?? []).filter((g) => g.folder_id === f.id).length;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <section>
-        <h1 className="text-2xl font-normal mb-1">New event</h1>
-        <p className="text-sm mb-3" style={{ color: "var(--g-grey-600)" }}>
-          An event is the container (e.g. “Spring Week 8 Practice”); pick its days and type the times.
-          {folder && <> New events land in <b><Icon name="folder" /> {folder.name}</b>.</>}
-        </p>
-        <EventBatchForm folderId={folder?.id ?? null} />
-      </section>
+    <div className="mx-auto max-w-[1000px]">
       <section>
         {folder ? (
           <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -140,7 +131,7 @@ export default async function AdminEventsPage({ searchParams }: { searchParams: 
               </div>
             );
           })}
-          {!containers.length && <p className="text-sm" style={{ color: "var(--g-grey-600)" }}>{folder ? "This folder is empty — use “Move” on an event, or create one on the left." : "No events yet."}</p>}
+          {!containers.length && <p className="text-sm" style={{ color: "var(--g-grey-600)" }}>{folder ? "This folder is empty — use “Move” on an event, or create one with the ➕ in the top bar." : "No events yet — create one with the ➕ in the top bar."}</p>}
         </div>
       </section>
     </div>
