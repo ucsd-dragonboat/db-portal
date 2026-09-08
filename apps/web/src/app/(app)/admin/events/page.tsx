@@ -3,7 +3,8 @@ import Icon from "@/components/icon";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import LocalTime from "@/components/local-time";
-import { createFolder, deleteEvent, deleteFolder, deleteGroup, moveGroupToFolder, renameFolder } from "../actions";
+import { createFolder, deleteEvent, deleteFolder, deleteGroup, renameFolder } from "../actions";
+import { DraggableEvent, FolderDropTarget } from "./dnd";
 import { createFormForGroup } from "../forms/actions";
 import ConfirmForm from "@/components/confirm-form";
 import type { EventFolder, EventGroup } from "@/lib/database.types";
@@ -39,7 +40,9 @@ export default async function AdminEventsPage({ searchParams }: { searchParams: 
       <section>
         {folder ? (
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Link href="/admin/events" className="btn-text -ml-3">← All events</Link>
+            <FolderDropTarget folderId={null}>
+              <Link href="/admin/events" className="btn-text -ml-3" title="Drop an event here to move it out of this folder">← All events</Link>
+            </FolderDropTarget>
             <h2 className="text-lg font-medium" style={{ color: "#5f6368" }}><Icon name="folder" /> {folder.name}</h2>
             <details className="text-xs">
               <summary className="cursor-pointer text-slate-500 underline">rename</summary>
@@ -66,24 +69,26 @@ export default async function AdminEventsPage({ searchParams }: { searchParams: 
             {(folders ?? []).length > 0 && (
               <div className="mb-4 grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
                 {(folders ?? []).map((f) => (
-                  <Link key={f.id} href={`/admin/events?folder=${f.id}`}
-                    className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2.5 text-sm hover:bg-slate-50"
-                    style={{ borderColor: "var(--g-grey-300)" }}>
-                    <span style={{ color: "#5f6368" }}><Icon name="folder" className="text-lg" /></span>
-                    <span className="min-w-0 flex-1 truncate font-medium">{f.name}</span>
-                    <span className="text-xs" style={{ color: "var(--g-grey-600)" }}>{countIn(f)}</span>
-                  </Link>
+                  <FolderDropTarget key={f.id} folderId={f.id}>
+                    <Link href={`/admin/events?folder=${f.id}`}
+                      className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2.5 text-sm hover:bg-slate-50"
+                      style={{ borderColor: "var(--g-grey-300)" }}>
+                      <span style={{ color: "#5f6368" }}><Icon name="folder" className="text-lg" /></span>
+                      <span className="min-w-0 flex-1 truncate font-medium">{f.name}</span>
+                      <span className="text-xs" style={{ color: "var(--g-grey-600)" }}>{countIn(f)}</span>
+                    </Link>
+                  </FolderDropTarget>
                 ))}
               </div>
             )}
-            <h2 className="text-lg font-medium mb-3">All events</h2>
+            <h2 className="text-lg font-medium mb-3">All events <span className="ml-1 text-xs font-normal" style={{ color: "var(--g-grey-600)" }}>drag one onto a folder to file it</span></h2>
           </>
         )}
         <div className="space-y-3">
           {containers.map(({ group, days: ds }) => {
             const total = ds.reduce((a, d) => a + (d.rsvps as { status: string }[]).filter((r) => r.status === "yes").length, 0);
-            return (
-              <div key={group?.id ?? ds[0].id} className="rounded-lg border" style={{ borderColor: "var(--g-grey-300)", background: "#fff" }}>
+            const card = (
+              <div className="rounded-lg border" style={{ borderColor: "var(--g-grey-300)", background: "#fff" }}>
                 <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2" style={{ borderColor: "var(--g-grey-300)", background: "var(--g-grey-50)" }}>
                   <div className="min-w-0 flex-1">
                     <Link href={group ? `/groups/${group.id}` : `/events/${ds[0].id}`} className="font-medium hover:underline">{group?.name ?? ds[0].title}</Link>
@@ -91,14 +96,6 @@ export default async function AdminEventsPage({ searchParams }: { searchParams: 
                   </div>
                   {group && (
                     <div className="flex items-center gap-1 text-xs">
-                      <form action={moveGroupToFolder} className="flex items-center gap-1" title="Move to folder">
-                        <input type="hidden" name="group_id" value={group.id} />
-                        <select name="folder_id" defaultValue={group.folder_id ?? ""} className="input w-auto py-0.5 text-xs">
-                          <option value="">📄 no folder</option>
-                          {(folders ?? []).map((f) => <option key={f.id} value={f.id}>📁 {f.name}</option>)}
-                        </select>
-                        <button className="btn-text py-0.5">Move</button>
-                      </form>
                       <Link href={`/groups/${group.id}`} className="btn-text py-0.5">Overview</Link>
                       <form action={createFormForGroup}><input type="hidden" name="group_id" value={group.id} /><button className="btn-text py-0.5"><Icon name="form" /> Form</button></form>
                       <ConfirmForm action={deleteGroup} message={`Delete "${group.name}" and all ${ds.length} of its days?`}><input type="hidden" name="id" value={group.id} /><input type="hidden" name="with_events" value="on" /><button className="btn-danger-text py-0.5">Delete</button></ConfirmForm>
@@ -130,8 +127,10 @@ export default async function AdminEventsPage({ searchParams }: { searchParams: 
                 </ul>
               </div>
             );
+            const key = group?.id ?? ds[0].id;
+            return group ? <DraggableEvent key={key} groupId={group.id}>{card}</DraggableEvent> : <div key={key}>{card}</div>;
           })}
-          {!containers.length && <p className="text-sm" style={{ color: "var(--g-grey-600)" }}>{folder ? "This folder is empty — use “Move” on an event, or create one with the ➕ in the top bar." : "No events yet — create one with the ➕ in the top bar."}</p>}
+          {!containers.length && <p className="text-sm" style={{ color: "var(--g-grey-600)" }}>{folder ? "This folder is empty — drag an event onto the folder, or create one with the ➕ in the top bar." : "No events yet — create one with the ➕ in the top bar."}</p>}
         </div>
       </section>
     </div>
