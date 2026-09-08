@@ -17,9 +17,10 @@ export type CalView = "month" | "week" | "agenda";
 const emptySub = () => () => {};
 const VIEWS: CalView[] = ["week", "month", "agenda"];
 
-export default function CalendarShell({ events, userId, view, date, today: teamToday }: {
+export default function CalendarShell({ events, userId, isAdmin = false, view, date, today: teamToday }: {
   events: CalEvent[];
   userId: string;
+  isAdmin?: boolean;
   view: CalView;
   date: string;
   today: string; // today in TEAM_TZ (SSR-stable)
@@ -62,7 +63,7 @@ export default function CalendarShell({ events, userId, view, date, today: teamT
             ))}
           </div>
         </div>
-        {view === "month" && <MonthView date={date} today={today} tz={tz} events={visible} userId={userId} />}
+        {view === "month" && <MonthView date={date} today={today} tz={tz} events={visible} userId={userId} isAdmin={isAdmin} />}
         {view === "week" && <WeekView date={date} today={today} tz={tz} events={visible} userId={userId} />}
         {view === "agenda" && <AgendaView date={date} today={today} tz={tz} events={visible} userId={userId} />}
       </div>

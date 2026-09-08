@@ -11,7 +11,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const today = dayKey(new Date(), TEAM_TZ);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : today;
 
-  const { org, userId } = await requireOrg();
+  const { org, userId, isAdmin } = await requireOrg();
   const supabase = await createClient();
 
   // One window serves all views: the focused month grid (±7d for tz spillover)
@@ -28,5 +28,5 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     .lte("starts_at", `${fetchEnd}T23:59:59Z`)
     .order("starts_at");
 
-  return <CalendarShell events={(events ?? []) as CalEvent[]} userId={userId} view={view} date={date} today={today} />;
+  return <CalendarShell events={(events ?? []) as CalEvent[]} userId={userId} isAdmin={isAdmin} view={view} date={date} today={today} />;
 }

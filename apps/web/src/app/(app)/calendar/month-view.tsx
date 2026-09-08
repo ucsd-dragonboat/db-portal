@@ -9,9 +9,13 @@ import type { CalEvent } from "./calendar-shell";
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MAX_CHIPS = 3;
 
-export default function MonthView({ date, today, tz, events, userId }: {
-  date: string; today: string; tz: string | undefined; events: CalEvent[]; userId: string;
+export default function MonthView({ date, today, tz, events, userId, isAdmin = false }: {
+  date: string; today: string; tz: string | undefined; events: CalEvent[]; userId: string; isAdmin?: boolean;
 }) {
+  // Admins: clicking a day square opens the New-event dialog pre-filled with that date.
+  const dayClick = (ymd: string) => {
+    if (isAdmin) window.dispatchEvent(new CustomEvent("portal-new-event", { detail: { date: ymd } }));
+  };
   const focusMonth = firstOfMonth(date).slice(0, 7);
   const byDay = new Map<string, CalEvent[]>();
   for (const e of events) {
@@ -29,7 +33,8 @@ export default function MonthView({ date, today, tz, events, userId }: {
           const isToday = ymd === today;
           const dayEvents = byDay.get(ymd) ?? [];
           return (
-            <div key={ymd} className="min-h-[6.5rem] border-b p-1"
+            <div key={ymd} onClick={() => dayClick(ymd)} title={isAdmin ? "New event on this day" : undefined}
+              className={`min-h-[6.5rem] border-b p-1 ${isAdmin ? "cursor-pointer hover:bg-[var(--g-blue-tint)]/40" : ""}`}
               style={{ borderColor: "var(--g-grey-300)", borderRight: (i + 1) % 7 ? "1px solid var(--g-grey-300)" : undefined, background: inMonth ? "#fff" : "var(--g-grey-50)" }}>
               <div className="flex justify-end">
                 <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${isToday ? "text-white" : ""}`}
@@ -42,7 +47,7 @@ export default function MonthView({ date, today, tz, events, userId }: {
                   const c = KIND_COLORS[e.kind];
                   const going = e.rsvps.some((r) => r.user_id === userId && r.status === "yes");
                   return (
-                    <Link key={e.id} href={`/events/${e.id}`} title={e.title}
+                    <Link key={e.id} href={`/events/${e.id}`} title={e.title} onClick={(ev) => ev.stopPropagation()}
                       className="block truncate rounded px-1 py-0.5 text-[11px] leading-tight"
                       style={{ background: c.soft, borderLeft: `3px solid ${c.color}` }}>
                       {fmtTime(e.starts_at, tz)} {e.title}{going && <span style={{ color: c.color }}> <Icon name="check" /></span>}
@@ -50,7 +55,7 @@ export default function MonthView({ date, today, tz, events, userId }: {
                   );
                 })}
                 {dayEvents.length > MAX_CHIPS && (
-                  <Link href={`/calendar?view=agenda&date=${ymd}`} className="block px-1 text-[11px]" style={{ color: "var(--g-grey-600)" }}>
+                  <Link href={`/calendar?view=agenda&date=${ymd}`} onClick={(ev) => ev.stopPropagation()} className="block px-1 text-[11px]" style={{ color: "var(--g-grey-600)" }}>
                     +{dayEvents.length - MAX_CHIPS} more
                   </Link>
                 )}
