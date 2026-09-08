@@ -1,11 +1,15 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Icon from "@/components/icon";
 import EventBatchForm from "@/components/event-batch-form";
 
-/** ➕ in the top app bar (Docs-style), shown on the admin Events page and the calendar. Opens the New-event dialog. */
+/**
+ * ➕ in the top app bar (Docs-style), shown on the admin Events page and the
+ * calendar. Opens the New-event dialog — also opened by clicking a day square
+ * on the calendar (a "portal-new-event" window event carrying the date).
+ */
 export default function NewEventButton() {
   return (
     <Suspense fallback={null}>
@@ -19,10 +23,22 @@ function Inner() {
   const router = useRouter();
   const folderId = useSearchParams().get("folder");
   const [open, setOpen] = useState(false);
+  const [initialDates, setInitialDates] = useState<string[]>([]);
+
+  useEffect(() => {
+    const onDayClick = (e: Event) => {
+      const date = (e as CustomEvent<{ date?: string }>).detail?.date;
+      setInitialDates(date ? [date] : []);
+      setOpen(true);
+    };
+    window.addEventListener("portal-new-event", onDayClick);
+    return () => window.removeEventListener("portal-new-event", onDayClick);
+  }, []);
+
   if (path !== "/admin/events" && path !== "/calendar") return null;
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} title="New event" aria-label="New event"
+      <button type="button" onClick={() => { setInitialDates([]); setOpen(true); }} title="New event" aria-label="New event"
         className="flex h-10 w-10 items-center justify-center rounded-full text-xl transition hover:shadow-md"
         style={{ background: "var(--g-blue-tint)", color: "var(--g-blue)" }}>
         <Icon name="plus" />
@@ -38,7 +54,8 @@ function Inner() {
               An event is the container (e.g. “Spring Week 8 Practice”); pick its days and type the times.
               {folderId && " It will be filed into the folder you have open."}
             </p>
-            <EventBatchForm folderId={folderId} onCreated={() => { setOpen(false); router.refresh(); }} />
+            <EventBatchForm key={initialDates.join(",") || "blank"} folderId={folderId} initialDates={initialDates}
+              onCreated={() => { setOpen(false); router.refresh(); }} />
           </div>
         </div>
       )}

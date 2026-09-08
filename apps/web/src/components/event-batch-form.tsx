@@ -16,11 +16,11 @@ const KIND_LABEL: Record<Kind, string> = { practice: "Practice", race: "Race", s
  * "Add days" widget: pick dates, type start/end times, one event is created per date.
  * Used standalone on Admin → Events and inline in the form editor (onCreated links them to the form).
  */
-export default function EventBatchForm({ onCreated, compact = false, groupId = null, folderId = null }: { onCreated?: (ids: string[], groupId: string | null) => void; compact?: boolean; groupId?: string | null; folderId?: string | null }) {
+export default function EventBatchForm({ onCreated, compact = false, groupId = null, folderId = null, initialDates = [] }: { onCreated?: (ids: string[], groupId: string | null) => void; compact?: boolean; groupId?: string | null; folderId?: string | null; initialDates?: string[] }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>("practice");
   const [title, setTitle] = useState("");
-  const [dates, setDates] = useState<string[]>([]);
+  const [dates, setDates] = useState<string[]>(initialDates);
   const [start, setStart] = useState("8:45am");
   const [end, setEnd] = useState("");
   const [deadline, setDeadline] = useState({ date: "", time: "11:59pm" });
