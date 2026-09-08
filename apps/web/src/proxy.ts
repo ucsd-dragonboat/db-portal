@@ -1,8 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// /api/cron is machine-to-machine and guards itself with CRON_SECRET.
-const PUBLIC_PATHS = ["/login", "/auth", "/f/", "/api/cron"];
+// /api/cron guards itself with CRON_SECRET; /api/calendar with per-member feed tokens.
+const PUBLIC_PATHS = ["/login", "/auth", "/f/", "/api/cron", "/api/calendar"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

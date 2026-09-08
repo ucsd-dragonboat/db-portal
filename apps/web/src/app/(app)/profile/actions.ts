@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { regenerateCalendarToken } from "@/lib/calendar-token";
 import { buildNominatimSearchUrl, parseNominatimResult } from "@db/carpool";
 
 export type ProfileState = { error?: string; saved?: boolean; geocoded?: boolean };
@@ -58,4 +59,13 @@ export async function setPassword(_: PasswordState, formData: FormData): Promise
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: error.message };
   return { saved: true };
+}
+
+/** Invalidates the member's old iCal feed URL and issues a fresh one. */
+export async function resetCalendarToken() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  await regenerateCalendarToken(user.id);
+  revalidatePath("/profile");
 }
