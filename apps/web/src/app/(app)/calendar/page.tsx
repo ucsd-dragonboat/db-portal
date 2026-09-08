@@ -22,7 +22,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const fetchEnd = [addDays(monthEnd, 7), addDays(today, 90)].sort()[1];
   const { data: events } = await supabase
     .from("events")
-    .select("*, rsvps(user_id, status)")
+    .select("*, rsvps(user_id, status), group:event_groups(name)")
     .eq("org_id", org.id)
     .gte("starts_at", `${fetchStart}T00:00:00Z`)
     .lte("starts_at", `${fetchEnd}T23:59:59Z`)

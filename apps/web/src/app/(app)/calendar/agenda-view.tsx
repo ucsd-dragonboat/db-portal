@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { fmtTime } from "@/lib/format";
 import { dayHeading, dayKey, KIND_COLORS } from "@/lib/calendar-dates";
-import type { CalEvent } from "./calendar-shell";
+import { eventLabel, type CalEvent } from "./calendar-shell";
 
 export default function AgendaView({ date, today, tz, events, userId }: {
   date: string; today: string; tz: string | undefined; events: CalEvent[]; userId: string;
@@ -34,7 +34,7 @@ export default function AgendaView({ date, today, tz, events, userId }: {
                 <Link key={e.id} href={`/events/${e.id}`} className="card card-hover flex items-center gap-3 !p-3 text-sm">
                   <span className="h-8 w-1 shrink-0 rounded" style={{ background: c.color }} />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{e.title}</div>
+                    <div className="truncate font-medium">{eventLabel(e)}</div>
                     <div className="text-xs" style={{ color: "var(--g-grey-600)" }}>
                       {fmtTime(e.starts_at, tz)}{e.ends_at && ` – ${fmtTime(e.ends_at, tz)}`}{e.location_name && ` · ${e.location_name}`} · <span className="capitalize">{e.kind}</span>
                     </div>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Icon from "@/components/icon";
 import { dayKey, firstOfMonth, KIND_COLORS, monthGrid } from "@/lib/calendar-dates";
-import { ATTACHMENTS, type AttachMap, type CalEvent } from "./calendar-shell";
+import { ATTACHMENTS, eventLabel, type AttachMap, type CalEvent } from "./calendar-shell";
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MAX_CHIPS = 3;
@@ -47,10 +47,10 @@ export default function MonthView({ date, today, tz, events, attach, userId, isA
                   const going = e.rsvps.some((r) => r.user_id === userId && r.status === "yes");
                   const a = attach[e.id];
                   return (
-                    <Link key={e.id} href={`/events/${e.id}`} title={e.title} onClick={(ev) => ev.stopPropagation()}
+                    <Link key={e.id} href={`/events/${e.id}`} title={eventLabel(e)} onClick={(ev) => ev.stopPropagation()}
                       className="flex items-center gap-1 rounded px-1 py-1 text-[11px] leading-tight"
                       style={{ background: c.soft, borderLeft: `3px solid ${c.color}` }}>
-                      <span className="min-w-0 flex-1 truncate">{e.title}{going && <span style={{ color: c.color }}> <Icon name="check" /></span>}</span>
+                      <span className="min-w-0 flex-1 truncate">{eventLabel(e)}{going && <span style={{ color: c.color }}> <Icon name="check" /></span>}</span>
                       <span className="flex shrink-0 items-center gap-0.5 text-[10px]">
                         {ATTACHMENTS.map((t) => (
                           <span key={t.key} title={a?.[t.key] ? `Has a ${t.label.toLowerCase()}` : `No ${t.label.toLowerCase()} yet`}

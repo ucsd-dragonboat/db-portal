@@ -18,7 +18,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   const since = new Date(Date.now() - 90 * 86400e3).toISOString();
   const { data: events, error } = await createAdminClient()
     .from("events")
-    .select("id, kind, title, starts_at, ends_at, location_name, rsvp_deadline, created_at")
+    .select("id, kind, title, starts_at, ends_at, location_name, rsvp_deadline, created_at, group:event_groups(name)")
     .eq("org_id", owner.orgId)
     .gte("starts_at", since)
     .order("starts_at");
@@ -26,7 +26,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
 
   const origin = new URL(req.url).origin;
   const slug = owner.orgName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "team";
-  return new Response(buildIcs({ name: `${owner.orgName} events`, origin, events: events ?? [] }), {
+  // Day rows carry auto-generated titles ("Saturday 9/12") — prefer the group's real name.
+  const named = (events ?? []).map((e) => ({ ...e, title: (e.group as unknown as { name: string } | null)?.name ?? e.title }));
+  return new Response(buildIcs({ name: `${owner.orgName} events`, origin, events: named }), {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
       "Cache-Control": "private, max-age=3600",
