@@ -2,15 +2,14 @@
 
 import Link from "next/link";
 import Icon from "@/components/icon";
-import { fmtTime } from "@/lib/format";
 import { dayKey, firstOfMonth, KIND_COLORS, monthGrid } from "@/lib/calendar-dates";
-import type { CalEvent } from "./calendar-shell";
+import { ATTACHMENTS, type AttachMap, type CalEvent } from "./calendar-shell";
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MAX_CHIPS = 3;
 
-export default function MonthView({ date, today, tz, events, userId, isAdmin = false }: {
-  date: string; today: string; tz: string | undefined; events: CalEvent[]; userId: string; isAdmin?: boolean;
+export default function MonthView({ date, today, tz, events, attach, userId, isAdmin = false }: {
+  date: string; today: string; tz: string | undefined; events: CalEvent[]; attach: AttachMap; userId: string; isAdmin?: boolean;
 }) {
   // Admins: clicking a day square opens the New-event dialog pre-filled with that date.
   const dayClick = (ymd: string) => {
@@ -34,7 +33,7 @@ export default function MonthView({ date, today, tz, events, userId, isAdmin = f
           const dayEvents = byDay.get(ymd) ?? [];
           return (
             <div key={ymd} onClick={() => dayClick(ymd)} title={isAdmin ? "New event on this day" : undefined}
-              className={`min-h-[6.5rem] border-b p-1 ${isAdmin ? "cursor-pointer hover:bg-[var(--g-blue-tint)]/40" : ""}`}
+              className={`min-h-[7.5rem] border-b p-1 ${isAdmin ? "cursor-pointer hover:bg-[var(--g-blue-tint)]/40" : ""}`}
               style={{ borderColor: "var(--g-grey-300)", borderRight: (i + 1) % 7 ? "1px solid var(--g-grey-300)" : undefined, background: inMonth ? "#fff" : "var(--g-grey-50)" }}>
               <div className="flex justify-end">
                 <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${isToday ? "text-white" : ""}`}
@@ -46,11 +45,20 @@ export default function MonthView({ date, today, tz, events, userId, isAdmin = f
                 {dayEvents.slice(0, MAX_CHIPS).map((e) => {
                   const c = KIND_COLORS[e.kind];
                   const going = e.rsvps.some((r) => r.user_id === userId && r.status === "yes");
+                  const a = attach[e.id];
                   return (
                     <Link key={e.id} href={`/events/${e.id}`} title={e.title} onClick={(ev) => ev.stopPropagation()}
-                      className="block truncate rounded px-1 py-0.5 text-[11px] leading-tight"
+                      className="flex items-center gap-1 rounded px-1 py-1 text-[11px] leading-tight"
                       style={{ background: c.soft, borderLeft: `3px solid ${c.color}` }}>
-                      {fmtTime(e.starts_at, tz)} {e.title}{going && <span style={{ color: c.color }}> <Icon name="check" /></span>}
+                      <span className="min-w-0 flex-1 truncate">{e.title}{going && <span style={{ color: c.color }}> <Icon name="check" /></span>}</span>
+                      <span className="flex shrink-0 items-center gap-0.5 text-[10px]">
+                        {ATTACHMENTS.map((t) => (
+                          <span key={t.key} title={a?.[t.key] ? `Has a ${t.label.toLowerCase()}` : `No ${t.label.toLowerCase()} yet`}
+                            style={{ color: t.color, opacity: a?.[t.key] ? 1 : 0.25 }}>
+                            <Icon name={t.icon} />
+                          </span>
+                        ))}
+                      </span>
                     </Link>
                   );
                 })}
