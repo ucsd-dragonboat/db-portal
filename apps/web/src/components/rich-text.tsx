@@ -1,16 +1,8 @@
 import { cleanHtml, isHtml } from "@/lib/html";
+import RichTextView from "./rich-text-view";
 
-/** Renders stored rich text (sanitized HTML) — or legacy plain text with linkified URLs. */
+/** Server-side rich text: sanitizes (defense in depth), then renders via RichTextView.
+ * Client components should pre-sanitize on the server and use RichTextView directly. */
 export default function RichText({ text, className = "" }: { text: string; className?: string }) {
-  if (isHtml(text)) {
-    return <div className={`rich text-sm leading-relaxed ${className}`} dangerouslySetInnerHTML={{ __html: cleanHtml(text) }} />;
-  }
-  const parts = text.split(/(https?:\/\/[^\s)]+)/g);
-  return (
-    <div className={`whitespace-pre-wrap text-sm leading-relaxed ${className}`}>
-      {parts.map((p, i) => /^https?:\/\//.test(p)
-        ? <a key={i} href={p} target="_blank" rel="noreferrer" className="text-sky-700 underline break-all">{p}</a>
-        : <span key={i}>{p}</span>)}
-    </div>
-  );
+  return <RichTextView html={isHtml(text) ? cleanHtml(text) : text} className={className} />;
 }

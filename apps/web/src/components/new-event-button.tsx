@@ -1,9 +1,15 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Icon from "@/components/icon";
-import EventBatchForm from "@/components/event-batch-form";
+
+// Lazy: keeps tiptap + the date picker out of the shared layout bundle — the chunk
+// only downloads when an admin actually opens the New-event dialog.
+const EventBatchForm = dynamic(() => import("@/components/event-batch-form"), {
+  loading: () => <p className="py-8 text-center text-sm" style={{ color: "var(--g-grey-600)" }}>Loading…</p>,
+});
 
 /**
  * ➕ in the top app bar (Docs-style), shown on the admin Events page and the

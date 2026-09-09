@@ -1,8 +1,14 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import RichEditor from "@/components/rich-editor";
-import RichText from "@/components/rich-text";
+import dynamic from "next/dynamic";
+import RichTextView from "@/components/rich-text-view";
+
+// Lazy: tiptap only downloads when the form actually has a paragraph question.
+const RichEditor = dynamic(() => import("@/components/rich-editor"), {
+  ssr: false,
+  loading: () => <div className="input-line w-full text-sm" style={{ color: "var(--g-grey-600)" }}>Loading editor…</div>,
+});
 import { submitForm, type SubmitState } from "./actions";
 import AttendanceFields from "@/components/attendance-fields";
 import LocalTime from "@/components/local-time";
@@ -13,7 +19,7 @@ const Q = ({ title, required, help, meta, children }: { title: React.ReactNode; 
   <div className="gf-card space-y-3">
     <div className="text-base font-normal">{title}{required && <span className="gf-required"> *</span>}</div>
     {meta && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>{meta}</p>}
-    {help && <RichText text={help} className="!text-xs" />}
+    {help && <RichTextView html={help} className="!text-xs" />}
     {children}
   </div>
 );
