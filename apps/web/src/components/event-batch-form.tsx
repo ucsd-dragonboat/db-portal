@@ -24,6 +24,8 @@ export default function EventBatchForm({ onCreated, compact = false, groupId = n
   const [start, setStart] = useState("8:45am");
   const [end, setEnd] = useState("");
   const [deadline, setDeadline] = useState({ date: "", time: "11:59pm" });
+  // Per-day time overrides; blank fields inherit the shared Start/End above.
+  const [overrides, setOverrides] = useState<Record<string, { start: string; end: string }>>({});
   const [loc, setLoc] = useState({ name: "", lat: "", lon: "" });
   const [saved, setSaved] = useState<SavedLocation[]>([]);
   const [notes, setNotes] = useState("");
@@ -42,6 +44,15 @@ export default function EventBatchForm({ onCreated, compact = false, groupId = n
   };
 
   const startT = parseTimeText(start), endT = end ? parseTimeText(end) : null;
+  const setOv = (d: string, field: "start" | "end", v: string) =>
+    setOverrides((o) => ({ ...o, [d]: { ...(o[d] ?? { start: "", end: "" }), [field]: v } }));
+  /** Effective times for a day: its override when filled, else the shared defaults. */
+  const timesFor = (d: string) => {
+    const ov = overrides[d];
+    const sRaw = ov?.start.trim() ? ov.start : start;
+    const eRaw = ov?.end.trim() ? ov.end : end;
+    return { sRaw, eRaw, sT: parseTimeText(sRaw), eT: eRaw ? parseTimeText(eRaw) : null };
+  };
   const addNextWeekend = () => {
     const out = [...dates]; const t = new Date();
     for (let i = 1; i <= 7; i++) { const d = new Date(t); d.setDate(t.getDate() + i); if (d.getDay() === 6 || d.getDay() === 0) { const s = d.toLocaleDateString("sv"); if (!out.includes(s)) out.push(s); } }
@@ -61,7 +72,13 @@ export default function EventBatchForm({ onCreated, compact = false, groupId = n
     if (!startT) return setError("Start time looks off — try “8:45am”.");
     if (end && !endT) return setError("End time looks off — try “11am”.");
     const dl = deadline.date ? combineLocal(deadline.date, deadline.time || "11:59pm") : null;
-    const items = dates.map((d) => ({ title: titleFor(d), starts_at: combineLocal(d, start)!, ends_at: end ? combineLocal(d, end) : null, rsvp_deadline: dl }));
+    const items: { title: string; starts_at: string; ends_at: string | null; rsvp_deadline: string | null }[] = [];
+    for (const d of dates) {
+      const { sRaw, eRaw, sT, eT } = timesFor(d);
+      if (!sT) return setError(`Start time for ${shortDate(d)} looks off — try “8:45am”.`);
+      if (eRaw && !eT) return setError(`End time for ${shortDate(d)} looks off — try “11am”.`);
+      items.push({ title: titleFor(d), starts_at: combineLocal(d, sRaw)!, ends_at: eRaw ? combineLocal(d, eRaw) : null, rsvp_deadline: dl });
+    }
     run(async () => {
       const r = await createEventsBatch({ kind, items, location_name: loc.name.trim() || null, location_lat: loc.lat ? Number(loc.lat) : null, location_lon: loc.lon ? Number(loc.lon) : null, notes: notes.trim() || null,
         groupId, groupName: groupId ? null : (groupName.trim() || defaultGroupName()), folderId });
@@ -110,6 +127,29 @@ export default function EventBatchForm({ onCreated, compact = false, groupId = n
           <div className="text-xs mt-0.5" style={{ color: !end || endT ? "var(--g-grey-600)" : "var(--g-red)" }}>{endT ? `= ${formatTime(endT.h, endT.m)}` : end ? "can't read that" : " "}</div></div>
       </div>
 
+      {dates.length > 0 && (
+        <details className="rounded border p-3" style={{ borderColor: "var(--g-grey-300)" }} open={Object.values(overrides).some((o) => o.start.trim() || o.end.trim())}>
+          <summary className="cursor-pointer text-xs font-medium" style={{ color: "var(--g-grey-600)" }}>Different times on some days? (optional)</summary>
+          <div className="mt-2 space-y-1.5">
+            {dates.map((d) => {
+              const ov = overrides[d] ?? { start: "", end: "" };
+              const { sT, eT, eRaw } = timesFor(d);
+              return (
+                <div key={d} className="grid grid-cols-[1fr_110px_110px] items-center gap-2">
+                  <span className="text-xs">{dayLabel(d)}</span>
+                  <input value={ov.start} onChange={(e) => setOv(d, "start", e.target.value)} placeholder={start || "start"} className="input py-1" aria-label={`Start time for ${shortDate(d)}`} />
+                  <input value={ov.end} onChange={(e) => setOv(d, "end", e.target.value)} placeholder={end || "(no end)"} className="input py-1" aria-label={`End time for ${shortDate(d)}`} />
+                  <span className="col-span-3 -mt-1 text-[11px]" style={{ color: sT && (!eRaw || eT) ? "var(--g-grey-600)" : "var(--g-red)" }}>
+                    {sT ? `= ${formatTime(sT.h, sT.m)}${eT ? ` – ${formatTime(eT.h, eT.m)}` : ""}` : "can’t read that time"}
+                  </span>
+                </div>
+              );
+            })}
+            <p className="text-[11px]" style={{ color: "var(--g-grey-600)" }}>Blank boxes use the default times above.</p>
+          </div>
+        </details>
+      )}
+
       <details className="rounded border p-3" style={{ borderColor: "var(--g-grey-300)" }}>
         <summary className="cursor-pointer text-xs font-medium" style={{ color: "var(--g-grey-600)" }}>Day labels, location, RSVP deadline, notes (optional)</summary>
         <div className="mt-3 space-y-3">
@@ -137,7 +177,10 @@ export default function EventBatchForm({ onCreated, compact = false, groupId = n
 
       {dates.length > 0 && startT && (
         <div className="rounded p-2 text-xs" style={{ background: "var(--g-grey-100)", color: "var(--g-grey-600)" }}>
-          {!groupId && <><b>{groupName.trim() || defaultGroupName()}</b> with days: </>}{dates.map((d) => `${titleFor(d)} (${shortDate(d)} ${formatTime(startT.h, startT.m)}${endT ? `–${formatTime(endT.h, endT.m)}` : ""})`).join(" · ")}
+          {!groupId && <><b>{groupName.trim() || defaultGroupName()}</b> with days: </>}{dates.map((d) => {
+            const { sT, eT } = timesFor(d);
+            return `${titleFor(d)} (${shortDate(d)} ${sT ? formatTime(sT.h, sT.m) : "?"}${eT ? `–${formatTime(eT.h, eT.m)}` : ""})`;
+          }).join(" · ")}
         </div>
       )}
       {error && <p className="text-sm" style={{ color: "var(--g-red)" }}>{error}</p>}
