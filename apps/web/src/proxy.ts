@@ -2,7 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // /api/cron guards itself with CRON_SECRET; /api/calendar with per-member feed tokens.
-const PUBLIC_PATHS = ["/login", "/auth", "/f/", "/api/cron", "/api/calendar"];
+// /privacy is a public static page (required by Google's OAuth app publishing).
+const PUBLIC_PATHS = ["/login", "/auth", "/f/", "/api/cron", "/api/calendar", "/privacy"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
