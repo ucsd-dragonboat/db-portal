@@ -5,7 +5,7 @@ import Link from "next/link";
 import Icon, { type IconName } from "@/components/icon";
 import type { EventKind } from "@/lib/database.types";
 import { TEAM_TZ } from "@/lib/format";
-import { addDays, addMonths, dayKey, monthTitle, startOfWeek } from "@/lib/calendar-dates";
+import { addDays, addMonths, dayKey, monthTitle, startOfWeek, ymdLabel } from "@/lib/calendar-dates";
 import MonthView from "./month-view";
 import WeekView from "./week-view";
 import AgendaView from "./agenda-view";
@@ -123,6 +123,5 @@ export default function CalendarShell({ events, attach, isAdmin = false, view, d
 function weekTitle(date: string): string {
   const start = startOfWeek(date);
   const end = addDays(start, 6);
-  const f = (ymd: string, opts: Intl.DateTimeFormatOptions) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en-US", { ...opts, timeZone: "UTC" });
-  return `${f(start, { month: "short", day: "numeric" })} – ${f(end, { month: "short", day: "numeric", year: "numeric" })}`;
+  return `${ymdLabel(start, { month: "short", day: "numeric" })} – ${ymdLabel(end, { month: "short", day: "numeric", year: "numeric" })}`;
 }

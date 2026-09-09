@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { fmtTime } from "@/lib/format";
-import { addDays, dayKey, KIND_COLORS, minutesOfDay, startOfWeek } from "@/lib/calendar-dates";
+import { addDays, dayKey, KIND_COLORS, minutesOfDay, startOfWeek, ymdLabel } from "@/lib/calendar-dates";
 import { eventLabel, type CalEvent } from "./calendar-shell";
 
 const START_MIN = 6 * 60;   // 6 AM
@@ -24,7 +24,7 @@ export default function WeekView({ date, today, tz, events }: {
     const h = min / 60;
     return h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h - 12} PM`;
   };
-  const dayName = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).toUpperCase();
+  const dayName = (ymd: string) => ymdLabel(ymd, { weekday: "short" }).toUpperCase();
 
   return (
     <div className="overflow-x-auto rounded-lg border bg-white" style={{ borderColor: "var(--g-grey-300)" }}>

@@ -1,7 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildResponseGrid, type GridEvent } from "@/lib/response-grid";
+import { buildResponseGrid } from "@/lib/response-grid";
+import { fetchResponseGridInput } from "@/lib/response-data";
 import { addTab, getAccessToken, getSheetTabs, tabTitle, writeGrid, SheetApiError } from "@/lib/google-sheets";
-import type { Form, Profile } from "@/lib/database.types";
+import type { Form } from "@/lib/database.types";
 
 /** Full-grid rewrite of the form's linked Google Sheet tab. Never throws — logs and returns. */
 export async function syncFormToSheet(formId: string): Promise<void> {
@@ -10,27 +11,10 @@ export async function syncFormToSheet(formId: string): Promise<void> {
     const { data: form } = await admin.from("forms").select("*").eq("id", formId).maybeSingle();
     if (!form?.sheet_spreadsheet_id || !form.sheet_linked_by) return;
 
-    const [{ data: links }, { data: responses }, { data: members }, { data: pickups }] = await Promise.all([
-      admin.from("form_events").select("*, event:events(id, title, starts_at)").eq("form_id", formId).order("sort_order"),
-      admin.from("form_responses").select("*").eq("form_id", formId),
-      admin.from("memberships").select("profile:profiles(*)").eq("org_id", form.org_id),
-      admin.from("pickup_locations").select("id, name").eq("org_id", form.org_id),
-    ]);
-    const events = (links ?? []).map((l) => l.event).filter(Boolean) as GridEvent[];
-    const { data: rsvps } = events.length
-      ? await admin.from("rsvps").select("*").in("event_id", events.map((e) => e.id))
-      : { data: [] };
-
+    const input = await fetchResponseGridInput(admin, form); // same loader the Responses page uses
     const token = await getAccessToken(form.sheet_linked_by);
     const tab = await resolveTab(token, form);
-    const { header, rows } = buildResponseGrid({
-      form,
-      events,
-      profiles: (members ?? []).map((m) => m.profile as unknown as Profile).filter(Boolean),
-      responses: responses ?? [],
-      rsvps: rsvps ?? [],
-      pickups: pickups ?? [],
-    });
+    const { header, rows } = buildResponseGrid(input);
     await writeGrid(token, form.sheet_spreadsheet_id, tab.title, [header, ...rows]);
   } catch (err) {
     console.error("[sheet-sync]", formId, err); // degraded, not fatal — next submission retries

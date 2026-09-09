@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const key = (d: Date) => d.toLocaleDateString("sv"); // yyyy-mm-dd, local
+import { dayKey } from "@/lib/calendar-dates";
+
+const key = (d: Date) => dayKey(d); // yyyy-mm-dd, local
 const parse = (k: string) => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
 
 /**

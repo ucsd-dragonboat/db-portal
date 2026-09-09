@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createEventsBatch } from "@/app/(app)/admin/actions";
 import { combineLocal, dayLabel, formatTime, parseTimeText, shortDate } from "@/lib/time";
+import { dayKey } from "@/lib/calendar-dates";
 import RichEditor from "@/components/rich-editor";
 import MultiDatePicker from "@/components/multi-date-picker";
 import { createClient } from "@/lib/supabase/client";
@@ -55,7 +56,7 @@ export default function EventBatchForm({ onCreated, compact = false, groupId = n
   };
   const addNextWeekend = () => {
     const out = [...dates]; const t = new Date();
-    for (let i = 1; i <= 7; i++) { const d = new Date(t); d.setDate(t.getDate() + i); if (d.getDay() === 6 || d.getDay() === 0) { const s = d.toLocaleDateString("sv"); if (!out.includes(s)) out.push(s); } }
+    for (let i = 1; i <= 7; i++) { const d = new Date(t); d.setDate(t.getDate() + i); if (d.getDay() === 6 || d.getDay() === 0) { const s = dayKey(d); if (!out.includes(s)) out.push(s); } }
     setDates(out.sort());
   };
   const defaultGroupName = () => {

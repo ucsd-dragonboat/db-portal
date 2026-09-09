@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, Rsvp } from "@/lib/database.types";
 import type { Car, Rider } from "@db/carpool";
+import { riderFromRsvp } from "@/lib/riders";
 import CarpoolBuilder, { type SavedCarpool } from "./builder";
 import LocalTime from "@/components/local-time";
 import Icon from "@/components/icon";
@@ -53,16 +54,11 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
     ]);
     const pickupBy = new Map((pickups ?? []).map((p) => [p.id, p]));
     for (const r of (rs ?? []) as (Rsvp & { profile: Profile })[]) {
-      const p = r.profile; if (!p) continue;
-      // Pickup point for this event beats home address; custom typed addresses aren't geocoded (shown as "no location").
-      const pk = r.pickup_location_id ? pickupBy.get(r.pickup_location_id) : null;
-      const location = pk && pk.lat != null && pk.lon != null ? { lat: pk.lat, lon: pk.lon }
-        : r.pickup_address ? null
-        : p.lat != null && p.lon != null ? { lat: p.lat, lon: p.lon } : null;
-      const suffix = pk ? ` @ ${pk.name}` : r.pickup_address ? ` @ ${r.pickup_address}` : "";
-      riders[p.id] = { id: p.id, name: (p.full_name || p.email) + (r.ride === "needs_ride" ? suffix : ""), location };
-      if (r.ride === "driver") drivers.push({ id: p.id, seats: (r.seats ?? (p.car_passengers || 3)) + 1 });
-      if (r.ride === "needs_ride") needsRide.push(p.id);
+      const out = riderFromRsvp(r, pickupBy); // shared with the auto-carpool cron
+      if (!out) continue;
+      riders[out.rider.id] = out.rider;
+      if (out.capacity != null) drivers.push({ id: out.rider.id, seats: out.capacity });
+      if (r.ride === "needs_ride") needsRide.push(out.rider.id);
     }
     if (cp) saved = { data: cp.data as unknown as { cars: Car[]; mode: "pickup" | "dropoff" }, published: cp.published };
   }

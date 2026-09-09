@@ -28,10 +28,6 @@ export function combineLocal(date: string, time: string): string | null {
   return new Date(y, mo - 1, d, t.h, t.m).toISOString();
 }
 
-export const weekdayName = (date: string) => {
-  const [y, mo, d] = date.split("-").map(Number);
-  return new Date(y, mo - 1, d).toLocaleDateString(undefined, { weekday: "long" });
-};
 export const shortDate = (date: string) => {
   const [y, mo, d] = date.split("-").map(Number);
   return new Date(y, mo - 1, d).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });

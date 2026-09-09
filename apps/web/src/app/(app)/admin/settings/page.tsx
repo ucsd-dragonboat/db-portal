@@ -1,10 +1,10 @@
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
-import { deletePickupLocation, deleteSavedLocation, disconnectGoogleAccount } from "../actions";
+import { deletePickupLocation, deleteSavedLocation, disconnectGoogleAccount, rotateJoinCode } from "../actions";
 import PickupForm from "./pickup-form";
 import SavedLocationForm from "./saved-location-form";
-import RotateCode from "./rotate-code";
+import ConfirmForm from "@/components/confirm-form";
 
 export default async function AdminSettingsPage() {
   const { org, userId } = await requireAdmin();
@@ -18,7 +18,10 @@ export default async function AdminSettingsPage() {
     <div className="max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-normal">Team settings</h1>
-        <div className="text-sm text-slate-500">Team: <b>{org.name}</b> · join code <span className="font-mono">{org.join_code}</span> <RotateCode /></div>
+        <div className="text-sm text-slate-500">Team: <b>{org.name}</b> · join code <span className="font-mono">{org.join_code}</span>{" "}
+          <ConfirmForm action={rotateJoinCode} className="inline" message="Rotate the join code? Anyone with the old code (or old shared form links) will no longer be auto-joined — current members are unaffected.">
+            <button className="text-xs text-slate-500 underline">rotate</button>
+          </ConfirmForm></div>
       </div>
       <section>
         <h2 className="text-lg font-medium mb-1">Saved locations</h2>

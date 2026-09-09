@@ -11,6 +11,7 @@ import Icon from "@/components/icon";
 import RichEditor from "@/components/rich-editor";
 import RichText from "@/components/rich-text";
 import AttendanceFields from "@/components/attendance-fields";
+import ConfirmForm from "@/components/confirm-form";
 
 type EventOpt = { id: string; title: string; kind: string; starts_at: string; group_id: string | null };
 type GroupOpt = { id: string; name: string };
@@ -219,7 +220,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
       </div>
 
       <div className="flex justify-between pt-6 text-xs">
-        <form action={deleteForm} onSubmit={(e) => { if (!confirm(`Delete “${f.title || "this form"}” and all its responses? This can’t be undone.`)) e.preventDefault(); }}><input type="hidden" name="id" value={id} /><button className="btn-danger-text">Delete form</button></form>
+        <ConfirmForm action={deleteForm} message={`Delete “${f.title || "this form"}” and all its responses? This can’t be undone.`}><input type="hidden" name="id" value={id} /><button className="btn-danger-text">Delete form</button></ConfirmForm>
         <span style={{ color: "var(--g-grey-600)" }}>Members get name / weight / phone / address from their profile automatically.</span>
       </div>
     </div>

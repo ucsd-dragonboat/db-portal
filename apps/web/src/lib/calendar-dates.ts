@@ -22,10 +22,6 @@ export function dayKey(iso: string | Date, tz?: string): string {
   return keyFmt(tz).format(typeof iso === "string" ? new Date(iso) : iso);
 }
 
-export function todayKey(tz?: string): string {
-  return dayKey(new Date(), tz);
-}
-
 /** Minutes since midnight (0–1439) of an instant, in `tz`. */
 export function minutesOfDay(iso: string, tz?: string): number {
   const k = tz ?? "";
@@ -68,13 +64,18 @@ export function monthGrid(ymd: string): string[] {
   return Array.from({ length: 42 }, (_, i) => addDays(start, i));
 }
 
+/** Format a day key with Intl options — UTC-pinned so the label can never shift a day. */
+export function ymdLabel(ymd: string, opts: Intl.DateTimeFormatOptions): string {
+  return toUtc(ymd).toLocaleDateString("en-US", { ...opts, timeZone: "UTC" });
+}
+
 export function monthTitle(ymd: string): string {
-  return toUtc(ymd).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+  return ymdLabel(ymd, { month: "long", year: "numeric" });
 }
 
 /** "Sunday, Sep 7" label for a day key (no timezone ambiguity — pure ymd). */
 export function dayHeading(ymd: string): string {
-  return toUtc(ymd).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
+  return ymdLabel(ymd, { weekday: "long", month: "short", day: "numeric" });
 }
 
 export const KIND_COLORS: Record<EventKind, { color: string; soft: string }> = {
@@ -83,5 +84,3 @@ export const KIND_COLORS: Record<EventKind, { color: string; soft: string }> = {
   social: { color: "var(--g-yellow)", soft: "var(--g-yellow-soft)" },
   other: { color: "var(--g-grey-600)", soft: "var(--g-grey-100)" },
 };
-
-export const KINDS: EventKind[] = ["practice", "race", "social", "other"];

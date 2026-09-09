@@ -8,7 +8,9 @@ import RichEditor from "@/components/rich-editor";
 import type { Event, SavedLocation } from "@/lib/database.types";
 import Icon from "@/components/icon";
 
-const localDate = (iso: string) => new Date(iso).toLocaleDateString("sv");
+import { dayKey } from "@/lib/calendar-dates";
+
+const localDate = (iso: string) => dayKey(iso); // yyyy-mm-dd, viewer-local
 const localTime = (iso: string) => { const d = new Date(iso); return formatTime(d.getHours(), d.getMinutes()); };
 
 /** ✎ button on a day card (group overview) that expands into an inline editor for that day. */
