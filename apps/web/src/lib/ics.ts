@@ -15,12 +15,12 @@ export type IcsEvent = {
   created_at: string;
 };
 
-export function icsEscape(s: string): string {
+function icsEscape(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/\r/g, "").replace(/\n/g, "\\n").replace(/[;,]/g, (c) => `\\${c}`);
 }
 
 /** Folds one logical line at 75 octets without splitting a UTF-8 character. */
-export function foldLine(line: string): string {
+function foldLine(line: string): string {
   const enc = new TextEncoder();
   const out: string[] = [];
   let cur = "";
@@ -43,7 +43,7 @@ export function foldLine(line: string): string {
 }
 
 /** ISO timestamp → RFC 5545 UTC form: 20260907T183000Z */
-export function icsUtc(iso: string): string {
+function icsUtc(iso: string): string {
   return new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 

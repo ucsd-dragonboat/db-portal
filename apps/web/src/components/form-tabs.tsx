@@ -1,19 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Icon from "@/components/icon";
+import CopyButton from "@/components/copy-button";
 
 /** Google Forms style "Questions | Responses" tab bar for the admin form editor, with a share-link button pinned right. */
 export default function FormTabs({ id, responses, joinCode }: { id: string; responses?: number; joinCode: string }) {
   const path = usePathname();
-  const [copied, setCopied] = useState(false);
   const tabs = [
     { href: `/admin/forms/${id}`, label: "Questions" },
     { href: `/admin/forms/${id}/responses`, label: `Responses${responses != null ? ` ${responses}` : ""}` },
   ];
-  const copy = () => navigator.clipboard.writeText(`${location.origin}/f/${id}?join=${joinCode}`).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); });
   return (
     <div className="relative flex justify-center gap-2 border-b bg-white -mx-4 md:-mx-6 -mt-4 md:-mt-6 mb-4 px-4" style={{ borderColor: "var(--g-grey-300)" }}>
       {tabs.map((t) => {
@@ -25,10 +23,10 @@ export default function FormTabs({ id, responses, joinCode }: { id: string; resp
           </Link>
         );
       })}
-      <button type="button" onClick={copy} className="btn-text absolute right-2 md:right-4 top-1/2 -translate-y-1/2"
-        title="Copy a link anyone can open without signing in — they fill it out, enter their email, and are added to the team">
-        {copied ? <><Icon name="check" /> Link copied</> : <><Icon name="link" /> Copy link</>}
-      </button>
+      <CopyButton text={() => `${location.origin}/f/${id}?join=${joinCode}`}
+        className="btn-text absolute right-2 md:right-4 top-1/2 -translate-y-1/2"
+        title="Copy a link anyone can open without signing in — they fill it out, enter their email, and are added to the team"
+        label={<><Icon name="link" /> Copy link</>} copiedLabel={<><Icon name="check" /> Link copied</>} />
     </div>
   );
 }

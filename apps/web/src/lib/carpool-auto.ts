@@ -17,6 +17,7 @@ import {
 } from "@db/carpool";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { Json, Profile, Rsvp } from "@/lib/database.types";
+import { riderFromRsvp } from "@/lib/riders";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -61,21 +62,17 @@ export async function generateCarpoolForEvent(
   ]);
   const pickupBy = new Map((pickups ?? []).map((p) => [p.id, p]));
 
-  // Mirrors the admin builder: pickup point beats home address; custom typed
-  // addresses aren't geocoded. Only needs_ride riders get seats.
+  // Same rider-assembly rules as the admin builder (lib/riders.ts). Only drivers
+  // and needs_ride riders matter here.
   const riders: Record<string, Rider> = {};
   const cars: Car[] = [];
   for (const r of (rs ?? []) as (Rsvp & { profile: Profile })[]) {
-    const p = r.profile;
-    if (!p || (r.ride !== "driver" && r.ride !== "needs_ride")) continue;
-    const pk = r.pickup_location_id ? pickupBy.get(r.pickup_location_id) : null;
-    const location = pk && pk.lat != null && pk.lon != null ? { lat: pk.lat, lon: pk.lon }
-      : r.pickup_address ? null
-      : p.lat != null && p.lon != null ? { lat: p.lat, lon: p.lon } : null;
-    const suffix = pk ? ` @ ${pk.name}` : r.pickup_address ? ` @ ${r.pickup_address}` : "";
-    riders[p.id] = { id: p.id, name: (p.full_name || p.email) + (r.ride === "needs_ride" ? suffix : ""), location };
-    if (r.ride === "driver")
-      cars.push({ id: p.id, driverId: p.id, capacity: (r.seats ?? (p.car_passengers || 3)) + 1, passengerIds: [] });
+    if (r.ride !== "driver" && r.ride !== "needs_ride") continue;
+    const out = riderFromRsvp(r, pickupBy);
+    if (!out) continue;
+    riders[out.rider.id] = out.rider;
+    if (out.capacity != null)
+      cars.push({ id: out.rider.id, driverId: out.rider.id, capacity: out.capacity, passengerIds: [] });
   }
   if (cars.length === 0) return { skipped: "no drivers RSVP'd" };
 

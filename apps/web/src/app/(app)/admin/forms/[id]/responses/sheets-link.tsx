@@ -2,7 +2,8 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import Icon from "@/components/icon";
+import Dialog from "@/components/dialog";
+import ConfirmForm from "@/components/confirm-form";
 import { linkSheet, searchSheets, unlinkSheet, type DriveSearch, type LinkState } from "./actions";
 
 const SheetsGlyph = () => (
@@ -47,10 +48,10 @@ export default function SheetsLink({ formId, connected, googleEmail, linkedUrl, 
         <a href={linkedUrl} target="_blank" rel="noopener" className="btn-secondary flex items-center gap-2">
           <SheetsGlyph /> View in Sheets
         </a>
-        <form action={unlinkSheet} onSubmit={(e) => { if (!confirm("Unlink this sheet? Responses stop syncing; the sheet keeps its data.")) e.preventDefault(); }}>
+        <ConfirmForm action={unlinkSheet} message="Unlink this sheet? Responses stop syncing; the sheet keeps its data.">
           <input type="hidden" name="form_id" value={formId} />
           <button className="btn-text py-0.5 text-xs" title="Unlink sheet">Unlink</button>
-        </form>
+        </ConfirmForm>
       </span>
     );
   }
@@ -61,12 +62,7 @@ export default function SheetsLink({ formId, connected, googleEmail, linkedUrl, 
         <SheetsGlyph /> Link to Sheets
       </button>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-24" onClick={() => setOpen(false)}>
-          <div className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-lg font-medium"><SheetsGlyph /> Link to Sheets</h2>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="btn-text"><Icon name="x" /></button>
-            </div>
+        <Dialog title={<span className="flex items-center gap-2"><SheetsGlyph /> Link to Sheets</span>} onClose={() => setOpen(false)}>
             {!connected ? (
               <div className="space-y-3 text-sm">
                 <p style={{ color: "var(--g-grey-600)" }}>
@@ -114,8 +110,7 @@ export default function SheetsLink({ formId, connected, googleEmail, linkedUrl, 
                 </div>
               </form>
             )}
-          </div>
-        </div>
+        </Dialog>
       )}
     </>
   );

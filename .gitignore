@@ -7,3 +7,7 @@ dist
 .DS_Store
 supabase/.temp
 *.tsbuildinfo
+
+# local-only PII — never commit
+Addresses.csv
+supabase/migrations/0018_import_members.sql

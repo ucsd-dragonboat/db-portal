@@ -4,10 +4,11 @@ import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import LocalTime from "@/components/local-time";
 import Icon from "@/components/icon";
-import type { Profile, Rsvp } from "@/lib/database.types";
+import type { Rsvp } from "@/lib/database.types";
 import ExportCsv from "./export-csv";
 import FormTabs from "@/components/form-tabs";
 import { buildResponseGrid } from "@/lib/response-grid";
+import { fetchResponseGridInput } from "@/lib/response-data";
 import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
 import SheetsLink from "./sheets-link";
 
@@ -15,28 +16,13 @@ export default async function FormResponsesPage({ params, searchParams }: { para
   const [{ id }, { google: googleReturn }] = await Promise.all([params, searchParams]);
   const { org, userId } = await requireAdmin();
   const supabase = await createClient();
-  const [{ data: form }, { data: links }, { data: responses }, { data: members }, { data: pickups }] = await Promise.all([
-    supabase.from("forms").select("*").eq("id", id).eq("org_id", org.id).maybeSingle(),
-    supabase.from("form_events").select("*, event:events(*)").eq("form_id", id).order("sort_order"),
-    supabase.from("form_responses").select("*").eq("form_id", id),
-    supabase.from("memberships").select("profile:profiles(*)").eq("org_id", org.id),
-    supabase.from("pickup_locations").select("id, name").eq("org_id", org.id),
-  ]);
+  const { data: form } = await supabase.from("forms").select("*").eq("id", id).eq("org_id", org.id).maybeSingle();
   if (!form) notFound();
-  const events = (links ?? []).map((l) => l.event).filter(Boolean) as { id: string; title: string; starts_at: string }[];
-  const { data: rsvps } = events.length
-    ? await supabase.from("rsvps").select("*").in("event_id", events.map((e) => e.id))
-    : { data: [] as Rsvp[] };
+  const input = await fetchResponseGridInput(supabase, form); // same loader the Sheets sync uses
+  const events = input.events;
   const rsvpBy = new Map<string, Rsvp>();
-  for (const r of rsvps ?? []) rsvpBy.set(`${r.event_id}:${r.user_id}`, r);
-  const { profiles, responded, missing, header, rows, lateFlags } = buildResponseGrid({
-    form,
-    events,
-    profiles: (members ?? []).map((m) => m.profile as unknown as Profile).filter(Boolean),
-    responses: responses ?? [],
-    rsvps: rsvps ?? [],
-    pickups: pickups ?? [],
-  });
+  for (const r of input.rsvps) rsvpBy.set(`${r.event_id}:${r.user_id}`, r);
+  const { profiles, responded, missing, header, rows, lateFlags } = buildResponseGrid(input);
   const google = await getGoogleConnection(userId).catch(() => null); // null until migration 0022 runs
 
   return (

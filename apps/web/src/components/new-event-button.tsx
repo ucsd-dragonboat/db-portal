@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Icon from "@/components/icon";
+import Dialog from "@/components/dialog";
 
 // Lazy: keeps tiptap + the date picker out of the shared layout bundle — the chunk
 // only downloads when an admin actually opens the New-event dialog.
@@ -50,20 +51,14 @@ function Inner() {
         <Icon name="plus" />
       </button>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-12" onClick={() => setOpen(false)}>
-          <div className="w-full max-w-2xl rounded-lg bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-lg font-medium">New event</h2>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="btn-text"><Icon name="x" /></button>
-            </div>
-            <p className="mb-3 text-sm" style={{ color: "var(--g-grey-600)" }}>
-              An event is the container (e.g. “Spring Week 8 Practice”); pick its days and type the times.
-              {folderId && " It will be filed into the folder you have open."}
-            </p>
-            <EventBatchForm key={initialDates.join(",") || "blank"} folderId={folderId} initialDates={initialDates}
-              onCreated={() => { setOpen(false); router.refresh(); }} />
-          </div>
-        </div>
+        <Dialog title="New event" onClose={() => setOpen(false)} maxW="max-w-2xl" top="pt-12">
+          <p className="mb-3 text-sm" style={{ color: "var(--g-grey-600)" }}>
+            An event is the container (e.g. “Spring Week 8 Practice”); pick its days and type the times.
+            {folderId && " It will be filed into the folder you have open."}
+          </p>
+          <EventBatchForm key={initialDates.join(",") || "blank"} folderId={folderId} initialDates={initialDates}
+            onCreated={() => { setOpen(false); router.refresh(); }} />
+        </Dialog>
       )}
     </>
   );
