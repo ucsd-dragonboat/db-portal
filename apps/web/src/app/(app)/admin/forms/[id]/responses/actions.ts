@@ -3,10 +3,27 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
-import { parseSheetUrl, setDefaultSpreadsheet } from "@/lib/google-sheets";
+import { getAccessToken, listSpreadsheets, parseSheetUrl, setDefaultSpreadsheet } from "@/lib/google-sheets";
 import { linkFormToSheet, syncFormToSheet, SheetApiError } from "@/lib/sheet-sync";
 
 export type LinkState = { error?: string } | null;
+export type DriveSearch =
+  | { sheets: { id: string; name: string; modifiedTime: string }[] }
+  | { error: "reconnect" | "unavailable" };
+
+/** Browse/search the connected admin's Drive for spreadsheets (dialog picker). */
+export async function searchSheets(query: string): Promise<DriveSearch> {
+  const { userId } = await requireAdmin();
+  try {
+    const token = await getAccessToken(userId);
+    return { sheets: await listSpreadsheets(token, String(query).slice(0, 100)) };
+  } catch (e) {
+    // 403 = token predates the Drive scope; expired grant also needs a fresh connect.
+    if (e instanceof SheetApiError && e.status === 403) return { error: "reconnect" };
+    if (e instanceof Error && e.message === "google_unlinked") return { error: "reconnect" };
+    return { error: "unavailable" };
+  }
+}
 
 /** Link a form to a pasted Google Sheet URL; claims a tab and backfills existing responses. */
 export async function linkSheet(_prev: LinkState, fd: FormData): Promise<LinkState> {

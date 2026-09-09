@@ -121,6 +121,18 @@ async function sheetsFetch(token: string, url: string, init?: RequestInit) {
   return res.json();
 }
 
+/** Recent spreadsheets in the user's Drive (incl. shared with them), optionally filtered by name.
+ * Needs the drive.metadata.readonly scope — connections made before it was added get a 403. */
+export async function listSpreadsheets(token: string, query: string): Promise<{ id: string; name: string; modifiedTime: string }[]> {
+  const parts = ["mimeType='application/vnd.google-apps.spreadsheet'", "trashed=false"];
+  if (query) parts.push(`name contains '${query.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`);
+  const url = "https://www.googleapis.com/drive/v3/files?" + new URLSearchParams({
+    q: parts.join(" and "), orderBy: "viewedByMeTime desc", pageSize: "12", fields: "files(id,name,modifiedTime)",
+  }).toString();
+  const data = await sheetsFetch(token, url);
+  return data.files ?? [];
+}
+
 export async function getSheetTabs(token: string, spreadsheetId: string): Promise<{ sheetId: number; title: string }[]> {
   const data = await sheetsFetch(token, `${SHEETS_BASE}/${spreadsheetId}?fields=sheets.properties(sheetId,title)`);
   return (data.sheets ?? []).map((s: { properties: { sheetId: number; title: string } }) => s.properties);
