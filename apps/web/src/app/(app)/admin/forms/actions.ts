@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import type { FormQuestion, Json } from "@/lib/database.types";
 import { cleanHtml } from "@/lib/html";
+import { defaultSheetColumns } from "@/lib/google-sheets";
 
 /** Start a form from a template. "practice" = the automatic weight question is on; "blank" = custom questions only. */
 export async function createForm(fd: FormData) {
@@ -13,7 +14,7 @@ export async function createForm(fd: FormData) {
   const template = String(fd.get("template") ?? "practice");
   const supabase = await createClient();
   const { data, error } = await supabase.from("forms")
-    .insert({ org_id: org.id, title: "Untitled form", created_by: userId, ask_weight: template === "practice" })
+    .insert({ org_id: org.id, title: "Untitled form", created_by: userId, ask_weight: template === "practice", ...(await defaultSheetColumns(userId)) })
     .select("id").single();
   if (error) throw new Error(error.message);
   redirect(`/admin/forms/${data.id}`);
@@ -37,7 +38,7 @@ export async function createFromTemplate(fd: FormData) {
   const { data: tpl } = await supabase.from("forms").select("*").eq("id", String(fd.get("template_id"))).eq("org_id", org.id).eq("status", "template").maybeSingle();
   if (!tpl) throw new Error("Template not found");
   const { data, error } = await supabase.from("forms")
-    .insert({ org_id: org.id, created_by: userId, title: tpl.title, description: tpl.description, questions: tpl.questions, ask_weight: tpl.ask_weight })
+    .insert({ org_id: org.id, created_by: userId, title: tpl.title, description: tpl.description, questions: tpl.questions, ask_weight: tpl.ask_weight, ...(await defaultSheetColumns(userId)) })
     .select("id").single();
   if (error) throw new Error(error.message);
   redirect(`/admin/forms/${data.id}`);
@@ -57,7 +58,7 @@ export async function createFormForGroup(fd: FormData) {
   const { data: tpl } = await supabase.from("forms").select("*").eq("org_id", org.id).eq("status", "template").order("created_at").limit(1).maybeSingle();
   const { data: form, error } = await supabase.from("forms")
     .insert({ org_id: org.id, created_by: userId, title: `${group.name} Form`,
-      description: tpl?.description ?? "", questions: tpl?.questions ?? [], ask_weight: tpl?.ask_weight ?? true })
+      description: tpl?.description ?? "", questions: tpl?.questions ?? [], ask_weight: tpl?.ask_weight ?? true, ...(await defaultSheetColumns(userId)) })
     .select("id").single();
   if (error) throw new Error(error.message);
   if (events?.length) await supabase.from("form_events").insert(events.map((e, i) => ({ form_id: form.id, event_id: e.id, sort_order: i })));
@@ -104,7 +105,7 @@ export async function duplicateForm(fd: FormData) {
   const { data: src } = await supabase.from("forms").select("*").eq("id", String(fd.get("id"))).eq("org_id", org.id).single();
   if (!src) return;
   const { data: copy } = await supabase.from("forms").insert({
-    org_id: org.id, created_by: userId, title: `${src.title} (copy)`, description: src.description, questions: src.questions, ask_weight: src.ask_weight, status: "draft",
+    org_id: org.id, created_by: userId, title: `${src.title} (copy)`, description: src.description, questions: src.questions, ask_weight: src.ask_weight, status: "draft", ...(await defaultSheetColumns(userId)),
   }).select("id").single();
   if (copy) redirect(`/admin/forms/${copy.id}`);
 }

@@ -1,5 +1,7 @@
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { syncFormToSheet } from "@/lib/sheet-sync";
 import { parseAttendance } from "@/lib/attendance";
 import type { Database, FormQuestion, Json } from "@/lib/database.types";
 import { cleanHtml, htmlToText } from "@/lib/html";
@@ -46,6 +48,9 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
   }
   const { error } = await supabase.from("form_responses").upsert({ form_id: formId, user_id: user.id, answers, submitted_at: new Date().toISOString() });
   if (error) return { error: error.message };
+
+  // Mirror to the linked Google Sheet after the response is sent — never blocks the submitter.
+  if (form.sheet_spreadsheet_id) after(() => syncFormToSheet(formId));
 
   revalidatePath(`/forms/${formId}`); revalidatePath("/forms"); revalidatePath("/events"); revalidatePath("/dashboard");
   return { saved: true };
