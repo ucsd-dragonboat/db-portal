@@ -23,11 +23,21 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const fetchEnd = [addDays(monthEnd, 7), addDays(today, 90)].sort()[1];
   const { data: events } = await supabase
     .from("events")
-    .select("*, rsvps(user_id, status), group:event_groups(name)")
+    .select("id, title, kind, starts_at, ends_at, location_name, rsvps(user_id, status), group:event_groups(name)")
     .eq("org_id", org.id)
     .gte("starts_at", `${fetchStart}T00:00:00Z`)
     .lte("starts_at", `${fetchEnd}T23:59:59Z`)
     .order("starts_at");
+  // Slim what reaches the client: my status + a yes-count, not every member's rsvps.
+  const calEvents: CalEvent[] = (events ?? []).map((e) => {
+    const rs = e.rsvps as { user_id: string; status: string }[];
+    return {
+      id: e.id, title: e.title, kind: e.kind, starts_at: e.starts_at, ends_at: e.ends_at, location_name: e.location_name,
+      group: e.group as { name: string } | null,
+      mine: rs.find((r) => r.user_id === userId)?.status ?? null,
+      yes: rs.filter((r) => r.status === "yes").length,
+    };
+  });
 
   // What each event has attached — RLS scopes visibility (members: published only).
   const ids = (events ?? []).map((e) => e.id);
@@ -47,5 +57,5 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   let feedToken: string | null = null;
   try { feedToken = await getOrCreateCalendarToken(userId); } catch { /* migration 0020 not run yet */ }
 
-  return <CalendarShell events={(events ?? []) as CalEvent[]} attach={attach} userId={userId} isAdmin={isAdmin} view={view} date={date} today={today} feedToken={feedToken} />;
+  return <CalendarShell events={calEvents} attach={attach} isAdmin={isAdmin} view={view} date={date} today={today} feedToken={feedToken} />;
 }

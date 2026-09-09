@@ -8,8 +8,8 @@ import { ATTACHMENTS, eventLabel, type AttachMap, type CalEvent } from "./calend
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MAX_CHIPS = 3;
 
-export default function MonthView({ date, today, tz, events, attach, userId, isAdmin = false }: {
-  date: string; today: string; tz: string | undefined; events: CalEvent[]; attach: AttachMap; userId: string; isAdmin?: boolean;
+export default function MonthView({ date, today, tz, events, attach, isAdmin = false }: {
+  date: string; today: string; tz: string | undefined; events: CalEvent[]; attach: AttachMap; isAdmin?: boolean;
 }) {
   // Admins: clicking a day square opens the New-event dialog pre-filled with that date.
   const dayClick = (ymd: string) => {
@@ -44,7 +44,7 @@ export default function MonthView({ date, today, tz, events, attach, userId, isA
               <div className="space-y-0.5">
                 {dayEvents.slice(0, MAX_CHIPS).map((e) => {
                   const c = KIND_COLORS[e.kind];
-                  const going = e.rsvps.some((r) => r.user_id === userId && r.status === "yes");
+                  const going = e.mine === "yes";
                   const a = attach[e.id];
                   return (
                     <Link key={e.id} href={`/events/${e.id}`} title={eventLabel(e)} onClick={(ev) => ev.stopPropagation()}

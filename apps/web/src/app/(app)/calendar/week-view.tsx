@@ -11,8 +11,8 @@ const SPAN = END_MIN - START_MIN;
 const HOUR_PX = 48;
 const BODY_PX = (SPAN / 60) * HOUR_PX;
 
-export default function WeekView({ date, today, tz, events, userId }: {
-  date: string; today: string; tz: string | undefined; events: CalEvent[]; userId: string;
+export default function WeekView({ date, today, tz, events }: {
+  date: string; today: string; tz: string | undefined; events: CalEvent[];
 }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(date), i));
   const byDay = new Map<string, CalEvent[]>();
@@ -60,7 +60,7 @@ export default function WeekView({ date, today, tz, events, userId }: {
                 const top = ((startMin - START_MIN) / 60) * HOUR_PX;
                 const height = Math.max(Math.min((durMin / 60) * HOUR_PX, BODY_PX - top), 24);
                 const c = KIND_COLORS[e.kind];
-                const going = e.rsvps.some((r) => r.user_id === userId && r.status === "yes");
+                const going = e.mine === "yes";
                 return (
                   <Link key={e.id} href={`/events/${e.id}`} title={eventLabel(e)}
                     className="absolute overflow-hidden rounded px-1 py-0.5 text-[11px] leading-tight"

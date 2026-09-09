@@ -14,17 +14,20 @@ import { deleteEvent } from "@/app/(app)/admin/actions";
 
 export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { userId, profile, isAdmin } = await requireOrg();
+  const { org, userId, profile, isAdmin } = await requireOrg();
   const supabase = await createClient();
-  const { data: event } = await supabase.from("events").select("*, group:event_groups(id, name)").eq("id", id).maybeSingle();
-  if (!event) notFound();
-  const [{ data: rsvps }, { data: lineups }, { data: carpool }, { data: teammates }, { data: pickups }] = await Promise.all([
+  const [{ data: event }, { data: rsvps }, { data: lineups }, { data: carpool }, { data: pickups }] = await Promise.all([
+    supabase.from("events").select("*, group:event_groups(id, name)").eq("id", id).maybeSingle(),
     supabase.from("rsvps").select("*, profile:profiles(full_name)").eq("event_id", id).order("updated_at"),
     supabase.from("lineups").select("*").eq("event_id", id).eq("published", true).order("created_at"),
     supabase.from("carpools").select("*").eq("event_id", id).eq("published", true).maybeSingle(),
-    supabase.from("profiles").select("id, full_name, email"),
-    supabase.from("pickup_locations").select("*").eq("org_id", event.org_id).eq("active", true).order("sort_order"),
+    supabase.from("pickup_locations").select("*").eq("org_id", org.id).eq("active", true).order("sort_order"),
   ]);
+  if (!event) notFound();
+  // The roster is only needed to name people in published lineups/carpools — skip it otherwise.
+  const { data: teammates } = (lineups?.length || carpool)
+    ? await supabase.from("profiles").select("id, full_name, email")
+    : { data: [] };
   const names: Record<string, string> = {};
   for (const t of teammates ?? []) names[t.id] = t.full_name || t.email;
   const cars = ((carpool?.data as { cars?: Car[] } | null)?.cars ?? []);

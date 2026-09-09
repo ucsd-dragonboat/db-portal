@@ -17,14 +17,14 @@ export default async function AdminLineupsPage({ searchParams }: { searchParams:
   const { org } = await requireAdmin();
   const supabase = await createClient();
 
-  const [{ data: events }, { data: members }, { data: lineups }] = await Promise.all([
-    supabase.from("events").select("id, title, starts_at").eq("org_id", org.id).order("starts_at", { ascending: false }).limit(30),
-    supabase.from("memberships").select("profile:profiles(*)").eq("org_id", org.id),
-    supabase.from("lineups").select("*").eq("org_id", org.id).order("created_at", { ascending: true }),
-  ]);
+  const { data: events } = await supabase.from("events").select("id, title, starts_at").eq("org_id", org.id).order("starts_at", { ascending: false }).limit(30);
 
   // Home: Google Forms-style day picker (blue). Selecting a day opens its lineup workspace.
+  // Only needs per-day counts for the days shown — not the full lineup rows (fat jsonb).
   if (!eventId && !blank) {
+    const { data: lineups } = (events ?? []).length
+      ? await supabase.from("lineups").select("event_id, published").eq("org_id", org.id).in("event_id", (events ?? []).map((e) => e.id))
+      : { data: [] };
     const byEvent = new Map<string, { n: number; pub: number }>();
     for (const l of lineups ?? []) {
       if (!l.event_id) continue;
@@ -55,7 +55,12 @@ export default async function AdminLineupsPage({ searchParams }: { searchParams:
     );
   }
 
-  // Day workspace (or blank full-roster mode).
+  // Day workspace (or blank full-roster mode). Fetch only this day's lineups (blank mode: the untied ones).
+  const lineupQuery = supabase.from("lineups").select("*").eq("org_id", org.id).order("created_at", { ascending: true });
+  const [{ data: members }, { data: lineups }] = await Promise.all([
+    supabase.from("memberships").select("profile:profiles(*)").eq("org_id", org.id),
+    eventId ? lineupQuery.eq("event_id", eventId) : lineupQuery.is("event_id", null),
+  ]);
   const event = eventId ? (events ?? []).find((e) => e.id === eventId) ?? null : null;
   let dayIds: string[] | null = null;
   if (eventId) {
@@ -70,7 +75,7 @@ export default async function AdminLineupsPage({ searchParams }: { searchParams:
     roster[p.id] = { id: p.id, name: p.full_name || p.email, weight: p.weight_lb ?? 0, gender: p.gender, sidePreference: p.side_preference, canSteer: p.can_steer, canDrum: p.can_drum };
   }
 
-  const forEvent = ((lineups ?? []) as LineupRow[]).filter((l) => (eventId ? l.event_id === eventId : l.event_id === null));
+  const forEvent = (lineups ?? []) as LineupRow[];
   const practiceRows = forEvent.filter((l) => !l.division);
   const raceRows = forEvent.filter((l) => l.division);
   const current = lineupId ? forEvent.find((l) => l.id === lineupId) ?? null : null;

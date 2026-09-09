@@ -23,11 +23,15 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
   const w = String(fd.get("weight_lb") ?? "").trim();
   if (w) await supabase.from("profiles").update({ weight_lb: Number(w) }).eq("id", user.id);
 
-  // 2. per-event attendance → rsvps
+  // 2. per-event attendance → rsvps (validate all, then one batched upsert)
+  const rsvpRows = [];
   for (const l of links ?? []) {
     const v = parseAttendance(fd, `ev_${l.event_id}_`);
     if (!v) return { error: "Please answer every attendance question." };
-    const { error } = await supabase.from("rsvps").upsert({ event_id: l.event_id, user_id: user.id, form_id: formId, ...v });
+    rsvpRows.push({ event_id: l.event_id, user_id: user.id, form_id: formId, ...v });
+  }
+  if (rsvpRows.length) {
+    const { error } = await supabase.from("rsvps").upsert(rsvpRows);
     if (error) return { error: error.message };
   }
 
