@@ -117,6 +117,17 @@ export type UserCalendarToken = {
   created_at: string;
 };
 
+/** Google OAuth refresh token for Sheets sync — service-role-only table. */
+export type UserGoogleToken = {
+  user_id: string;
+  google_email: string;
+  refresh_token: string;
+  access_token: string | null;
+  access_expires_at: string | null;
+  default_spreadsheet_id: string | null;
+  created_at: string;
+};
+
 export type Event = {
   id: string;
   org_id: string;
@@ -169,6 +180,9 @@ export type Form = {
   questions: Json;   // FormQuestion[]
   ask_weight: boolean;
   carpools_generated_at: string | null; // set once the auto-carpool cron has processed this form
+  sheet_spreadsheet_id: string | null;  // linked Google Sheet; responses mirror into it
+  sheet_tab_id: number | null;          // tab gid; null until the first sync creates the tab
+  sheet_linked_by: string | null;       // whose Google token the sync uses
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -278,6 +292,14 @@ export type Database = {
           { foreignKeyName: "user_calendar_tokens_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ];
       };
+      user_google_tokens: {
+        Row: Row<UserGoogleToken>;
+        Insert: Insert<UserGoogleToken, "access_token" | "access_expires_at" | "default_spreadsheet_id" | "created_at">;
+        Update: Partial<UserGoogleToken>;
+        Relationships: [
+          { foreignKeyName: "user_google_tokens_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ];
+      };
       event_folders: {
         Row: Row<EventFolder>;
         Insert: Insert<EventFolder, "id" | "parent_id" | "color" | "created_at">;
@@ -306,7 +328,7 @@ export type Database = {
       };
       forms: {
         Row: Row<Form>;
-        Insert: Insert<Form, "id" | "description" | "due_at" | "status" | "questions" | "ask_weight" | "carpools_generated_at" | "created_by" | "created_at" | "updated_at">;
+        Insert: Insert<Form, "id" | "description" | "due_at" | "status" | "questions" | "ask_weight" | "carpools_generated_at" | "sheet_spreadsheet_id" | "sheet_tab_id" | "sheet_linked_by" | "created_by" | "created_at" | "updated_at">;
         Update: Partial<Form>;
         Relationships: [
           { foreignKeyName: "forms_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },

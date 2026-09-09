@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { cleanHtml } from "@/lib/html";
+import { disconnectGoogle } from "@/lib/google-sheets";
 
 export type AdminState = { error?: string; ok?: boolean };
 
@@ -335,4 +336,10 @@ export async function removePending(fd: FormData) {
   const supabase = await createClient();
   await supabase.from("pending_members").delete().eq("org_id", org.id).eq("email", String(fd.get("email")));
   revalidatePath("/admin/members");
+}
+
+export async function disconnectGoogleAccount() {
+  const { userId } = await requireAdmin();
+  await disconnectGoogle(userId);
+  revalidatePath("/admin/settings");
 }

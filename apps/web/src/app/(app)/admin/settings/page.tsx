@@ -1,17 +1,19 @@
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
-import { deletePickupLocation, deleteSavedLocation } from "../actions";
+import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
+import { deletePickupLocation, deleteSavedLocation, disconnectGoogleAccount } from "../actions";
 import PickupForm from "./pickup-form";
 import SavedLocationForm from "./saved-location-form";
 import RotateCode from "./rotate-code";
 
 export default async function AdminSettingsPage() {
-  const { org } = await requireAdmin();
+  const { org, userId } = await requireAdmin();
   const supabase = await createClient();
   const [{ data: pickups }, { data: locations }] = await Promise.all([
     supabase.from("pickup_locations").select("*").eq("org_id", org.id).order("sort_order").order("name"),
     supabase.from("saved_locations").select("*").eq("org_id", org.id).order("sort_order").order("name"),
   ]);
+  const google = await getGoogleConnection(userId).catch(() => null); // null until migration 0022 runs
   return (
     <div className="max-w-2xl space-y-6">
       <div>
@@ -45,6 +47,21 @@ export default async function AdminSettingsPage() {
           ))}
           {!pickups?.length && <li className="text-sm text-slate-400">None yet.</li>}
         </ul>
+      </section>
+      <section>
+        <h2 className="text-lg font-medium mb-1">Google account</h2>
+        <p className="text-sm text-slate-500 mb-3">Used to write form responses into Google Sheets (the “Link to Sheets” button on a form’s Responses page).</p>
+        {google ? (
+          <div className="card py-2 flex items-center justify-between text-sm">
+            <span>
+              Connected as <b>{google.googleEmail}</b>
+              {google.defaultSpreadsheetId && <> · <a href={sheetViewUrl(google.defaultSpreadsheetId, null)} target="_blank" rel="noopener" className="underline">default spreadsheet</a></>}
+            </span>
+            <form action={disconnectGoogleAccount}><button className="text-xs text-red-600 underline" title="Forms already linked stop syncing">Disconnect</button></form>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">Not connected — <a href="/api/google/connect?next=/admin/settings" className="underline">connect Google account</a>, or do it from any form’s Responses page.</p>
+        )}
       </section>
     </div>
   );
