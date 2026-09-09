@@ -70,7 +70,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
                 <Link key={f.id} href={`/events?folder=${f.id}`}
                   className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2.5 text-sm hover:bg-slate-50"
                   style={{ borderColor: "var(--g-grey-300)" }}>
-                  <span style={{ color: "#5f6368" }}><Icon name="folder" className="text-lg" /></span>
+                  <span style={{ color: f.color ?? "#5f6368" }}><Icon name="folder" className="text-lg" /></span>
                   <span className="min-w-0 flex-1 truncate font-medium">{f.name}</span>
                   <span className="text-xs" style={{ color: "var(--g-grey-600)" }}>{upcomingIn(f.id)}</span>
                 </Link>
