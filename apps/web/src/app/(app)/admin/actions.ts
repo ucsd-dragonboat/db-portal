@@ -178,7 +178,8 @@ export async function createFolder(fd: FormData) {
   const { org } = await requireAdmin();
   const supabase = await createClient();
   const name = String(fd.get("name") ?? "").trim();
-  if (name) await supabase.from("event_folders").insert({ org_id: org.id, name });
+  const parentId = String(fd.get("parent_id") ?? "") || null;
+  if (name) await supabase.from("event_folders").insert({ org_id: org.id, name, parent_id: parentId });
   revalidatePath("/admin/events");
 }
 
@@ -205,6 +206,33 @@ export async function moveGroupToFolder(fd: FormData) {
   const folderId = String(fd.get("folder_id") ?? "");
   await supabase.from("event_groups").update({ folder_id: folderId || null }).eq("id", String(fd.get("group_id"))).eq("org_id", org.id);
   revalidatePath("/admin/events");
+}
+
+/** Re-parents a folder (Drive-style nesting). Refuses cycles: a folder can't move into itself or a descendant. */
+export async function moveFolderToFolder(fd: FormData) {
+  const { org } = await requireAdmin();
+  const supabase = await createClient();
+  const folderId = String(fd.get("folder_id"));
+  const parentId = String(fd.get("parent_id") ?? "") || null;
+  if (!folderId || folderId === parentId) return;
+  if (parentId) {
+    const { data: all } = await supabase.from("event_folders").select("id, parent_id").eq("org_id", org.id);
+    const parentOf = new Map((all ?? []).map((f) => [f.id, f.parent_id]));
+    for (let p: string | null = parentId; p; p = parentOf.get(p) ?? null) {
+      if (p === folderId) return; // would create a cycle
+    }
+  }
+  await supabase.from("event_folders").update({ parent_id: parentId }).eq("id", folderId).eq("org_id", org.id);
+  revalidatePath("/admin/events");
+}
+
+export async function setFolderColor(fd: FormData) {
+  const { org } = await requireAdmin();
+  const supabase = await createClient();
+  const color = String(fd.get("color") ?? "");
+  if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) return;
+  await supabase.from("event_folders").update({ color: color || null }).eq("id", String(fd.get("id"))).eq("org_id", org.id);
+  revalidatePath("/admin/events"); revalidatePath("/events");
 }
 
 export async function renameGroup(fd: FormData) {

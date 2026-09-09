@@ -105,6 +105,8 @@ export type EventFolder = {
   id: string;
   org_id: string;
   name: string;
+  parent_id: string | null; // folders can nest, Drive-style
+  color: string | null;     // folder icon color (null = default grey)
   created_at: string;
 };
 
@@ -278,7 +280,7 @@ export type Database = {
       };
       event_folders: {
         Row: Row<EventFolder>;
-        Insert: Insert<EventFolder, "id" | "created_at">;
+        Insert: Insert<EventFolder, "id" | "parent_id" | "color" | "created_at">;
         Update: Partial<EventFolder>;
         Relationships: [
           { foreignKeyName: "event_folders_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },

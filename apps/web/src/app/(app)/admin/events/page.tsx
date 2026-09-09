@@ -3,8 +3,9 @@ import Icon from "@/components/icon";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import LocalTime from "@/components/local-time";
-import { createFolder, deleteEvent, deleteFolder, deleteGroup, renameFolder } from "../actions";
-import { DraggableEvent, FolderDropTarget } from "./dnd";
+import { createFolder, deleteEvent, deleteGroup } from "../actions";
+import { DraggableEvent, DraggableFolder, FolderDropTarget } from "./dnd";
+import FolderMenu from "./folder-menu";
 import { createFormForGroup } from "../forms/actions";
 import ConfirmForm from "@/components/confirm-form";
 import type { EventFolder, EventGroup } from "@/lib/database.types";
@@ -34,56 +35,56 @@ export default async function AdminEventsPage({ searchParams }: { searchParams: 
   // In a folder: only its events. At root: events not in any folder.
   const containers = all.filter(({ group }) => (folder ? group?.folder_id === folder.id : (group?.folder_id ?? null) === null));
   const countIn = (f: EventFolder) => (groups ?? []).filter((g) => g.folder_id === f.id).length;
+  // Folders shown at this level: root folders at the root, children inside a folder.
+  const subfolders = (folders ?? []).filter((f) => (f.parent_id ?? null) === (folder?.id ?? null));
 
   return (
     <div className="mx-auto max-w-[1000px]">
       <section>
         {folder ? (
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <FolderDropTarget folderId={null}>
-              <Link href="/admin/events" className="btn-text -ml-3" title="Drop an event here to move it out of this folder">← All events</Link>
+            <FolderDropTarget folderId={folder.parent_id}>
+              <Link href={folder.parent_id ? `/admin/events?folder=${folder.parent_id}` : "/admin/events"} className="btn-text -ml-3"
+                title="Drop an event or folder here to move it up a level">
+                ← {(folders ?? []).find((f) => f.id === folder.parent_id)?.name ?? "All events"}
+              </Link>
             </FolderDropTarget>
-            <h2 className="text-lg font-medium" style={{ color: "#5f6368" }}><Icon name="folder" /> {folder.name}</h2>
-            <details className="text-xs">
-              <summary className="cursor-pointer text-slate-500 underline">rename</summary>
-              <form action={renameFolder} className="mt-1 flex items-center gap-1">
-                <input type="hidden" name="id" value={folder.id} />
-                <input name="name" defaultValue={folder.name} required className="input w-40 py-1" />
-                <button className="btn-secondary py-1">Save</button>
-              </form>
-            </details>
-            <ConfirmForm action={deleteFolder} message={`Delete folder "${folder.name}"? Its events are kept and move back to All events.`}>
-              <input type="hidden" name="id" value={folder.id} />
-              <button className="btn-danger-text py-0.5 text-xs">Delete folder</button>
-            </ConfirmForm>
+            <h2 className="flex items-center gap-2 text-lg font-medium" style={{ color: "#5f6368" }}>
+              <span style={{ color: folder.color ?? "#5f6368" }}><Icon name="folder" /></span> {folder.name}
+            </h2>
+            <FolderMenu id={folder.id} name={folder.name} color={folder.color} />
           </div>
         ) : (
-          <>
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-lg font-medium">Folders</h2>
-              <form action={createFolder} className="flex items-center gap-1 text-xs">
-                <input name="name" required placeholder="New folder…" className="input w-36 py-1" />
-                <button className="btn-secondary py-1">+ <Icon name="folder" /></button>
-              </form>
-            </div>
-            {(folders ?? []).length > 0 && (
-              <div className="mb-4 grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
-                {(folders ?? []).map((f) => (
-                  <FolderDropTarget key={f.id} folderId={f.id}>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-lg font-medium">Folders</h2>
+          </div>
+        )}
+        <>
+          {subfolders.length > 0 && (
+            <div className="mb-4 grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+              {subfolders.map((f) => (
+                <DraggableFolder key={f.id} folderId={f.id}>
+                  <FolderDropTarget folderId={f.id}>
                     <Link href={`/admin/events?folder=${f.id}`}
-                      className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2.5 text-sm hover:bg-slate-50"
-                      style={{ borderColor: "var(--g-grey-300)" }}>
-                      <span style={{ color: "#5f6368" }}><Icon name="folder" className="text-lg" /></span>
+                      className="flex items-center gap-3 rounded-2xl px-4 py-2 text-sm hover:bg-slate-200/70"
+                      style={{ background: "var(--g-grey-100)" }}>
+                      <span className="text-lg" style={{ color: f.color ?? "#5f6368" }}><Icon name="folder" /></span>
                       <span className="min-w-0 flex-1 truncate font-medium">{f.name}</span>
                       <span className="text-xs" style={{ color: "var(--g-grey-600)" }}>{countIn(f)}</span>
+                      <FolderMenu id={f.id} name={f.name} color={f.color} />
                     </Link>
                   </FolderDropTarget>
-                ))}
-              </div>
-            )}
-            <h2 className="text-lg font-medium mb-3">All events <span className="ml-1 text-xs font-normal" style={{ color: "var(--g-grey-600)" }}>drag one onto a folder to file it</span></h2>
-          </>
-        )}
+                </DraggableFolder>
+              ))}
+            </div>
+          )}
+          <form action={createFolder} className="mb-4 flex items-center gap-1 text-xs">
+            {folder && <input type="hidden" name="parent_id" value={folder.id} />}
+            <input name="name" required placeholder={folder ? "New folder inside…" : "New folder…"} className="input w-40 py-1" />
+            <button className="btn-secondary py-1">+ <Icon name="folder" /></button>
+          </form>
+          <h2 className="text-lg font-medium mb-3">{folder ? "Events" : "All events"} <span className="ml-1 text-xs font-normal" style={{ color: "var(--g-grey-600)" }}>drag events or folders onto a folder to file them</span></h2>
+        </>
         <div className="space-y-3">
           {containers.map(({ group, days: ds }) => {
             const total = ds.reduce((a, d) => a + (d.rsvps as { status: string }[]).filter((r) => r.status === "yes").length, 0);
