@@ -3,7 +3,7 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import Icon, { type IconName } from "@/components/icon";
-import type { Event } from "@/lib/database.types";
+import type { EventKind } from "@/lib/database.types";
 import { TEAM_TZ } from "@/lib/format";
 import { addDays, addMonths, dayKey, monthTitle, startOfWeek } from "@/lib/calendar-dates";
 import MonthView from "./month-view";
@@ -12,7 +12,14 @@ import AgendaView from "./agenda-view";
 import MiniMonth from "./mini-month";
 import FeedDialog from "./feed-dialog";
 
-export type CalEvent = Event & { rsvps: { user_id: string; status: string }[]; group: { name: string } | null };
+/** Slim shape serialized to the client — my status + a yes-count instead of every member's rsvps. */
+export type CalEvent = {
+  id: string; title: string; kind: EventKind; starts_at: string; ends_at: string | null;
+  location_name: string | null;
+  group: { name: string } | null;
+  mine: string | null; // the viewer's rsvp status
+  yes: number;         // total "yes" rsvps
+};
 
 /** Day rows carry auto-generated titles ("Saturday 9/12"); the real name is the group's. */
 export const eventLabel = (e: CalEvent) => e.group?.name ?? e.title;
@@ -30,10 +37,9 @@ export const ATTACHMENTS: { key: Attachment; label: string; icon: IconName; colo
 const emptySub = () => () => {};
 const VIEWS: CalView[] = ["week", "month", "agenda"];
 
-export default function CalendarShell({ events, attach, userId, isAdmin = false, view, date, today: teamToday, feedToken = null }: {
+export default function CalendarShell({ events, attach, isAdmin = false, view, date, today: teamToday, feedToken = null }: {
   events: CalEvent[];
   attach: AttachMap;
-  userId: string;
   isAdmin?: boolean;
   view: CalView;
   date: string;
@@ -82,9 +88,9 @@ export default function CalendarShell({ events, attach, userId, isAdmin = false,
             ))}
           </div>
         </div>
-        {view === "month" && <MonthView date={date} today={today} tz={tz} events={visible} attach={attach} userId={userId} isAdmin={isAdmin} />}
-        {view === "week" && <WeekView date={date} today={today} tz={tz} events={visible} userId={userId} />}
-        {view === "agenda" && <AgendaView date={date} today={today} tz={tz} events={visible} userId={userId} />}
+        {view === "month" && <MonthView date={date} today={today} tz={tz} events={visible} attach={attach} isAdmin={isAdmin} />}
+        {view === "week" && <WeekView date={date} today={today} tz={tz} events={visible} />}
+        {view === "agenda" && <AgendaView date={date} today={today} tz={tz} events={visible} />}
       </div>
       <aside className="hidden w-56 shrink-0 space-y-5 lg:block">
         <MiniMonth date={date} today={today} tz={tz} view={view} events={visible} />

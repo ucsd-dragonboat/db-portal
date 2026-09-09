@@ -13,9 +13,10 @@ export default async function DashboardPage() {
       .order("pinned", { ascending: false }).order("created_at", { ascending: false }).limit(10),
     supabase.from("events").select("*").eq("org_id", org.id)
       .gte("starts_at", new Date().toISOString()).order("starts_at").limit(5),
-    supabase.from("forms").select("id, title, due_at, form_responses(user_id)").eq("org_id", org.id).eq("status", "open").order("due_at", { ascending: true, nullsFirst: false }),
+    supabase.from("forms").select("id, title, due_at, form_responses(user_id)").eq("org_id", org.id).eq("status", "open")
+      .eq("form_responses.user_id", userId).order("due_at", { ascending: true, nullsFirst: false }),
   ]);
-  const pendingForms = (openForms ?? []).filter((f) => !(f.form_responses as { user_id: string }[]).some((r) => r.user_id === userId));
+  const pendingForms = (openForms ?? []).filter((f) => !(f.form_responses as { user_id: string }[]).length);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">

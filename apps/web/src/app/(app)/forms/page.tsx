@@ -7,8 +7,9 @@ import LocalTime from "@/components/local-time";
 export default async function FormsPage() {
   const { org, userId } = await requireOrg();
   const supabase = await createClient();
-  const { data: forms } = await supabase.from("forms").select("*, form_responses(user_id, submitted_at)").eq("org_id", org.id)
-    .neq("status", "draft").order("status").order("due_at", { ascending: true, nullsFirst: false });
+  // The embed filter keeps this to *my* response per form instead of every member's.
+  const { data: forms } = await supabase.from("forms").select("id, title, due_at, status, form_responses(user_id, submitted_at)").eq("org_id", org.id)
+    .neq("status", "draft").eq("form_responses.user_id", userId).order("status").order("due_at", { ascending: true, nullsFirst: false });
   const mine = (f: { form_responses: { user_id: string; submitted_at: string }[] }) => f.form_responses.find((r) => r.user_id === userId);
   const open = (forms ?? []).filter((f) => f.status === "open");
   const closed = (forms ?? []).filter((f) => f.status === "closed");

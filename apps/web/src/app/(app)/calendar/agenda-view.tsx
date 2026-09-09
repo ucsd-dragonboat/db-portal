@@ -5,8 +5,8 @@ import { fmtTime } from "@/lib/format";
 import { dayHeading, dayKey, KIND_COLORS } from "@/lib/calendar-dates";
 import { eventLabel, type CalEvent } from "./calendar-shell";
 
-export default function AgendaView({ date, today, tz, events, userId }: {
-  date: string; today: string; tz: string | undefined; events: CalEvent[]; userId: string;
+export default function AgendaView({ date, today, tz, events }: {
+  date: string; today: string; tz: string | undefined; events: CalEvent[];
 }) {
   // Agenda lists everything from the focused date forward (within the fetched window).
   const upcoming = events.filter((e) => dayKey(e.starts_at, tz) >= date);
@@ -28,8 +28,8 @@ export default function AgendaView({ date, today, tz, events, userId }: {
           <div className="space-y-1.5">
             {byDay.get(ymd)!.map((e) => {
               const c = KIND_COLORS[e.kind];
-              const mine = e.rsvps.find((r) => r.user_id === userId)?.status;
-              const yes = e.rsvps.filter((r) => r.status === "yes").length;
+              const mine = e.mine;
+              const yes = e.yes;
               return (
                 <Link key={e.id} href={`/events/${e.id}`} className="card card-hover flex items-center gap-3 !p-3 text-sm">
                   <span className="h-8 w-1 shrink-0 rounded" style={{ background: c.color }} />
