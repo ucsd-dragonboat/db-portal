@@ -49,6 +49,8 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
   const delQ = (qid: string) => set("questions", f.questions.filter((q) => q.id !== qid));
   const dupQ = (qid: string) => { const i = f.questions.findIndex((q) => q.id === qid); const c = { ...f.questions[i], id: uid() }; const a = [...f.questions]; a.splice(i + 1, 0, c); set("questions", a); setFocus(c.id); };
   const moveQ = (i: number, d: -1 | 1) => { const a = [...f.questions]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; set("questions", a); };
+  // Order of f.events = order of the attendance questions (saved as form_events.sort_order).
+  const moveEvent = (i: number, d: -1 | 1) => { const a = [...f.events]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; set("events", a); };
 
   const save = (status = f.status) => start(async () => {
     // Untitled questions are dropped — except info blocks, which only need body text.
@@ -121,6 +123,22 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
             </div>
           );
         })}
+        {f.events.length > 1 && (
+          <div className="rounded-lg border p-2" style={{ borderColor: "var(--g-grey-300)", background: "var(--g-grey-50)" }}>
+            <div className="mb-1 text-xs font-medium" style={{ color: "var(--g-grey-600)" }}>Attendance question order</div>
+            {f.events.map((e, i) => {
+              const ev = events.find((x) => x.id === e.event_id);
+              return (
+                <div key={e.event_id} className="flex items-center gap-1 py-0.5 text-sm">
+                  <button type="button" onClick={() => moveEvent(i, -1)} disabled={i === 0} className="btn-text !py-0 disabled:opacity-30" aria-label="Move up"><Icon name="up" /></button>
+                  <button type="button" onClick={() => moveEvent(i, 1)} disabled={i === f.events.length - 1} className="btn-text !py-0 disabled:opacity-30" aria-label="Move down"><Icon name="down" /></button>
+                  <span className="min-w-0 flex-1 truncate">{i + 1}. {ev?.title ?? "(past day)"}</span>
+                  {ev && <span className="shrink-0 text-xs" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={ev.starts_at} /></span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>}
 
       {/* automatic questions — rendered exactly as members will see them */}
