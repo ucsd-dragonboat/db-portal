@@ -107,11 +107,12 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         {!events.length && !addingDays && <p className="text-sm" style={{ color: "var(--g-red)" }}>No upcoming events yet — click “New event & days”.</p>}
         {events.map((ev) => {
           const on = f.events.find((e) => e.event_id === ev.id);
+          const groupName = ev.group_id ? groups.find((g) => g.id === ev.group_id)?.name : null;
           return (
             <div key={ev.id} className="rounded px-2 py-1" style={{ background: on ? "var(--g-purple-soft)" : undefined }}>
               <label className="gf-radio !py-1">
                 <input type="checkbox" checked={!!on} onChange={() => toggleEvent(ev.id)} />
-                <span>{ev.title}</span><span className="text-[10px] uppercase" style={{ color: "var(--g-grey-600)" }}>{ev.kind}</span>
+                <span>{ev.title}</span><span className={`text-[10px] ${groupName ? "" : "uppercase"}`} style={{ color: "var(--g-grey-600)" }}>{groupName ?? ev.kind}</span>
                 <span className="ml-auto text-xs" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={ev.starts_at} /></span>
               </label>
               {on && <input value={on.prompt ?? ""} onChange={(e) => setPrompt(ev.id, e.target.value)} placeholder={`Custom prompt (default: “Will you be attending ${ev.title}?”)`} className="input-line ml-9 w-[calc(100%-2.25rem)] text-xs" />}
