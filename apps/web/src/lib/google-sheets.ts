@@ -141,7 +141,8 @@ export async function getSheetTabs(token: string, spreadsheetId: string): Promis
 export async function addTab(token: string, spreadsheetId: string, title: string): Promise<{ sheetId: number; title: string }> {
   const tryAdd = async (t: string) => {
     const data = await sheetsFetch(token, `${SHEETS_BASE}/${spreadsheetId}:batchUpdate`, {
-      method: "POST", body: JSON.stringify({ requests: [{ addSheet: { properties: { title: t } } }] }),
+      // index 0 = the new tab lands leftmost in the tab bar, not appended at the end.
+      method: "POST", body: JSON.stringify({ requests: [{ addSheet: { properties: { title: t, index: 0 } } }] }),
     });
     return data.replies[0].addSheet.properties as { sheetId: number; title: string };
   };
