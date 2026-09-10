@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import type { FormQuestion } from "@/lib/database.types";
+import { htmlToText } from "@/lib/html";
 import FormsHome, { type FormRow, type TemplateRow } from "./forms-home";
 
 export default async function AdminFormsPage() {
@@ -12,7 +13,7 @@ export default async function AdminFormsPage() {
   ]);
   const templates: TemplateRow[] = (allForms ?? []).filter((f) => f.status === "template").map((t) => ({
     id: t.id, title: t.title, ask_weight: t.ask_weight,
-    qLabels: ((t.questions as unknown as FormQuestion[]) ?? []).map((q) => q.label).filter(Boolean).slice(0, 4),
+    qLabels: ((t.questions as unknown as FormQuestion[]) ?? []).map((q) => htmlToText(q.label)).filter(Boolean).slice(0, 4),
   }));
   const forms: FormRow[] = (allForms ?? []).filter((f) => f.status !== "template").map((f) => ({
     id: f.id, title: f.title, status: f.status, due_at: f.due_at, created_at: f.created_at,

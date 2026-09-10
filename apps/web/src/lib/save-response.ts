@@ -48,7 +48,7 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
     else if (q.type === "long_text") { const raw = String(fd.get(key) ?? "").trim(); const clean = raw ? cleanHtml(raw) : ""; val = htmlToText(clean).trim() ? clean : null; }
     else val = String(fd.get(key) ?? "").trim() || null;
     const empty = val === null || (Array.isArray(val) && !val.length);
-    if (q.required && empty) return { error: `"${q.label}" is required.` };
+    if (q.required && empty) return { error: `"${htmlToText(q.label)}" is required.` };
     answers[q.id] = val;
   }
   const { error } = await supabase.from("form_responses").upsert({ form_id: formId, user_id: user.id, answers, submitted_at: new Date().toISOString() });
