@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     client_id: googleClientEnv().id,
     redirect_uri: `${origin}/api/google/callback`,
     response_type: "code",
-    scope: "openid email https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.metadata.readonly",
+    scope: "openid email https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/calendar",
     access_type: "offline",
     prompt: "consent", // always re-issue a refresh token
     state: nonce,

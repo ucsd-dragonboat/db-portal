@@ -141,8 +141,19 @@ export type Event = {
   location_lon: number | null;
   notes: string | null;
   rsvp_deadline: string | null;
+  google_event_id: string | null; // mirrored event in the org's team Google Calendar
+  needs_info: boolean;            // imported from Google, awaiting kind/group/details
   created_by: string | null;
   created_at: string;
+};
+
+/** One team Google Calendar per org — service-role-only table. */
+export type GoogleCalendarSync = {
+  org_id: string;
+  user_id: string;
+  calendar_id: string;
+  sync_token: string | null;
+  updated_at: string;
 };
 
 export type RideChoice = "none" | "driver" | "self" | "needs_ride";
@@ -301,6 +312,15 @@ export type Database = {
           { foreignKeyName: "user_google_tokens_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ];
       };
+      google_calendar_sync: {
+        Row: Row<GoogleCalendarSync>;
+        Insert: Insert<GoogleCalendarSync, "sync_token" | "updated_at">;
+        Update: Partial<GoogleCalendarSync>;
+        Relationships: [
+          { foreignKeyName: "google_calendar_sync_org_id_fkey"; columns: ["org_id"]; isOneToOne: true; referencedRelation: "organizations"; referencedColumns: ["id"] },
+          { foreignKeyName: "google_calendar_sync_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ];
+      };
       event_folders: {
         Row: Row<EventFolder>;
         Insert: Insert<EventFolder, "id" | "parent_id" | "color" | "created_at">;
@@ -319,7 +339,7 @@ export type Database = {
       };
       events: {
         Row: Row<Event>;
-        Insert: Insert<Event, "id" | "kind" | "group_id" | "ends_at" | "location_name" | "location_lat" | "location_lon" | "notes" | "rsvp_deadline" | "created_by" | "created_at">;
+        Insert: Insert<Event, "id" | "kind" | "group_id" | "ends_at" | "location_name" | "location_lat" | "location_lon" | "notes" | "rsvp_deadline" | "google_event_id" | "needs_info" | "created_by" | "created_at">;
         Update: Partial<Event>;
         Relationships: [
           { foreignKeyName: "events_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
