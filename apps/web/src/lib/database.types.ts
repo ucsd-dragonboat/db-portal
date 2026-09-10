@@ -160,7 +160,7 @@ export type Rsvp = {
   updated_at: string;
 };
 
-export type QuestionType = "short_text" | "long_text" | "single_choice" | "multi_choice" | "yes_no" | "number" | "info";
+export type QuestionType = "short_text" | "long_text" | "single_choice" | "multi_choice" | "yes_no" | "number" | "info" | "day";
 export type FormQuestion = {
   id: string;
   type: QuestionType;
@@ -168,6 +168,7 @@ export type FormQuestion = {
   help?: string;
   required?: boolean;
   options?: string[];
+  event_id?: string; // type "day" only: position marker for that day's attendance question
 };
 
 export type Form = {

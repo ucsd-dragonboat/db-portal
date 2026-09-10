@@ -37,6 +37,19 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
 }) {
   const [state, action, pending] = useActionState<SubmitState, FormData>(submitAction, {});
   const a = (id: string) => existingAnswers?.[id];
+
+  // Attendance days and custom questions share one sequence: "day" markers in the
+  // questions list position each day; days without a marker (older forms) come first.
+  type FormItem = { day: { prompt: string | null; event: Event } } | { q: FormQuestion };
+  const dayByEvent = new Map(events.map((e) => [e.event.id, e]));
+  const marked = new Set(questions.filter((q) => q.type === "day").map((q) => q.event_id));
+  const items: FormItem[] = [
+    ...events.filter((e) => !marked.has(e.event.id)).map((e) => ({ day: e })),
+    ...questions.flatMap<FormItem>((q) => q.type === "day"
+      ? (q.event_id && dayByEvent.has(q.event_id) ? [{ day: dayByEvent.get(q.event_id)! }] : [])
+      : [{ q }]),
+  ];
+  let dayIdx = -1;
   return (
     <form action={action} className="space-y-3">
       <input type="hidden" name="form_id" value={formId} />
@@ -48,14 +61,19 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
         </Q>
       )}
 
-      {events.map(({ event, prompt }, i) => (
-        <Q key={event.id} required title={prompt || <><Icon name={i % 2 ? "moon" : "sun"} /> Will you be attending {event.title}?</>}
-          meta={<><LocalTime iso={event.starts_at} />{event.location_name && <> · <Icon name="pin" /> {event.location_name}</>}</>} help={event.notes ?? undefined}>
-          <AttendanceFields prefix={`ev_${event.id}_`} existing={rsvpBy[event.id] ?? null} pickups={pickups} defaultSeats={defaultSeats} />
-        </Q>
-      ))}
-
-      {questions.map((q) => q.type === "info" ? (
+      {items.map((it) => {
+        if ("day" in it) {
+          const { event, prompt } = it.day;
+          dayIdx += 1;
+          return (
+            <Q key={event.id} required title={prompt || <><Icon name={dayIdx % 2 ? "moon" : "sun"} /> Will you be attending {event.title}?</>}
+              meta={<><LocalTime iso={event.starts_at} />{event.location_name && <> · <Icon name="pin" /> {event.location_name}</>}</>} help={event.notes ?? undefined}>
+              <AttendanceFields prefix={`ev_${event.id}_`} existing={rsvpBy[event.id] ?? null} pickups={pickups} defaultSeats={defaultSeats} />
+            </Q>
+          );
+        }
+        const q = it.q;
+        return q.type === "info" ? (
         // Read-only info card — admin-authored rich text, nothing to answer.
         <div key={q.id} className="gf-card space-y-2">
           {q.label && <div className="text-base font-medium">{q.label}</div>}
@@ -76,7 +94,8 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
             <label key={o} className="gf-radio"><input type="checkbox" name={`q_${q.id}`} value={o} defaultChecked={Array.isArray(a(q.id)) && (a(q.id) as string[]).includes(o)} /> {o}</label>
           ))}
         </Q>
-      ))}
+      );
+      })}
 
       {state.error && <p className="text-sm" style={{ color: "var(--g-red)" }}>{state.error}</p>}
       {state.saved && <div className="gf-card text-sm"><Icon name="yes" /> Your response has been recorded. You can resubmit any time before the form closes — the latest one counts.</div>}
