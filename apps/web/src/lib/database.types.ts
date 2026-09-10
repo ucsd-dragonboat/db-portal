@@ -160,7 +160,7 @@ export type Rsvp = {
   updated_at: string;
 };
 
-export type QuestionType = "short_text" | "long_text" | "single_choice" | "multi_choice" | "yes_no" | "number";
+export type QuestionType = "short_text" | "long_text" | "single_choice" | "multi_choice" | "yes_no" | "number" | "info";
 export type FormQuestion = {
   id: string;
   type: QuestionType;

@@ -22,6 +22,7 @@ const TYPES: { value: QuestionType; label: string; icon: string }[] = [
   { value: "short_text", label: "Short answer", icon: "―" },
   { value: "long_text", label: "Paragraph", icon: "☰" },
   { value: "number", label: "Number", icon: "#" },
+  { value: "info", label: "Info block (no answer)", icon: "¶" },
 ];
 const uid = () => Math.random().toString(36).slice(2, 9);
 const toLocal = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "");
@@ -50,7 +51,8 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
   const moveQ = (i: number, d: -1 | 1) => { const a = [...f.questions]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; set("questions", a); };
 
   const save = (status = f.status) => start(async () => {
-    const payload = { ...f, status, questions: f.questions.filter((q) => q.label.trim()) };
+    // Untitled questions are dropped — except info blocks, which only need body text.
+    const payload = { ...f, status, questions: f.questions.filter((q) => (q.type === "info" ? q.label.trim() || q.help : q.label.trim())) };
     const r = await saveForm(id, payload);
     if (r.error) { setMsg(r.error); return; }
     setF(payload); setMsg(status === "open" ? "Saved — form is open to members" : "Saved"); router.refresh();
@@ -176,15 +178,16 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         return (
           <div key={q.id} onClick={() => setFocus(q.id)} className={`gf-card ${active ? "gf-card-active" : ""} space-y-3`}>
             <div className="flex gap-3">
-              <input value={q.label} onChange={(e) => updQ(q.id, { label: e.target.value })} placeholder="Question" className="input-line flex-1 text-base" style={{ background: active ? "var(--g-grey-50)" : undefined }} />
+              <input value={q.label} onChange={(e) => updQ(q.id, { label: e.target.value })} placeholder={q.type === "info" ? "Title (optional)" : "Question"} className="input-line flex-1 text-base" style={{ background: active ? "var(--g-grey-50)" : undefined }} />
               {active && (
-                <select value={q.type} onChange={(e) => updQ(q.id, { type: e.target.value as QuestionType, options: ["single_choice", "multi_choice"].includes(e.target.value) ? (q.options?.length ? q.options : ["Option 1"]) : undefined })} className="input w-48">
+                <select value={q.type} onChange={(e) => updQ(q.id, { type: e.target.value as QuestionType, options: ["single_choice", "multi_choice"].includes(e.target.value) ? (q.options?.length ? q.options : ["Option 1"]) : undefined, ...(e.target.value === "info" ? { required: false } : {}) })} className="input w-48">
                   {TYPES.map((x) => <option key={x.value} value={x.value}>{x.icon} {x.label}</option>)}
                 </select>
               )}
             </div>
-            {active && <RichEditor value={q.help ?? ""} onChange={(html) => updQ(q.id, { help: html || undefined })} minRows={2} placeholder="Description (optional)" className="text-xs" />}
-            {!active && q.help && <RichText text={q.help} className="!text-xs" />}
+            {active && <RichEditor value={q.help ?? ""} onChange={(html) => updQ(q.id, { help: html || undefined })} minRows={q.type === "info" ? 5 : 2} placeholder={q.type === "info" ? "Write the info members will read — headings, bullets and links work" : "Description (optional)"} className={q.type === "info" ? "" : "text-xs"} />}
+            {!active && q.help && <RichText text={q.help} className={q.type === "info" ? "" : "!text-xs"} />}
+            {q.type === "info" && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>Read-only info card — members don’t answer anything here.</p>}
 
             {(q.type === "single_choice" || q.type === "multi_choice") && (
               <div className="space-y-1">
@@ -208,7 +211,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
                 <button type="button" onClick={() => dupQ(q.id)} className="btn-text" title="Duplicate"><Icon name="clone" /></button>
                 <button type="button" onClick={() => delQ(q.id)} className="btn-text" title="Delete"><Icon name="trash" /></button>
                 <span className="flex-1" />
-                <label className="flex items-center gap-2 text-xs"><span>Required</span><input type="checkbox" checked={!!q.required} onChange={(e) => updQ(q.id, { required: e.target.checked })} className="accent-[var(--g-purple)] w-4 h-4" /></label>
+                {q.type !== "info" && <label className="flex items-center gap-2 text-xs"><span>Required</span><input type="checkbox" checked={!!q.required} onChange={(e) => updQ(q.id, { required: e.target.checked })} className="accent-[var(--g-purple)] w-4 h-4" /></label>}
               </div>
             )}
           </div>
