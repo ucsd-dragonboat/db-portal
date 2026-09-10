@@ -12,6 +12,7 @@ import RichEditor from "@/components/rich-editor";
 import RichText from "@/components/rich-text";
 import AttendanceFields from "@/components/attendance-fields";
 import ConfirmForm from "@/components/confirm-form";
+import { htmlToText } from "@/lib/html";
 
 type EventOpt = { id: string; title: string; kind: string; starts_at: string; group_id: string | null };
 type GroupOpt = { id: string; name: string };
@@ -70,7 +71,8 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
 
   const save = (status = f.status) => start(async () => {
     // Untitled questions are dropped — info blocks only need body text; day markers carry position only.
-    const questions = f.questions.filter((q) => (q.type === "day" ? true : q.type === "info" ? q.label.trim() || q.help : q.label.trim()));
+    const hasLabel = (q: FormQuestion) => !!htmlToText(q.label).trim(); // labels can be rich HTML now
+    const questions = f.questions.filter((q) => (q.type === "day" ? true : q.type === "info" ? hasLabel(q) || q.help : hasLabel(q)));
     // Keep form_events.sort_order in step with the markers (the grid/CSV/sheet columns follow it).
     const pos = new Map(questions.flatMap((q, i) => (q.type === "day" ? [[q.event_id, i] as const] : [])));
     const eventsSorted = [...f.events].sort((a, b) => (pos.get(a.event_id) ?? -1) - (pos.get(b.event_id) ?? -1));
@@ -204,7 +206,13 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         return (
           <div key={q.id} onClick={() => setFocus(q.id)} className={`gf-card ${active ? "gf-card-active" : ""} space-y-3`}>
             <div className="flex gap-3">
-              <input value={q.label} onChange={(e) => updQ(q.id, { label: e.target.value })} placeholder={q.type === "info" ? "Title (optional)" : "Question"} className="input-line flex-1 text-base" style={{ background: active ? "var(--g-grey-50)" : undefined }} />
+              <div className="min-w-0 flex-1">
+                {active
+                  ? <RichEditor value={q.label} onChange={(html) => updQ(q.id, { label: html })} minRows={1} placeholder={q.type === "info" ? "Title (optional)" : "Question"} />
+                  : htmlToText(q.label).trim()
+                    ? <RichText text={q.label} className="!text-base" />
+                    : <span className="text-base" style={{ color: "var(--g-grey-600)" }}>{q.type === "info" ? "Title (optional)" : "Question"}</span>}
+              </div>
               {active && (
                 <select value={q.type} onChange={(e) => updQ(q.id, { type: e.target.value as QuestionType, options: ["single_choice", "multi_choice"].includes(e.target.value) ? (q.options?.length ? q.options : ["Option 1"]) : undefined, ...(e.target.value === "info" ? { required: false } : {}) })} className="input w-48">
                   {TYPES.map((x) => <option key={x.value} value={x.value}>{x.icon} {x.label}</option>)}

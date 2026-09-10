@@ -76,11 +76,11 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
         return q.type === "info" ? (
         // Read-only info card — admin-authored rich text, nothing to answer.
         <div key={q.id} className="gf-card space-y-2">
-          {q.label && <div className="text-base font-medium">{q.label}</div>}
+          {q.label && <div className="text-base font-medium"><RichTextView html={q.label} className="!text-base" /></div>}
           {q.help && <RichTextView html={q.help} />}
         </div>
       ) : (
-        <Q key={q.id} title={q.label} required={q.required} help={q.help}>
+        <Q key={q.id} title={<span className="[&>div]:inline-block [&>div]:align-top [&_p]:inline"><RichTextView html={q.label} className="!text-base" /></span>} required={q.required} help={q.help}>
           {q.type === "short_text" && <input name={`q_${q.id}`} defaultValue={(a(q.id) as string) ?? ""} required={q.required} placeholder="Your answer" className="input-line w-1/2" />}
           {q.type === "long_text" && <ParagraphAnswer name={`q_${q.id}`} initial={(a(q.id) as string) ?? ""} />}
           {q.type === "number" && <input name={`q_${q.id}`} type="number" step="any" defaultValue={(a(q.id) as number) ?? ""} required={q.required} placeholder="Your answer" className="input-line w-1/3" />}

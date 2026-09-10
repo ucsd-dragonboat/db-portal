@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import type { FormQuestion, Json } from "@/lib/database.types";
-import { cleanHtml } from "@/lib/html";
+import { cleanHtml, isHtml } from "@/lib/html";
 import { defaultSheetColumns } from "@/lib/google-sheets";
 
 /** Start a form from a template. "practice" = the automatic weight question is on; "blank" = custom questions only. */
@@ -77,7 +77,7 @@ export async function saveForm(id: string, p: FormPayload) {
   const { org } = await requireAdmin();
   const supabase = await createClient();
   const { error } = await supabase.from("forms")
-    .update({ title: p.title.trim() || "Untitled form", description: cleanHtml(p.description), due_at: p.due_at, status: p.status, ask_weight: p.ask_weight, questions: p.questions.map((q) => ({ ...q, help: q.help ? cleanHtml(q.help) : undefined })) as unknown as Json })
+    .update({ title: p.title.trim() || "Untitled form", description: cleanHtml(p.description), due_at: p.due_at, status: p.status, ask_weight: p.ask_weight, questions: p.questions.map((q) => ({ ...q, label: isHtml(q.label) ? cleanHtml(q.label) : q.label, help: q.help ? cleanHtml(q.help) : undefined })) as unknown as Json })
     .eq("id", id).eq("org_id", org.id);
   if (error) return { error: error.message };
   // Replace event links.

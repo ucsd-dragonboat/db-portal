@@ -48,7 +48,7 @@ export function buildResponseGrid(input: {
     const r = respBy.get(uid);
     return !!dueAt && !!r && new Date(r.first_submitted_at ?? r.submitted_at) > dueAt;
   };
-  const header = ["Name", "Email", "Weight (lb)", "Phone", ...events.map((e) => e.title), ...questions.map((q) => q.label), "Submitted", "On time"];
+  const header = ["Name", "Email", "Weight (lb)", "Phone", ...events.map((e) => e.title), ...questions.map((q) => htmlToText(q.label)), "Submitted", "On time"];
   const rows: (string | number)[][] = responded.map((p) => [p.full_name, p.email, p.weight_lb ?? "", p.phone ?? "", ...events.map((e) => rideCell(rsvpBy.get(`${e.id}:${p.id}`))), ...questions.map((q) => ansCell(p.id, q)), fmtDateTime(respBy.get(p.id)!.submitted_at), dueAt ? (isLate(p.id) ? "Late" : "On time") : ""]);
   const lateFlags = responded.map((p) => isLate(p.id));
 
