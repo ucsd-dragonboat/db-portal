@@ -27,34 +27,54 @@ const TYPES: { value: QuestionType; label: string; icon: string }[] = [
 const uid = () => Math.random().toString(36).slice(2, 9);
 const toLocal = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "");
 
+const dayMarker = (event_id: string): FormQuestion => ({ id: `day_${event_id}`, type: "day", label: "", event_id });
+/** Every linked day gets a "day" marker in the questions list — its position IS the
+ * attendance question's position, so days and custom questions reorder together.
+ * Drops stale markers; days without one (older forms) go first, like before. */
+const withDayMarkers = (p: FormPayload): FormPayload => {
+  const qs = p.questions.filter((q) => q.type !== "day" || p.events.some((e) => e.event_id === q.event_id));
+  const marked = new Set(qs.filter((q) => q.type === "day").map((q) => q.event_id));
+  const missing = p.events.filter((e) => !marked.has(e.event_id)).map((e) => dayMarker(e.event_id));
+  return { ...p, questions: [...missing, ...qs] };
+};
+
 export default function FormEditor({ id, initial, events, groups, pickups }: { id: string; initial: FormPayload; events: EventOpt[]; groups: GroupOpt[]; pickups: PickupLocation[] }) {
   const router = useRouter();
-  const [f, setF] = useState<FormPayload>(initial);
+  const [f, setF] = useState<FormPayload>(() => withDayMarkers(initial));
   const [focus, setFocus] = useState<string | null>(null);
   const [addingDays, setAddingDays] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const set = <K extends keyof FormPayload>(k: K, v: FormPayload[K]) => setF((s) => ({ ...s, [k]: v }));
 
+  const addDays = (ids: string[]) => setF((s) => ({
+    ...s,
+    events: [...s.events, ...ids.map((event_id) => ({ event_id, prompt: null }))],
+    questions: [...s.questions, ...ids.map(dayMarker)],
+  }));
   const addGroup = (gid: string) => {
     if (!gid) return;
     const ids = events.filter((e) => e.group_id === gid).map((e) => e.id).filter((eid) => !f.events.some((x) => x.event_id === eid));
-    set("events", [...f.events, ...ids.map((event_id) => ({ event_id, prompt: null }))]);
+    addDays(ids);
     setMsg(`Added ${ids.length} day(s)`);
   };
-  const toggleEvent = (eid: string) => set("events", f.events.some((e) => e.event_id === eid) ? f.events.filter((e) => e.event_id !== eid) : [...f.events, { event_id: eid, prompt: null }]);
+  const toggleEvent = (eid: string) => setF((s) => s.events.some((e) => e.event_id === eid)
+    ? { ...s, events: s.events.filter((e) => e.event_id !== eid), questions: s.questions.filter((q) => !(q.type === "day" && q.event_id === eid)) }
+    : { ...s, events: [...s.events, { event_id: eid, prompt: null }], questions: [...s.questions, dayMarker(eid)] });
   const setPrompt = (eid: string, prompt: string) => set("events", f.events.map((e) => (e.event_id === eid ? { ...e, prompt: prompt || null } : e)));
   const addQ = () => { const q: FormQuestion = { id: uid(), type: "single_choice", label: "", required: true, options: ["Option 1"] }; set("questions", [...f.questions, q]); setFocus(q.id); };
   const updQ = (qid: string, patch: Partial<FormQuestion>) => set("questions", f.questions.map((q) => (q.id === qid ? { ...q, ...patch } : q)));
   const delQ = (qid: string) => set("questions", f.questions.filter((q) => q.id !== qid));
   const dupQ = (qid: string) => { const i = f.questions.findIndex((q) => q.id === qid); const c = { ...f.questions[i], id: uid() }; const a = [...f.questions]; a.splice(i + 1, 0, c); set("questions", a); setFocus(c.id); };
   const moveQ = (i: number, d: -1 | 1) => { const a = [...f.questions]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; set("questions", a); };
-  // Order of f.events = order of the attendance questions (saved as form_events.sort_order).
-  const moveEvent = (i: number, d: -1 | 1) => { const a = [...f.events]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; set("events", a); };
 
   const save = (status = f.status) => start(async () => {
-    // Untitled questions are dropped — except info blocks, which only need body text.
-    const payload = { ...f, status, questions: f.questions.filter((q) => (q.type === "info" ? q.label.trim() || q.help : q.label.trim())) };
+    // Untitled questions are dropped — info blocks only need body text; day markers carry position only.
+    const questions = f.questions.filter((q) => (q.type === "day" ? true : q.type === "info" ? q.label.trim() || q.help : q.label.trim()));
+    // Keep form_events.sort_order in step with the markers (the grid/CSV/sheet columns follow it).
+    const pos = new Map(questions.flatMap((q, i) => (q.type === "day" ? [[q.event_id, i] as const] : [])));
+    const eventsSorted = [...f.events].sort((a, b) => (pos.get(a.event_id) ?? -1) - (pos.get(b.event_id) ?? -1));
+    const payload = { ...f, status, questions, events: eventsSorted };
     const r = await saveForm(id, payload);
     if (r.error) { setMsg(r.error); return; }
     setF(payload); setMsg(status === "open" ? "Saved — form is open to members" : "Saved"); router.refresh();
@@ -105,7 +125,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>Each checked day gets its own “Will you be attending?” question (drive others / own ride / need a ride + pickup spot), so people can answer per day. Answers feed attendance, lineups and carpool.</p>
         {addingDays && (
           <div className="rounded-lg border p-3" style={{ borderColor: "var(--g-purple)", background: "var(--g-grey-50)" }}>
-            <EventBatchForm compact onCreated={(ids) => { set("events", [...f.events, ...ids.map((id) => ({ event_id: id, prompt: null }))]); setAddingDays(false); setMsg(`Added ${ids.length} day(s) — remember to Save`); }} />
+            <EventBatchForm compact onCreated={(ids) => { addDays(ids); setAddingDays(false); setMsg(`Added ${ids.length} day(s) — remember to Save`); }} />
           </div>
         )}
         {!events.length && !addingDays && <p className="text-sm" style={{ color: "var(--g-red)" }}>No upcoming events yet — click “New event & days”.</p>}
@@ -123,22 +143,6 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
             </div>
           );
         })}
-        {f.events.length > 1 && (
-          <div className="rounded-lg border p-2" style={{ borderColor: "var(--g-grey-300)", background: "var(--g-grey-50)" }}>
-            <div className="mb-1 text-xs font-medium" style={{ color: "var(--g-grey-600)" }}>Attendance question order</div>
-            {f.events.map((e, i) => {
-              const ev = events.find((x) => x.id === e.event_id);
-              return (
-                <div key={e.event_id} className="flex items-center gap-1 py-0.5 text-sm">
-                  <button type="button" onClick={() => moveEvent(i, -1)} disabled={i === 0} className="btn-text !py-0 disabled:opacity-30" aria-label="Move up"><Icon name="up" /></button>
-                  <button type="button" onClick={() => moveEvent(i, 1)} disabled={i === f.events.length - 1} className="btn-text !py-0 disabled:opacity-30" aria-label="Move down"><Icon name="down" /></button>
-                  <span className="min-w-0 flex-1 truncate">{i + 1}. {ev?.title ?? "(past day)"}</span>
-                  {ev && <span className="shrink-0 text-xs" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={ev.starts_at} /></span>}
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>}
 
       {/* automatic questions — rendered exactly as members will see them */}
@@ -165,32 +169,36 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         </div>
       )}
 
-      {f.events.map((fe, i) => {
-        const ev = events.find((e) => e.id === fe.event_id);
-        return (
-          <div key={fe.event_id} className="gf-card space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex flex-1 items-baseline gap-2 text-base">
-                <Icon name={i % 2 ? "moon" : "sun"} />
-                <input value={fe.prompt ?? ""} onChange={(e) => setPrompt(fe.event_id, e.target.value)}
-                  placeholder={`Will you be attending ${ev?.title ?? "this day"}?`} className="input-line flex-1 text-base" />
-                <span className="gf-required">*</span>
-              </div>
-              <span className="flex items-center gap-1">
-                <span className="chip !py-0 text-[10px] whitespace-nowrap">Automatic</span>
-                <button type="button" onClick={() => toggleEvent(fe.event_id)} className="btn-text py-0.5" title="Remove this day from the form"><Icon name="trash" /></button>
-              </span>
-            </div>
-            {ev && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={ev.starts_at} /> · answers feed attendance, lineups and carpool</p>}
-            <fieldset disabled className="pointer-events-none">
-              <AttendanceFields prefix={`preview_${fe.event_id}_`} existing={null} pickups={pickups} defaultSeats={3} required={false} />
-            </fieldset>
-          </div>
-        );
-      })}
-
-      {/* question cards */}
+      {/* question cards — attendance days and custom questions share one order (↑↓ moves across both) */}
       {f.questions.map((q, i) => {
+        if (q.type === "day") {
+          const fe = f.events.find((e) => e.event_id === q.event_id);
+          if (!fe) return null;
+          const ev = events.find((e) => e.id === fe.event_id);
+          const dayIdx = f.questions.slice(0, i).filter((x) => x.type === "day").length;
+          return (
+            <div key={q.id} className="gf-card space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex flex-1 items-baseline gap-2 text-base">
+                  <Icon name={dayIdx % 2 ? "moon" : "sun"} />
+                  <input value={fe.prompt ?? ""} onChange={(e) => setPrompt(fe.event_id, e.target.value)}
+                    placeholder={`Will you be attending ${ev?.title ?? "this day"}?`} className="input-line flex-1 text-base" />
+                  <span className="gf-required">*</span>
+                </div>
+                <span className="flex items-center gap-1">
+                  <span className="chip !py-0 text-[10px] whitespace-nowrap">Automatic</span>
+                  <button type="button" onClick={() => moveQ(i, -1)} disabled={i === 0} className="btn-text py-0.5 disabled:opacity-30" title="Move up"><Icon name="up" /></button>
+                  <button type="button" onClick={() => moveQ(i, 1)} disabled={i === f.questions.length - 1} className="btn-text py-0.5 disabled:opacity-30" title="Move down"><Icon name="down" /></button>
+                  <button type="button" onClick={() => toggleEvent(fe.event_id)} className="btn-text py-0.5" title="Remove this day from the form"><Icon name="trash" /></button>
+                </span>
+              </div>
+              {ev && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={ev.starts_at} /> · answers feed attendance, lineups and carpool</p>}
+              <fieldset disabled className="pointer-events-none">
+                <AttendanceFields prefix={`preview_${fe.event_id}_`} existing={null} pickups={pickups} defaultSeats={3} required={false} />
+              </fieldset>
+            </div>
+          );
+        }
         const active = focus === q.id;
         const t = TYPES.find((x) => x.value === q.type)!;
         return (

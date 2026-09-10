@@ -20,8 +20,8 @@ export function buildResponseGrid(input: {
   const rsvpBy = new Map<string, Rsvp>();
   for (const r of rsvps) rsvpBy.set(`${r.event_id}:${r.user_id}`, r);
   const pickupName = new Map(pickups.map((p) => [p.id, p.name]));
-  // Info blocks are read-only cards — no answers, so no column in the table/CSV/sheet.
-  const questions = ((form.questions as unknown as FormQuestion[]) ?? []).filter((q) => q.type !== "info");
+  // Info blocks and day position markers carry no answers — no column in the table/CSV/sheet.
+  const questions = ((form.questions as unknown as FormQuestion[]) ?? []).filter((q) => q.type !== "info" && q.type !== "day");
   const profiles = [...input.profiles].sort((a, b) => a.full_name.localeCompare(b.full_name));
   const respBy = new Map(responses.map((r) => [r.user_id, r]));
   const responded = profiles.filter((p) => respBy.has(p.id));
