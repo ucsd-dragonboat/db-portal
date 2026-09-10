@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { cleanHtml } from "@/lib/html";
 import { disconnectGoogle } from "@/lib/google-sheets";
+import { createTeamCalendar, disconnectTeamCalendar, removeEventFromGoogle, syncEventToGoogle } from "@/lib/google-calendar";
 
 export type AdminState = { error?: string; ok?: boolean };
 
@@ -49,8 +51,9 @@ export async function deleteEvent(fd: FormData) {
   const { org } = await requireAdmin();
   const supabase = await createClient();
   const id = String(fd.get("id"));
-  const { data: ev } = await supabase.from("events").select("group_id").eq("id", id).eq("org_id", org.id).maybeSingle();
+  const { data: ev } = await supabase.from("events").select("group_id, google_event_id").eq("id", id).eq("org_id", org.id).maybeSingle();
   await supabase.from("events").delete().eq("id", id).eq("org_id", org.id);
+  if (ev?.google_event_id) after(() => removeEventFromGoogle(org.id, ev.google_event_id));
   revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
   if (ev?.group_id) revalidatePath(`/groups/${ev.group_id}`);
   const back = String(fd.get("redirect") ?? "");
@@ -148,6 +151,7 @@ export async function createEventsBatch(input: {
     location_name: input.location_name, location_lat: input.location_lat, location_lon: input.location_lon, notes: input.notes ? cleanHtml(input.notes) : null,
   }))).select("id, starts_at");
   if (error) return { error: error.message };
+  after(async () => { for (const d of data ?? []) await syncEventToGoogle(d.id); }); // mirror to the team Google Calendar
   revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
   const order = new Map(input.items.map((it, i) => [it.starts_at, i]));
   revalidatePath("/groups", "layout");
@@ -166,8 +170,10 @@ export async function updateEventDay(input: {
     title: input.title.trim(), starts_at: input.starts_at, ends_at: input.ends_at, rsvp_deadline: input.rsvp_deadline,
     location_name: input.location_name, location_lat: input.location_lat, location_lon: input.location_lon,
     notes: input.notes ? cleanHtml(input.notes) : null,
+    needs_info: false, // an edited day is no longer "missing info"
   }).eq("id", input.id).eq("org_id", org.id).select("group_id").maybeSingle();
   if (error) return { error: error.message };
+  after(() => syncEventToGoogle(input.id)); // mirror to the team Google Calendar
   revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events"); revalidatePath(`/events/${input.id}`);
   if (ev?.group_id) revalidatePath(`/groups/${ev.group_id}`);
   return { ok: true };
@@ -248,7 +254,11 @@ export async function deleteGroup(fd: FormData) {
   const { org } = await requireAdmin();
   const supabase = await createClient();
   const id = String(fd.get("id"));
-  if (fd.get("with_events") === "on") await supabase.from("events").delete().eq("group_id", id).eq("org_id", org.id);
+  if (fd.get("with_events") === "on") {
+    const { data: evs } = await supabase.from("events").select("google_event_id").eq("group_id", id).eq("org_id", org.id).not("google_event_id", "is", null);
+    await supabase.from("events").delete().eq("group_id", id).eq("org_id", org.id);
+    if (evs?.length) after(async () => { for (const e of evs) await removeEventFromGoogle(org.id, e.google_event_id); });
+  }
   await supabase.from("event_groups").delete().eq("id", id).eq("org_id", org.id);
   revalidatePath("/admin/events"); revalidatePath("/events"); revalidatePath("/dashboard");
   redirect("/admin/events");
@@ -341,5 +351,18 @@ export async function removePending(fd: FormData) {
 export async function disconnectGoogleAccount() {
   const { userId } = await requireAdmin();
   await disconnectGoogle(userId);
+  revalidatePath("/admin/settings");
+}
+
+/** Create the team Google Calendar and mirror recent + future events into it. */
+export async function connectTeamCalendarAction() {
+  const { org, userId } = await requireAdmin();
+  await createTeamCalendar(org.id, userId, org.name);
+  revalidatePath("/admin/settings"); revalidatePath("/admin/events");
+}
+
+export async function disconnectTeamCalendarAction() {
+  const { org } = await requireAdmin();
+  await disconnectTeamCalendar(org.id);
   revalidatePath("/admin/settings");
 }

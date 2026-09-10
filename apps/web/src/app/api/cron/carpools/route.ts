@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateCarpoolForEvent, type GenerateResult } from "@/lib/carpool-auto";
+import { pullGoogleCalendar } from "@/lib/google-calendar";
 
 export const maxDuration = 60;
 
@@ -48,5 +49,13 @@ export async function POST(req: Request) {
 
     report[form.title] = results;
   }
-  return NextResponse.json({ processed: Object.keys(report).length, report });
+
+  // Same 10-min tick also pulls Google Calendar edits back into the portal.
+  const gcal: Record<string, unknown> = {};
+  try {
+    const { data: syncs } = await supabase.from("google_calendar_sync").select("org_id");
+    for (const s of syncs ?? []) gcal[s.org_id] = await pullGoogleCalendar(s.org_id);
+  } catch { /* table may not exist until migration 0023 runs */ }
+
+  return NextResponse.json({ processed: Object.keys(report).length, report, gcal });
 }

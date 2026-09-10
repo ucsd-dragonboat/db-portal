@@ -38,8 +38,24 @@ export default async function AdminEventsPage({ searchParams }: { searchParams: 
   // Folders shown at this level: root folders at the root, children inside a folder.
   const subfolders = (folders ?? []).filter((f) => (f.parent_id ?? null) === (folder?.id ?? null));
 
+  const needsInfo = (days ?? []).filter((d) => d.needs_info);
+
   return (
     <div className="mx-auto max-w-[1000px]">
+      {needsInfo.length > 0 && !folder && (
+        <section className="mb-4 rounded-lg border p-3 text-sm" style={{ borderColor: "#fde293", background: "#fef7e0" }}>
+          <h2 className="font-semibold text-amber-800"><Icon name="due" /> Missing info — added from Google Calendar</h2>
+          <p className="mb-2 text-xs text-amber-700">These synced in from the team Google Calendar. Open one and save its details to clear it from this list; give it a kind/event so lineups, forms and carpools can attach.</p>
+          <ul className="space-y-1">
+            {needsInfo.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center gap-2">
+                <Link href={`/events/${d.id}`} className="font-medium hover:underline">{d.title}</Link>
+                <span className="text-xs text-amber-700"><LocalTime iso={d.starts_at} />{d.location_name && ` · ${d.location_name}`}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section>
         {folder ? (
           <div className="mb-3 flex flex-wrap items-center gap-2">

@@ -1,7 +1,8 @@
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
-import { deletePickupLocation, deleteSavedLocation, disconnectGoogleAccount, rotateJoinCode } from "../actions";
+import { getCalendarSync } from "@/lib/google-calendar";
+import { connectTeamCalendarAction, deletePickupLocation, deleteSavedLocation, disconnectGoogleAccount, disconnectTeamCalendarAction, rotateJoinCode } from "../actions";
 import PickupForm from "./pickup-form";
 import SavedLocationForm from "./saved-location-form";
 import ConfirmForm from "@/components/confirm-form";
@@ -14,6 +15,7 @@ export default async function AdminSettingsPage() {
     supabase.from("saved_locations").select("*").eq("org_id", org.id).order("sort_order").order("name"),
   ]);
   const google = await getGoogleConnection(userId).catch(() => null); // null until migration 0022 runs
+  const calSync = await getCalendarSync(org.id).catch(() => null);    // null until migration 0023 runs
   return (
     <div className="max-w-2xl space-y-6">
       <div>
@@ -64,6 +66,30 @@ export default async function AdminSettingsPage() {
           </div>
         ) : (
           <p className="text-sm text-slate-400">Not connected — <a href="/api/google/connect?next=/admin/settings" className="underline">connect Google account</a>, or do it from any form’s Responses page.</p>
+        )}
+        {google && (
+          <div className="card mt-2 py-2 text-sm">
+            {calSync ? (
+              <div className="flex items-center justify-between">
+                <span>
+                  <b>Team calendar synced</b> — edit events in{" "}
+                  <a href={`https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(calSync.calendar_id)}`} target="_blank" rel="noopener" className="underline">Google Calendar</a>{" "}
+                  and they flow back here within ~10 minutes.
+                </span>
+                <ConfirmForm action={disconnectTeamCalendarAction} message="Stop syncing with Google Calendar? The Google calendar and all portal events are kept — they just stop mirroring.">
+                  <button className="text-xs text-red-600 underline whitespace-nowrap">Stop syncing</button>
+                </ConfirmForm>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-slate-500">
+                  Two-way calendar sync: creates a “{org.name}” calendar in your Google account, mirrors portal events into it,
+                  and pulls your Google-side edits back. Deleting there only unlinks here; Google-created events land in “Missing info”.
+                </span>
+                <form action={connectTeamCalendarAction}><button className="btn-secondary whitespace-nowrap">Create team calendar</button></form>
+              </div>
+            )}
+          </div>
         )}
       </section>
     </div>
