@@ -39,6 +39,7 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
   const questions = (form.questions as unknown as FormQuestion[]) ?? [];
   const answers: Record<string, Json> = {};
   for (const q of questions) {
+    if (q.type === "info") continue; // read-only card, nothing to answer
     const key = `q_${q.id}`;
     let val: Json = null;
     if (q.type === "multi_choice") val = fd.getAll(key).map(String);
