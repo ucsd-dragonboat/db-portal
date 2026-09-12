@@ -42,6 +42,13 @@ export type DirSet = {
   diy: string[]
 }
 
+/** Which TOTAL-panel column a hand-typed guest was written into. */
+export type GuestCol = 'drivers' | 'offCampus' | 'onCampus' | 'diy'
+
+/** A name typed directly into the TOTAL panel — not a roster member, no location.
+ * Ids are namespaced `x:<random>` so they can sit in passengerIds like anyone. */
+export type CarpoolGuest = { id: string; name: string; col: GuestCol }
+
 /** carpools.data, version 2 — the Sheets-style layout with separate directions.
  * Car ids are namespaced `g:<driverId>` / `b:<driverId>` so map layers stay unique. */
 export type CarpoolDataV2 = {
@@ -52,6 +59,8 @@ export type CarpoolDataV2 = {
   funFactQuestionId: string | null
   /** Campus grouping keywords, matched case-insensitively against name + pickup. */
   collegeKeywords: string[]
+  /** Hand-typed temporary people in the TOTAL panel. */
+  guests: CarpoolGuest[]
   going: DirSet
   back: DirSet
 }

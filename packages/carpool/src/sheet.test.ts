@@ -40,6 +40,10 @@ describe('upgradeCarpoolData', () => {
     expect(up.back).toEqual(dir())
     expect(up.collegeKeywords).toEqual(DEFAULT_COLLEGE_KEYWORDS)
   })
+  it('keeps valid guests and drops junk ones', () => {
+    const up = upgradeCarpoolData({ v: 2, guests: [{ id: 'x:1', name: 'Aunt Amy', col: 'drivers' }, { id: 'x:2', name: 'Bad', col: 'nope' }, 'junk'] }, {})
+    expect(up.guests).toEqual([{ id: 'x:1', name: 'Aunt Amy', col: 'drivers' }])
+  })
   it('normalizes partial v2 and rejects junk members', () => {
     const up = upgradeCarpoolData({ v: 2, going: { onCampus: [car('d1'), { junk: true }], diy: ['p1', 42] }, collegeKeywords: [] }, MATCH)
     expect(up.going.onCampus).toHaveLength(1)

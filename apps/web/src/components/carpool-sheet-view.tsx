@@ -66,7 +66,9 @@ function Direction({ dir, dirKey, label, names }: { dir: DirSet; dirKey: "going"
   );
 }
 
-export default function CarpoolSheetView({ data, names }: { data: CarpoolDataV2; names: Names }) {
+export default function CarpoolSheetView({ data, names: roster }: { data: CarpoolDataV2; names: Names }) {
+  // Write-in guests live on the carpool itself — merge their names in.
+  const names: Names = { ...Object.fromEntries((data.guests ?? []).map((g) => [g.id, g.name])), ...roster };
   return (
     <div className="overflow-x-auto">
       <div className="w-max min-w-full">

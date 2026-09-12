@@ -6,7 +6,7 @@ import {
   addDriverToDirSet, assignCarpool, buildOsrmRouteUrl, carRoutePoints, discrepancies, groupNeedsRide,
   locationKey, mirrorDirSet, parseOsrmRoute, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
   removeFromDirSet, splitByCampus, upgradeCarpoolData,
-  type CarpoolDataV2, type Destination, type MatchText, type OsrmRoute, type Rider,
+  type CarpoolDataV2, type CarpoolGuest, type Destination, type MatchText, type OsrmRoute, type Rider,
 } from "@db/carpool";
 import { saveCarpool } from "./actions";
 import { CarGrid, DiyRow, SHEET, type DirKey, type GridHandlers } from "./car-grid";
@@ -27,22 +27,29 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
   funFactQuestions: { id: string; label: string }[];
   funFactAnswers: Record<string, { userId: string; text: string }[]>;
 }) {
-  const matchText = useMemo<MatchText>(
-    () => Object.fromEntries(Object.values(riders).map((r) => [r.id, `${r.name} ${pickupNames[r.id] ?? ""}`])),
-    [riders, pickupNames],
-  );
-  const riderIdSet = useMemo(() => new Set(Object.keys(riders)), [riders]);
-
   const initial = useMemo<CarpoolDataV2>(() => {
-    const up = upgradeCarpoolData(saved?.data, matchText);
+    const mt: MatchText = Object.fromEntries(Object.values(riders).map((r) => [r.id, `${r.name} ${pickupNames[r.id] ?? ""}`]));
+    const up = upgradeCarpoolData(saved?.data, mt);
+    // Guests (write-ins) count as riders so their placements survive reconciliation.
+    const ids = new Set([...Object.keys(riders), ...up.guests.map((g) => g.id)]);
     return {
       ...up,
-      going: reconcileDirSet(up.going, drivers, riderIdSet, matchText, up.collegeKeywords, "g"),
-      back: reconcileDirSet(up.back, drivers, riderIdSet, matchText, up.collegeKeywords, "b"),
+      going: reconcileDirSet(up.going, drivers, ids, mt, up.collegeKeywords, "g"),
+      back: reconcileDirSet(up.back, drivers, ids, mt, up.collegeKeywords, "b"),
     };
-  }, [saved, drivers, riderIdSet, matchText]);
+  }, [saved, drivers, riders, pickupNames]);
 
   const [data, setData] = useState<CarpoolDataV2>(initial);
+
+  // Roster members + write-ins, one lookup for every cell/panel.
+  const effRiders = useMemo<Record<string, Rider>>(() => ({
+    ...riders,
+    ...Object.fromEntries(data.guests.map((g) => [g.id, { id: g.id, name: g.name, location: null } as Rider])),
+  }), [riders, data.guests]);
+  const matchText = useMemo<MatchText>(
+    () => Object.fromEntries(Object.values(effRiders).map((r) => [r.id, `${r.name} ${pickupNames[r.id] ?? ""}`])),
+    [effRiders, pickupNames],
+  );
   const [routes, setRoutes] = useState<Record<string, OsrmRoute | null>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -58,7 +65,7 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
   const grouped = useMemo(() => groupNeedsRide(needsRide, matchText, data.collegeKeywords), [needsRide, matchText, data.collegeKeywords]);
   const disc = useMemo(() => discrepancies(needsRide, data.going, data.back), [needsRide, data.going, data.back]);
   const options = useMemo(() => {
-    const all = Object.values(riders).map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name));
+    const all = Object.values(effRiders).map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name));
     const drivingIn = (d: CarpoolDataV2["going"]) => new Set([...d.onCampus, ...d.offCampus].map((c) => c.driverId));
     const dg = drivingIn(data.going), db = drivingIn(data.back);
     return {
@@ -68,7 +75,7 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
       goingDrivers: all.filter((o) => !dg.has(o.id)),
       backDrivers: all.filter((o) => !db.has(o.id)),
     };
-  }, [riders, placedGoing, placedBack, data.going, data.back]);
+  }, [effRiders, placedGoing, placedBack, data.going, data.back]);
 
   const setDir = (dir: DirKey, f: (d: CarpoolDataV2[DirKey]) => CarpoolDataV2[DirKey]) =>
     setData((s) => ({ ...s, [dir]: f(s[dir]) }));
@@ -82,7 +89,7 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
     unseat: (dir, riderId) => setDir(dir, (d) => removeFromDirSet(d, riderId)),
     drop: (dir, target, payload) => {
       const [kind, id] = payload.split(":");
-      if (kind !== "rider" || !riders[id]) return;
+      if (kind !== "rider" || !effRiders[id]) return;
       h.place(dir, target, id);
     },
     setCap: (dir, carId, cap) => setDir(dir, (d) => mapCarsIn(d, (c) => (c.id === carId ? { ...c, capacity: Math.max(1, cap) } : c))),
@@ -100,13 +107,21 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
     const g = placedGoing.has(id), b = placedBack.has(id);
     return g || b ? ` · ${g ? "G" : ""}${b ? "B" : ""}` : "";
   };
+  const addGuest = (col: CarpoolGuest["col"], name: string) =>
+    setData((s) => ({ ...s, guests: [...s.guests, { id: `x:${Math.random().toString(36).slice(2, 9)}`, name, col }] }));
+  const removeGuest = (id: string) => setData((s) => ({
+    ...s,
+    guests: s.guests.filter((g) => g.id !== id),
+    going: removeFromDirSet(s.going, id),
+    back: removeFromDirSet(s.back, id),
+  }));
 
   const optimize = () => {
     if (!destination) return;
     const cars = [...data.going.onCampus, ...data.going.offCampus];
     const eligible: Record<string, Rider> = {};
-    for (const id of needsRide) if (!placedGoing.has(id)) eligible[id] = riders[id];
-    for (const c of cars) for (const p of c.passengerIds) eligible[p] = riders[p]; // keep manual placements
+    for (const id of needsRide) if (!placedGoing.has(id)) eligible[id] = effRiders[id];
+    for (const c of cars) for (const p of c.passengerIds) eligible[p] = effRiders[p]; // keep manual placements
     const res = assignCarpool(cars, eligible, destination, { mode: "pickup" });
     setDir("going", (d) => ({ ...splitByCampus(res.cars, matchText, data.collegeKeywords), diy: d.diy }));
     setMsg(res.unassigned.length ? `${res.unassigned.length} rider(s) unassigned (no address or cars full)` : "Assigned");
@@ -129,15 +144,15 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
   const goingCars = useMemo(() => [...data.going.onCampus, ...data.going.offCampus], [data.going]);
   const routeSig = useMemo(() => {
     if (!destination) return "";
-    return JSON.stringify(goingCars.map((c) => [c.id, carRoutePoints(c, riders, destination, "pickup").map(locationKey).join("|")]));
-  }, [goingCars, riders, destination]);
+    return JSON.stringify(goingCars.map((c) => [c.id, carRoutePoints(c, effRiders, destination, "pickup").map(locationKey).join("|")]));
+  }, [goingCars, effRiders, destination]);
   useEffect(() => {
     if (!destination) return; // routes stays {} — destination never changes per page
     let cancelled = false;
     const t = setTimeout(async () => {
       const next: Record<string, OsrmRoute | null> = {};
       for (const c of goingCars) {
-        const pts = carRoutePoints(c, riders, destination, "pickup");
+        const pts = carRoutePoints(c, effRiders, destination, "pickup");
         const key = pts.map(locationKey).join("|");
         const cached = routeCache.current.get(c.id);
         if (cached && cached.key === key) { next[c.id] = cached.route; continue; }
@@ -156,16 +171,16 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
   }, [routeSig]);
 
   const mapCars = destination
-    ? goingCars.map((c, i) => ({ id: c.id, color: COLORS[i % COLORS.length], points: carRoutePoints(c, riders, destination, "pickup"), route: routes[c.id] ?? null, label: riders[c.driverId]?.name ?? "?" }))
+    ? goingCars.map((c, i) => ({ id: c.id, color: COLORS[i % COLORS.length], points: carRoutePoints(c, effRiders, destination, "pickup"), route: routes[c.id] ?? null, label: effRiders[c.driverId]?.name ?? "?" }))
     : [];
 
   const dirSection = (dir: DirKey, label: string) => {
     const dOpts = dir === "going" ? options.goingDrivers : options.backDrivers;
     return (
       <section>
-        <CarGrid dir={dir} band="onCampus" label="ON CAMPUS" directionLabel={label} cars={data[dir].onCampus} riders={riders} options={options[dir]} driverOptions={dOpts} h={h} />
-        <CarGrid dir={dir} band="offCampus" label="OFF CAMPUS" cars={data[dir].offCampus} riders={riders} options={options[dir]} driverOptions={dOpts} h={h} />
-        <DiyRow dir={dir} dirSet={data[dir]} riders={riders} options={options[dir]} h={h} />
+        <CarGrid dir={dir} band="onCampus" label="ON CAMPUS" directionLabel={label} cars={data[dir].onCampus} riders={effRiders} options={options[dir]} driverOptions={dOpts} h={h} />
+        <CarGrid dir={dir} band="offCampus" label="OFF CAMPUS" cars={data[dir].offCampus} riders={effRiders} options={options[dir]} driverOptions={dOpts} h={h} />
+        <DiyRow dir={dir} dirSet={data[dir]} riders={effRiders} options={options[dir]} h={h} />
       </section>
     );
   };
@@ -204,7 +219,8 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
                   </div>
                 </div>
                 <div className="w-[14px] shrink-0 self-stretch" style={{ background: SHEET.sep }} />
-                <TotalPanel riders={riders} drivers={drivers} grouped={grouped} selfIds={selfIds} placedNote={placedNote} onUnseatDrop={unseatDrop} />
+                <TotalPanel riders={effRiders} drivers={drivers} grouped={grouped} selfIds={selfIds} guests={data.guests}
+                  placedNote={placedNote} onUnseatDrop={unseatDrop} onAddGuest={addGuest} onRemoveGuest={removeGuest} />
               </div>
             </div>
             {destination && (
@@ -218,9 +234,9 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
           </div>
           {/* bottom row, like the sheet's footer area: discrepancy tracker + fun-fact side by side */}
           <div className="mt-[22px] flex items-start gap-8">
-            <DiscrepancyTracker rows={disc} riders={riders} />
+            <DiscrepancyTracker rows={disc} riders={effRiders} />
             <FunFactPanel questions={funFactQuestions} answers={funFactAnswers} questionId={data.funFactQuestionId}
-              onPickQuestion={(id) => setData((s) => ({ ...s, funFactQuestionId: id }))} riders={riders} />
+              onPickQuestion={(id) => setData((s) => ({ ...s, funFactQuestionId: id }))} riders={effRiders} />
           </div>
         </div>
       </div>
