@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
-import type { Profile, Rsvp } from "@/lib/database.types";
-import type { Car, Rider } from "@db/carpool";
+import type { FormQuestion, Profile, Rsvp } from "@/lib/database.types";
+import type { Rider } from "@db/carpool";
 import { riderFromRsvp } from "@/lib/riders";
+import { flattenAnswer } from "@/lib/response-grid";
+import { htmlToText } from "@/lib/html";
 import CarpoolBuilder, { type SavedCarpool } from "./builder";
 import LocalTime from "@/components/local-time";
 import Icon from "@/components/icon";
@@ -45,22 +47,40 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
   }
 
   const riders: Record<string, Rider> = {}, drivers: { id: string; seats: number }[] = [], needsRide: string[] = [];
+  const pickupNames: Record<string, string> = {};
   let saved: SavedCarpool | null = null;
-  if (event) {
-    const [{ data: rs }, { data: cp }, { data: pickups }] = await Promise.all([
-      supabase.from("rsvps").select("*, profile:profiles(*)").eq("event_id", event.id).in("status", ["yes", "maybe"]),
-      supabase.from("carpools").select("*").eq("event_id", event.id).maybeSingle(),
-      supabase.from("pickup_locations").select("*").eq("org_id", org.id),
-    ]);
-    const pickupBy = new Map((pickups ?? []).map((p) => [p.id, p]));
-    for (const r of (rs ?? []) as (Rsvp & { profile: Profile })[]) {
-      const out = riderFromRsvp(r, pickupBy); // shared with the auto-carpool cron
-      if (!out) continue;
-      riders[out.rider.id] = out.rider;
-      if (out.capacity != null) drivers.push({ id: out.rider.id, seats: out.capacity });
-      if (r.ride === "needs_ride") needsRide.push(out.rider.id);
+  const [{ data: rs }, { data: cp }, { data: pickups }, { data: formLinks }] = await Promise.all([
+    supabase.from("rsvps").select("*, profile:profiles(*)").eq("event_id", event.id).in("status", ["yes", "maybe"]),
+    supabase.from("carpools").select("*").eq("event_id", event.id).maybeSingle(),
+    supabase.from("pickup_locations").select("*").eq("org_id", org.id),
+    supabase.from("form_events").select("form:forms(id, questions)").eq("event_id", event.id),
+  ]);
+  const pickupBy = new Map((pickups ?? []).map((p) => [p.id, p]));
+  for (const r of (rs ?? []) as (Rsvp & { profile: Profile })[]) {
+    const out = riderFromRsvp(r, pickupBy); // shared with the auto-carpool cron
+    if (!out) continue;
+    riders[out.rider.id] = out.rider;
+    const pk = r.pickup_location_id ? pickupBy.get(r.pickup_location_id) : null;
+    pickupNames[out.rider.id] = pk?.name ?? r.pickup_address ?? "";
+    if (out.capacity != null) drivers.push({ id: out.rider.id, seats: out.capacity });
+    if (r.ride === "needs_ride") needsRide.push(out.rider.id);
+  }
+  if (cp) saved = { data: cp.data, published: cp.published };
+
+  // Fun-fact panel: answerable questions from the form(s) linked to this day + everyone's answers.
+  const forms = (formLinks ?? []).map((l) => l.form as unknown as { id: string; questions: unknown }).filter(Boolean);
+  const funFactQuestions = forms.flatMap((f) => ((f.questions as FormQuestion[]) ?? [])
+    .filter((q) => q.type !== "info" && q.type !== "day")
+    .map((q) => ({ id: q.id, label: htmlToText(q.label) })));
+  const funFactAnswers: Record<string, { userId: string; text: string }[]> = {};
+  if (forms.length) {
+    const { data: responses } = await supabase.from("form_responses").select("user_id, answers").in("form_id", forms.map((f) => f.id));
+    for (const q of funFactQuestions) {
+      const rows = (responses ?? [])
+        .map((r) => ({ userId: r.user_id, text: flattenAnswer((r.answers as Record<string, unknown> | null)?.[q.id]) }))
+        .filter((r) => r.text);
+      if (rows.length) funFactAnswers[q.id] = rows;
     }
-    if (cp) saved = { data: cp.data as unknown as { cars: Car[]; mode: "pickup" | "dropoff" }, published: cp.published };
   }
 
   return (
@@ -72,7 +92,8 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
       </div>
       <CarpoolBuilder key={event.id} eventId={event.id}
         destination={event.location_lat != null && event.location_lon != null ? { lat: event.location_lat, lon: event.location_lon, label: event.location_name ?? event.title } : null}
-        riders={riders} drivers={drivers} needsRide={needsRide} saved={saved} />
+        riders={riders} drivers={drivers} needsRide={needsRide} saved={saved}
+        pickupNames={pickupNames} funFactQuestions={funFactQuestions} funFactAnswers={funFactAnswers} />
     </div>
   );
 }

@@ -8,11 +8,17 @@
 import {
   buildOsrmTableUrl,
   locationKey,
+  mirrorDirSet,
   optimizeCarpool,
   parseOsrmTable,
+  splitByCampus,
+  DEFAULT_CARPOOL_HEADER,
+  DEFAULT_COLLEGE_KEYWORDS,
   type Car,
+  type CarpoolDataV2,
   type CostMatrix,
   type LatLon,
+  type MatchText,
   type Rider,
 } from "@db/carpool";
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -66,11 +72,14 @@ export async function generateCarpoolForEvent(
   // and needs_ride riders matter here.
   const riders: Record<string, Rider> = {};
   const cars: Car[] = [];
+  const matchText: MatchText = {};
   for (const r of (rs ?? []) as (Rsvp & { profile: Profile })[]) {
     if (r.ride !== "driver" && r.ride !== "needs_ride") continue;
     const out = riderFromRsvp(r, pickupBy);
     if (!out) continue;
     riders[out.rider.id] = out.rider;
+    const pk = r.pickup_location_id ? pickupBy.get(r.pickup_location_id) : null;
+    matchText[out.rider.id] = `${out.rider.name} ${pk?.name ?? r.pickup_address ?? ""}`;
     if (out.capacity != null)
       cars.push({ id: out.rider.id, driverId: out.rider.id, capacity: out.capacity, passengerIds: [] });
   }
@@ -88,8 +97,15 @@ export async function generateCarpoolForEvent(
   const matrix = await fetchMatrix(points);
   const res = optimizeCarpool(cars, riders, destination, matrix);
 
+  // v2 sheet: optimized cars into Going split by campus keyword; Back starts as a
+  // mirror (the form asks per-day attendance, not per-direction) — admins diverge it.
+  const going = { ...splitByCampus(res.cars.map((c) => ({ ...c, id: `g:${c.driverId}` })), matchText, DEFAULT_COLLEGE_KEYWORDS), diy: [] };
+  const data: CarpoolDataV2 = {
+    v: 2, header: DEFAULT_CARPOOL_HEADER, funFactQuestionId: null,
+    collegeKeywords: [...DEFAULT_COLLEGE_KEYWORDS], going, back: mirrorDirSet(going),
+  };
   const { error } = await supabase.from("carpools").upsert(
-    { org_id: orgId, event_id: eventId, data: { cars: res.cars, mode: "pickup" } as unknown as Json, published: false },
+    { org_id: orgId, event_id: eventId, data: data as unknown as Json, published: false },
     { onConflict: "event_id" },
   );
   if (error) return { error: error.message };

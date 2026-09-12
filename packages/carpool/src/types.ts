@@ -33,3 +33,31 @@ export type AssignResult = {
   cars: Car[]
   unassigned: string[]
 }
+
+/** One direction of the rides sheet: cars grouped by campus, plus self-transport. */
+export type DirSet = {
+  onCampus: Car[]
+  offCampus: Car[]
+  /** Rider ids who get themselves there (DIY). */
+  diy: string[]
+}
+
+/** carpools.data, version 2 — the Sheets-style layout with separate directions.
+ * Car ids are namespaced `g:<driverId>` / `b:<driverId>` so map layers stay unique. */
+export type CarpoolDataV2 = {
+  v: 2
+  /** Editable black banner line at the top of the sheet. */
+  header: string
+  /** Form question shown in the yellow Name | Response panel. */
+  funFactQuestionId: string | null
+  /** Campus grouping keywords, matched case-insensitively against name + pickup. */
+  collegeKeywords: string[]
+  going: DirSet
+  back: DirSet
+}
+
+/** The pre-sheet shape ({ cars, mode }) still stored on old rows. */
+export type LegacyCarpoolData = { cars: Car[]; mode: Mode }
+
+export const DEFAULT_CARPOOL_HEADER = 'LEAVE BY **:**AM, ISLAND BY **:**AM'
+export const DEFAULT_COLLEGE_KEYWORDS = ['SEVENTH', 'MARSHALL', 'SIXTH', 'MUIR', 'REVELLE', 'EIGHTH', 'WARREN', 'TRANSFER']
