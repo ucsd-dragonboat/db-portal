@@ -2,8 +2,14 @@
 // upgrade, per-direction reconciliation against current RSVPs, placement, the
 // TOTAL-panel campus grouping, and the discrepancy tracker.
 
-import type { Car, CarpoolDataV2, DirSet } from './types'
+import type { Car, CarpoolDataV2, CarpoolGuest, DirSet } from './types'
 import { DEFAULT_CARPOOL_HEADER, DEFAULT_COLLEGE_KEYWORDS } from './types'
+
+const GUEST_COLS = new Set(['drivers', 'offCampus', 'onCampus', 'diy'])
+const isGuest = (x: unknown): x is CarpoolGuest => {
+  const g = x as CarpoolGuest
+  return !!g && typeof g === 'object' && typeof g.id === 'string' && typeof g.name === 'string' && GUEST_COLS.has(g.col)
+}
 
 /** riderId → text the campus keywords match against (name + pickup-location name). */
 export type MatchText = Record<string, string>
@@ -64,6 +70,7 @@ export function upgradeCarpoolData(raw: unknown, matchText: MatchText): CarpoolD
       collegeKeywords: Array.isArray(r.collegeKeywords) && r.collegeKeywords.length
         ? r.collegeKeywords.filter((k): k is string => typeof k === 'string')
         : [...DEFAULT_COLLEGE_KEYWORDS],
+      guests: Array.isArray(r.guests) ? r.guests.filter(isGuest) : [],
       going: cleanDir(r.going, 'g'),
       back: cleanDir(r.back, 'b'),
     }
@@ -74,6 +81,7 @@ export function upgradeCarpoolData(raw: unknown, matchText: MatchText): CarpoolD
     header: DEFAULT_CARPOOL_HEADER,
     funFactQuestionId: null,
     collegeKeywords: [...DEFAULT_COLLEGE_KEYWORDS],
+    guests: [],
     going: { ...splitByCampus(legacy, matchText, DEFAULT_COLLEGE_KEYWORDS), diy: [] },
     back: emptyDir(),
   }

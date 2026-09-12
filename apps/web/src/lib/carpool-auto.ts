@@ -102,7 +102,7 @@ export async function generateCarpoolForEvent(
   const going = { ...splitByCampus(res.cars.map((c) => ({ ...c, id: `g:${c.driverId}` })), matchText, DEFAULT_COLLEGE_KEYWORDS), diy: [] };
   const data: CarpoolDataV2 = {
     v: 2, header: DEFAULT_CARPOOL_HEADER, funFactQuestionId: null,
-    collegeKeywords: [...DEFAULT_COLLEGE_KEYWORDS], going, back: mirrorDirSet(going),
+    collegeKeywords: [...DEFAULT_COLLEGE_KEYWORDS], guests: [], going, back: mirrorDirSet(going),
   };
   const { error } = await supabase.from("carpools").upsert(
     { org_id: orgId, event_id: eventId, data: data as unknown as Json, published: false },

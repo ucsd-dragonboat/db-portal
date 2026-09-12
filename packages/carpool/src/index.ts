@@ -9,6 +9,8 @@ export type {
   DirSet,
   CarpoolDataV2,
   LegacyCarpoolData,
+  GuestCol,
+  CarpoolGuest,
 } from './types'
 export { DEFAULT_CARPOOL_HEADER, DEFAULT_COLLEGE_KEYWORDS } from './types'
 export {
