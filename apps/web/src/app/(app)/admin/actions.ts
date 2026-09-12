@@ -355,10 +355,20 @@ export async function disconnectGoogleAccount() {
 }
 
 /** Create the team Google Calendar and mirror recent + future events into it. */
-export async function connectTeamCalendarAction() {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function connectTeamCalendarAction(_prev: { error?: string } | null, _fd: FormData): Promise<{ error?: string } | null> {
   const { org, userId } = await requireAdmin();
-  await createTeamCalendar(org.id, userId, org.name);
+  try {
+    await createTeamCalendar(org.id, userId, org.name);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "failed";
+    if (msg === "google_unlinked") return { error: "Your Google connection expired — reconnect above and try again." };
+    if (/insufficient|scope/i.test(msg)) return { error: "Your Google connection predates calendar access. Disconnect above, connect again (the consent screen now includes Calendar), then retry." };
+    if (/has not been used|accessNotConfigured|is disabled/i.test(msg)) return { error: "The Google Calendar API isn't enabled in your Google Cloud project — APIs & Services → Library → Google Calendar API → Enable, wait a minute, then retry." };
+    return { error: `Couldn't create the calendar: ${msg.slice(0, 200)}` };
+  }
   revalidatePath("/admin/settings"); revalidatePath("/admin/events");
+  return null;
 }
 
 export async function disconnectTeamCalendarAction() {

@@ -2,7 +2,8 @@ import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
 import { getCalendarSync } from "@/lib/google-calendar";
-import { connectTeamCalendarAction, deletePickupLocation, deleteSavedLocation, disconnectGoogleAccount, disconnectTeamCalendarAction, rotateJoinCode } from "../actions";
+import { deletePickupLocation, deleteSavedLocation, disconnectGoogleAccount, disconnectTeamCalendarAction, rotateJoinCode } from "../actions";
+import TeamCalendarForm from "./team-calendar-form";
 import PickupForm from "./pickup-form";
 import SavedLocationForm from "./saved-location-form";
 import ConfirmForm from "@/components/confirm-form";
@@ -86,7 +87,7 @@ export default async function AdminSettingsPage() {
                   Two-way calendar sync: creates a “{org.name}” calendar in your Google account, mirrors portal events into it,
                   and pulls your Google-side edits back. Deleting there only unlinks here; Google-created events land in “Missing info”.
                 </span>
-                <form action={connectTeamCalendarAction}><button className="btn-secondary whitespace-nowrap">Create team calendar</button></form>
+                <TeamCalendarForm />
               </div>
             )}
           </div>

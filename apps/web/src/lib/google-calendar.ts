@@ -33,9 +33,12 @@ type GEvent = {
   extendedProperties?: { private?: Record<string, string> };
 };
 
-function toGoogle(ev: Event): GEvent {
+type EventWithGroup = Event & { group?: { name: string } | null };
+
+function toGoogle(ev: EventWithGroup): GEvent {
   return {
-    summary: ev.title,
+    // Day rows carry auto titles ("Saturday 9/12") — the real name is the group's.
+    summary: ev.group?.name ?? ev.title,
     location: ev.location_name ?? undefined,
     description: ev.notes ? htmlToText(ev.notes) : undefined,
     start: { dateTime: ev.starts_at },
@@ -62,7 +65,7 @@ export async function createTeamCalendar(orgId: string, userId: string, name: st
   if (error) throw new Error(error.message);
 
   const since = new Date(Date.now() - 30 * 86400e3).toISOString();
-  const { data: events } = await admin.from("events").select("*").eq("org_id", orgId).gte("starts_at", since).is("google_event_id", null);
+  const { data: events } = await admin.from("events").select("*, group:event_groups(name)").eq("org_id", orgId).gte("starts_at", since).is("google_event_id", null);
   let pushed = 0;
   for (const ev of events ?? []) {
     try {
@@ -85,7 +88,7 @@ export async function disconnectTeamCalendar(orgId: string) {
 export async function syncEventToGoogle(eventId: string): Promise<void> {
   try {
     const admin = createAdminClient();
-    const { data: ev } = await admin.from("events").select("*").eq("id", eventId).maybeSingle();
+    const { data: ev } = await admin.from("events").select("*, group:event_groups(name)").eq("id", eventId).maybeSingle();
     if (!ev) return;
     const sync = await getCalendarSync(ev.org_id);
     if (!sync) return;
@@ -173,11 +176,11 @@ export async function pullGoogleCalendar(orgId: string): Promise<{ applied: numb
 async function applyGoogleItem(orgId: string, g: GEvent): Promise<boolean> {
   if (!g.id) return false;
   const admin = createAdminClient();
-  const { data: byGid } = await admin.from("events").select("id, google_event_id").eq("org_id", orgId).eq("google_event_id", g.id).maybeSingle();
+  const { data: byGid } = await admin.from("events").select("id, google_event_id, group:event_groups(name)").eq("org_id", orgId).eq("google_event_id", g.id).maybeSingle();
   let linked = byGid ?? null;
   const pid = g.extendedProperties?.private?.portalEventId;
   if (!linked && pid) {
-    const { data: byPid } = await admin.from("events").select("id, google_event_id").eq("org_id", orgId).eq("id", pid).maybeSingle();
+    const { data: byPid } = await admin.from("events").select("id, google_event_id, group:event_groups(name)").eq("org_id", orgId).eq("id", pid).maybeSingle();
     linked = byPid ?? null;
   }
 
@@ -191,17 +194,20 @@ async function applyGoogleItem(orgId: string, g: GEvent): Promise<boolean> {
   }
   if (!g.start?.dateTime) return false; // all-day events aren't imported — portal events are timed
 
+  const summary = g.summary?.trim() || "Untitled event";
   const fields = {
-    title: g.summary?.trim() || "Untitled event",
     starts_at: new Date(g.start.dateTime).toISOString(),
     ends_at: g.end?.dateTime ? new Date(g.end.dateTime).toISOString() : null,
     location_name: g.location?.trim() || null,
   };
   if (linked) {
-    // Last write wins on title/times/location. Notes/kind/group stay portal-authored.
-    await admin.from("events").update({ ...fields, google_event_id: g.id }).eq("id", linked.id);
+    // Last write wins on times/location. Grouped days push the GROUP name as the
+    // Google summary, so only take it as the day title when it's a real rename.
+    const groupName = (linked.group as { name: string } | null)?.name;
+    const title = groupName && summary === groupName ? undefined : summary;
+    await admin.from("events").update({ ...fields, ...(title ? { title } : {}), google_event_id: g.id }).eq("id", linked.id);
   } else {
-    await admin.from("events").insert({ org_id: orgId, kind: "other", needs_info: true, google_event_id: g.id, ...fields });
+    await admin.from("events").insert({ org_id: orgId, kind: "other", needs_info: true, google_event_id: g.id, title: summary, ...fields });
   }
   return true;
 }
