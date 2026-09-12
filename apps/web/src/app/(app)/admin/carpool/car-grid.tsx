@@ -43,7 +43,11 @@ function CarColumn({ dir, car, riders, options, rows, h }: {
         <span className="min-w-0 flex-1 truncate font-medium" title={riders[car.driverId]?.name}>{riders[car.driverId]?.name ?? "?"}</span>
         <input type="number" min={1} max={15} value={car.capacity} onChange={(e) => h.setCap(dir, car.id, Number(e.target.value))}
           className="w-8 rounded-sm bg-white/60 px-0.5 text-center text-[11px] outline-none" title="Capacity incl. driver" />
-        <button type="button" onClick={() => h.toggleLock(dir, car.id)} className="text-[11px]" title="Lock: optimizer won't change this car">{car.locked ? "🔒" : "🔓"}</button>
+        <button type="button" onClick={() => h.toggleLock(dir, car.id)}
+          className={`text-[12px] ${car.locked ? "" : "opacity-30 grayscale hover:opacity-70"}`}
+          title={car.locked ? "Locked — Optimize won't touch this car (click to unlock)" : "Unlocked — Optimize may rearrange this car (click to lock)"}>
+          {car.locked ? "🔒" : "🔓"}
+        </button>
         <button type="button" onClick={() => h.removeCar(dir, car.id)} tabIndex={-1} className="hidden text-[11px] text-black/40 hover:text-red-700 group-hover:inline" title="Remove this car (passengers become unplaced)">✕</button>
       </div>
       <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
