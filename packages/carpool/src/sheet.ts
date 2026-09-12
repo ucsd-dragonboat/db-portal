@@ -79,10 +79,11 @@ export function upgradeCarpoolData(raw: unknown, matchText: MatchText): CarpoolD
   }
 }
 
-/** Re-project one direction onto the CURRENT drivers/riders: stale drivers drop,
- * new drivers get a blank car in the grid their keyword match picks, passengers
- * and DIY are filtered to known riders, and a rider seated twice keeps only the
- * first placement. */
+/** Re-project one direction onto the CURRENT drivers/riders: cars whose driver
+ * left the event drop (typed-in drivers survive as long as they're still riders),
+ * new RSVP'd drivers get a blank car in the grid their keyword match picks,
+ * passengers and DIY are filtered to known riders, and a rider seated twice keeps
+ * only the first placement. */
 export function reconcileDirSet(
   dir: DirSet,
   drivers: { id: string; seats: number }[],
@@ -91,11 +92,10 @@ export function reconcileDirSet(
   keywords: string[],
   prefix: DirPrefix,
 ): DirSet {
-  const driverIds = new Set(drivers.map((d) => d.id))
   const seatsBy = new Map(drivers.map((d) => [d.id, d.seats]))
   const seen = new Set<string>()
   const keep = (cars: Car[]): Car[] =>
-    cars.filter((c) => driverIds.has(c.driverId)).map((c) => ({
+    cars.filter((c) => riderIds.has(c.driverId)).map((c) => ({
       ...c,
       id: `${prefix}:${c.driverId}`,
       capacity: c.capacity || seatsBy.get(c.driverId) || 1,
@@ -138,6 +138,20 @@ export function placeInDirSet(dir: DirSet, target: PlaceTarget, riderId: string)
 export function removeFromDirSet(dir: DirSet, riderId: string): DirSet {
   const strip = (cars: Car[]) => cars.map((c) => (c.passengerIds.includes(riderId) ? { ...c, passengerIds: c.passengerIds.filter((p) => p !== riderId) } : c))
   return { onCampus: strip(dir.onCampus), offCampus: strip(dir.offCampus), diy: dir.diy.filter((p) => p !== riderId) }
+}
+
+/** Type/drop someone into an empty Driver cell: unseat them in this direction,
+ * then add their (empty) car to the chosen band. No-op if they already drive here. */
+export function addDriverToDirSet(dir: DirSet, band: 'onCampus' | 'offCampus', riderId: string, capacity: number, prefix: DirPrefix): DirSet {
+  if ([...dir.onCampus, ...dir.offCampus].some((c) => c.driverId === riderId)) return dir
+  const cleared = removeFromDirSet(dir, riderId)
+  const car: Car = { id: `${prefix}:${riderId}`, driverId: riderId, capacity: Math.max(2, capacity), passengerIds: [] }
+  return { ...cleared, [band]: [...cleared[band], car] }
+}
+
+/** Delete a car column; its passengers simply become unplaced. */
+export function removeCarFromDirSet(dir: DirSet, carId: string): DirSet {
+  return { ...dir, onCampus: dir.onCampus.filter((c) => c.id !== carId), offCampus: dir.offCampus.filter((c) => c.id !== carId) }
 }
 
 /** Copy Going → Back (deep copy, ids re-keyed g:→b:). */
