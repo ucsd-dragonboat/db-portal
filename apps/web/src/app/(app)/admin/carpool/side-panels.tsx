@@ -54,18 +54,45 @@ export function TotalPanel({ riders, drivers, grouped, selfIds, placedNote, onUn
         <div className={`${cell} ${col} font-medium text-white`} style={{ background: "#3c78d8", ...cellBorder }}>ON CAMPUS</div>
         <div className={`${cell} ${col} bg-white`} style={cellBorder} />
       </div>
-      <div className="flex items-start">
-        <div className={col}>{drivers.map((d) => <Chip key={d.id} id={d.id} name={name(d.id)} note={`${d.seats - 1}${placedNote(d.id)}`} />)}</div>
-        <div className={col}>{grouped.offCampus.map((id) => <Chip key={id} id={id} name={name(id)} note={placedNote(id)} />)}</div>
-        <div className={col}>
-          {grouped.onCampus.map((g) => (
-            <div key={g.keyword}>
-              <div className={`${cell} font-medium uppercase`} style={{ background: "#a2c4c9", ...cellBorder }}>{g.keyword}</div>
-              {g.ids.map((id) => <Chip key={id} id={id} name={name(id)} note={placedNote(id)} />)}
-            </div>
-          ))}
-        </div>
-        <div className={col}>{selfIds.map((id) => <Chip key={id} id={id} name={name(id)} note={placedNote(id)} />)}</div>
+      <div className="flex items-stretch">
+        {(() => {
+          // Pad every column with empty gridline cells to a common height, like the sheet.
+          const rowsUsed = [
+            drivers.length,
+            grouped.offCampus.length,
+            grouped.onCampus.reduce((n, g) => n + 1 + g.ids.length, 0),
+            selfIds.length,
+          ];
+          const totalRows = Math.max(...rowsUsed, 12);
+          const pad = (used: number) => Array.from({ length: totalRows - used }, (_, i) => (
+            <div key={`pad${i}`} className={`${cell} bg-white`} style={cellBorder} />
+          ));
+          return (
+            <>
+              <div className={col}>
+                {drivers.map((d) => <Chip key={d.id} id={d.id} name={name(d.id)} note={`${d.seats - 1}${placedNote(d.id)}`} />)}
+                {pad(rowsUsed[0])}
+              </div>
+              <div className={col}>
+                {grouped.offCampus.map((id) => <Chip key={id} id={id} name={name(id)} note={placedNote(id)} />)}
+                {pad(rowsUsed[1])}
+              </div>
+              <div className={col}>
+                {grouped.onCampus.map((g) => (
+                  <div key={g.keyword}>
+                    <div className={`${cell} font-medium uppercase`} style={{ background: "#a2c4c9", ...cellBorder }}>{g.keyword}</div>
+                    {g.ids.map((id) => <Chip key={id} id={id} name={name(id)} note={placedNote(id)} />)}
+                  </div>
+                ))}
+                {pad(rowsUsed[2])}
+              </div>
+              <div className={col}>
+                {selfIds.map((id) => <Chip key={id} id={id} name={name(id)} note={placedNote(id)} />)}
+                {pad(rowsUsed[3])}
+              </div>
+            </>
+          );
+        })()}
       </div>
       <p className="px-1 py-1 text-[10px]" style={{ color: "var(--g-grey-600)" }}>Drag a name into a car; drop one here to unseat. G/B = placed Going/Back.</p>
     </div>
