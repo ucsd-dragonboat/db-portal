@@ -14,27 +14,33 @@ export type GridHandlers = {
   toggleLock: (dir: DirKey, carId: string) => void;
 };
 
+// Exact colors from the team's Google Sheets template.
+export const SHEET = {
+  grid: "#e0e0e0", banner: "#2f2f2f", direction: "#e80b0b", band: "#ffefbf", bandBack: "#ffeebf",
+  driver: "#fecccc", filler: "#d9d9d9", diy: "#d6ccfe", sep: "#666666", warn: "#ff7c3a",
+};
+const cellBorder = { borderRight: `1px solid ${SHEET.grid}`, borderBottom: `1px solid ${SHEET.grid}` };
+
 const opt = (riders: Record<string, Rider>, id: string): NameOption => ({ id, name: riders[id]?.name ?? "?" });
 
-/** One car as a spreadsheet column: red driver cell on top, passenger cells below.
- * Cars with more than 4 passenger seats take two columns inside a black box. */
-function CarColumn({ dir, car, riders, options, h }: {
-  dir: DirKey; car: Car; riders: Record<string, Rider>; options: NameOption[]; h: GridHandlers;
+/** One car as spreadsheet columns: pink driver cell on top, white passenger cells
+ * below. Cars with more than 4 passenger seats take two columns inside a black box. */
+function CarColumn({ dir, car, riders, options, rows, h }: {
+  dir: DirKey; car: Car; riders: Record<string, Rider>; options: NameOption[]; rows: number; h: GridHandlers;
 }) {
   const seats = car.capacity - 1;
-  const cols = seats > 4 ? 2 : 1;
-  const rows = Math.max(4, Math.ceil(seats / cols));
+  const wide = seats > 4;
+  const cols = wide ? 2 : 1;
   const cells = Array.from({ length: rows * cols }, (_, i) => i);
   return (
-    <div className={`w-${cols === 2 ? "[16rem]" : "32"} shrink-0 ${cols === 2 ? "border-2 border-black" : ""}`}
-      style={{ width: cols === 2 ? "16rem" : "8rem" }}>
-      <div className="flex items-center gap-1 px-1 py-1 text-sm text-white" style={{ background: "var(--g-red)" }}
+    <div className="shrink-0" style={{ width: cols * 100, outline: wide ? "2px solid #000" : undefined, outlineOffset: -1, zIndex: wide ? 1 : undefined }}>
+      <div className="flex h-[22px] items-center gap-0.5 px-1 text-[13px]" style={{ background: SHEET.driver, ...cellBorder }}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); h.drop(dir, { kind: "car", carId: car.id }, e.dataTransfer.getData("text/plain")); }}>
         <span className="min-w-0 flex-1 truncate font-medium" title={riders[car.driverId]?.name}>{riders[car.driverId]?.name ?? "?"}</span>
         <input type="number" min={1} max={15} value={car.capacity} onChange={(e) => h.setCap(dir, car.id, Number(e.target.value))}
-          className="w-9 rounded bg-white/20 px-0.5 text-center text-xs text-white outline-none" title="Capacity incl. driver" />
-        <button type="button" onClick={() => h.toggleLock(dir, car.id)} className="text-xs" title="Lock: optimizer won't change this car">{car.locked ? "🔒" : "🔓"}</button>
+          className="w-8 rounded-sm bg-white/60 px-0.5 text-center text-[11px] outline-none" title="Capacity incl. driver" />
+        <button type="button" onClick={() => h.toggleLock(dir, car.id)} className="text-[11px]" title="Lock: optimizer won't change this car">{car.locked ? "🔒" : "🔓"}</button>
       </div>
       <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {cells.map((i) => {
@@ -56,40 +62,52 @@ function CarColumn({ dir, car, riders, options, h }: {
   );
 }
 
-/** A labeled band of car columns (ON CAMPUS / OFF CAMPUS). */
-export function CarGrid({ dir, label, cars, riders, options, h }: {
-  dir: DirKey; label: string; cars: Car[]; riders: Record<string, Rider>; options: NameOption[]; h: GridHandlers;
+/** One campus band of a direction: tan header row (with the red GOING/BACK cell on
+ * the first band), then the "Driver" pink label column + flush car columns. */
+export function CarGrid({ dir, label, directionLabel, cars, riders, options, h }: {
+  dir: DirKey; label: string; directionLabel?: string; cars: Car[]; riders: Record<string, Rider>; options: NameOption[]; h: GridHandlers;
 }) {
+  const rows = Math.max(4, ...cars.map((c) => Math.ceil((c.capacity - 1) / (c.capacity - 1 > 4 ? 2 : 1))));
   return (
-    <div>
-      <div className="px-2 py-0.5 text-center text-xs font-semibold" style={{ background: "#ffefbf" }}>{label}</div>
-      {cars.length ? (
-        <div className="flex flex-wrap gap-2 border p-2" style={{ borderColor: "var(--g-grey-300)", background: "var(--g-grey-50)" }}>
-          {cars.map((c) => <CarColumn key={c.id} dir={dir} car={c} riders={riders} options={options} h={h} />)}
+    <div className="text-[13px]" style={{ borderLeft: `1px solid ${SHEET.grid}`, borderTop: `1px solid ${SHEET.grid}` }}>
+      <div className="flex">
+        <div className="flex h-[22px] w-20 shrink-0 items-center px-1 font-medium text-white" style={{ background: directionLabel ? SHEET.direction : "#fff", ...cellBorder }}>
+          {directionLabel ?? ""}
         </div>
-      ) : (
-        <p className="border p-2 text-xs" style={{ borderColor: "var(--g-grey-300)", color: "var(--g-grey-600)" }}>No cars here.</p>
-      )}
+        <div className="flex h-[22px] flex-1 items-center justify-center font-medium" style={{ background: dir === "back" ? SHEET.bandBack : SHEET.band, ...cellBorder }}>{label}</div>
+      </div>
+      <div className="flex">
+        <div className="w-20 shrink-0">
+          <div className="flex h-[22px] items-center px-1" style={{ background: SHEET.driver, ...cellBorder }}>Driver</div>
+          <div style={{ background: SHEET.filler, height: rows * 22, ...cellBorder }} />
+        </div>
+        {cars.map((c) => <CarColumn key={c.id} dir={dir} car={c} riders={riders} options={options} rows={rows} h={h} />)}
+        {!cars.length && <div className="flex h-[22px] flex-1 items-center bg-white px-2 text-xs" style={{ color: "var(--g-grey-600)", ...cellBorder }}>no drivers</div>}
+      </div>
     </div>
   );
 }
 
-/** DIY strip: self-transport people, free placement. */
+/** DIY band: purple header, then a white free-placement row. */
 export function DiyRow({ dir, dirSet, riders, options, h }: {
   dir: DirKey; dirSet: DirSet; riders: Record<string, Rider>; options: NameOption[]; h: GridHandlers;
 }) {
   return (
-    <div>
-      <div className="px-2 py-0.5 text-center text-xs font-semibold" style={{ background: "#d6ccfe" }}>DIY</div>
-      <div className="flex flex-wrap items-center gap-1 border p-2" style={{ borderColor: "var(--g-grey-300)" }}
+    <div className="text-[13px]" style={{ borderLeft: `1px solid ${SHEET.grid}` }}>
+      <div className="flex">
+        <div className="h-[22px] w-20 shrink-0" style={{ background: SHEET.diy, ...cellBorder }} />
+        <div className="flex h-[22px] flex-1 items-center justify-center font-medium" style={{ background: SHEET.diy, ...cellBorder }}>DIY</div>
+      </div>
+      <div className="flex flex-wrap bg-white"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); h.drop(dir, { kind: "diy" }, e.dataTransfer.getData("text/plain")); }}>
+        <div className="w-20 shrink-0 self-stretch" style={{ background: SHEET.filler, ...cellBorder }} />
         {dirSet.diy.map((pid) => (
           <NameCell key={pid} value={opt(riders, pid)} options={[]} onPick={() => {}}
-            onClear={() => h.unseat(dir, pid)} dragPayload={`rider:${pid}:${dir}`} className="w-32 !border" />
+            onClear={() => h.unseat(dir, pid)} dragPayload={`rider:${pid}:${dir}`} className="w-[100px]" />
         ))}
         <NameCell value={null} options={options} onPick={(id) => h.place(dir, { kind: "diy" }, id)}
-          onDropRider={(payload) => h.drop(dir, { kind: "diy" }, payload)} className="w-32 !border" />
+          onDropRider={(payload) => h.drop(dir, { kind: "diy" }, payload)} className="w-[100px]" />
       </div>
     </div>
   );
