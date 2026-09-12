@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addDriverToDirSet,
   discrepancies,
   groupNeedsRide,
   matchKeyword,
   mirrorDirSet,
   placeInDirSet,
   reconcileDirSet,
+  removeCarFromDirSet,
   removeFromDirSet,
   splitByCampus,
   upgradeCarpoolData,
@@ -99,6 +101,28 @@ describe('placeInDirSet / removeFromDirSet', () => {
     expect(out.onCampus[0].passengerIds).toEqual([])
     expect(out.diy).toEqual(['p1'])
     expect(removeFromDirSet(out, 'p1').diy).toEqual([])
+  })
+})
+
+describe('addDriverToDirSet / removeCarFromDirSet', () => {
+  it('promotes a seated rider to a driver (unseated first), no-ops if already driving', () => {
+    const d = dir({ onCampus: [car('d1', 5, ['p1'])] })
+    const out = addDriverToDirSet(d, 'offCampus', 'p1', 4, 'g')
+    expect(out.onCampus[0].passengerIds).toEqual([])
+    expect(out.offCampus[0]).toMatchObject({ id: 'g:p1', driverId: 'p1', capacity: 4, passengerIds: [] })
+    expect(addDriverToDirSet(out, 'onCampus', 'p1', 4, 'g')).toBe(out)
+  })
+  it('reconcile keeps a typed-in driver who is still a rider', () => {
+    const d = dir({ offCampus: [car('p2', 5, ['p1'])] }) // p2 never RSVP'd as a driver
+    const out = reconcileDirSet(d, [{ id: 'd1', seats: 5 }], new Set(['d1', 'p1', 'p2']), MATCH, DEFAULT_COLLEGE_KEYWORDS, 'g')
+    expect(out.offCampus.map((c) => c.driverId)).toEqual(['p2'])
+    expect(out.onCampus.map((c) => c.driverId)).toEqual(['d1'])
+  })
+  it('removeCar frees its passengers', () => {
+    const d = dir({ onCampus: [car('d1', 5, ['p1'])] })
+    const out = removeCarFromDirSet(d, 'g:d1')
+    expect(out.onCampus).toEqual([])
+    expect(out.diy).toEqual([])
   })
 })
 

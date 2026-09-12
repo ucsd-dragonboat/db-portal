@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import {
-  assignCarpool, buildOsrmRouteUrl, carRoutePoints, discrepancies, groupNeedsRide, locationKey,
-  mirrorDirSet, parseOsrmRoute, placeInDirSet, reconcileDirSet, removeFromDirSet, splitByCampus,
-  upgradeCarpoolData,
+  addDriverToDirSet, assignCarpool, buildOsrmRouteUrl, carRoutePoints, discrepancies, groupNeedsRide,
+  locationKey, mirrorDirSet, parseOsrmRoute, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
+  removeFromDirSet, splitByCampus, upgradeCarpoolData,
   type CarpoolDataV2, type Destination, type MatchText, type OsrmRoute, type Rider,
 } from "@db/carpool";
 import { saveCarpool } from "./actions";
@@ -59,8 +59,16 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
   const disc = useMemo(() => discrepancies(needsRide, data.going, data.back), [needsRide, data.going, data.back]);
   const options = useMemo(() => {
     const all = Object.values(riders).map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name));
-    return { going: all.filter((o) => !placedGoing.has(o.id)), back: all.filter((o) => !placedBack.has(o.id)) };
-  }, [riders, placedGoing, placedBack]);
+    const drivingIn = (d: CarpoolDataV2["going"]) => new Set([...d.onCampus, ...d.offCampus].map((c) => c.driverId));
+    const dg = drivingIn(data.going), db = drivingIn(data.back);
+    return {
+      going: all.filter((o) => !placedGoing.has(o.id) && !dg.has(o.id)),
+      back: all.filter((o) => !placedBack.has(o.id) && !db.has(o.id)),
+      // empty Driver cells: anyone not already driving in that direction
+      goingDrivers: all.filter((o) => !dg.has(o.id)),
+      backDrivers: all.filter((o) => !db.has(o.id)),
+    };
+  }, [riders, placedGoing, placedBack, data.going, data.back]);
 
   const setDir = (dir: DirKey, f: (d: CarpoolDataV2[DirKey]) => CarpoolDataV2[DirKey]) =>
     setData((s) => ({ ...s, [dir]: f(s[dir]) }));
@@ -79,6 +87,9 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
     },
     setCap: (dir, carId, cap) => setDir(dir, (d) => mapCarsIn(d, (c) => (c.id === carId ? { ...c, capacity: Math.max(1, cap) } : c))),
     toggleLock: (dir, carId) => setDir(dir, (d) => mapCarsIn(d, (c) => (c.id === carId ? { ...c, locked: !c.locked } : c))),
+    addDriver: (dir, band, riderId) => setDir(dir, (d) =>
+      addDriverToDirSet(d, band, riderId, drivers.find((x) => x.id === riderId)?.seats ?? 5, dir === "going" ? "g" : "b")),
+    removeCar: (dir, carId) => setDir(dir, (d) => removeCarFromDirSet(d, carId)),
   };
   const unseatDrop = (payload: string) => {
     const [kind, id, origin] = payload.split(":");
@@ -148,13 +159,16 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
     ? goingCars.map((c, i) => ({ id: c.id, color: COLORS[i % COLORS.length], points: carRoutePoints(c, riders, destination, "pickup"), route: routes[c.id] ?? null, label: riders[c.driverId]?.name ?? "?" }))
     : [];
 
-  const dirSection = (dir: DirKey, label: string) => (
-    <section>
-      <CarGrid dir={dir} label="ON CAMPUS" directionLabel={label} cars={data[dir].onCampus} riders={riders} options={options[dir]} h={h} />
-      <CarGrid dir={dir} label="OFF CAMPUS" cars={data[dir].offCampus} riders={riders} options={options[dir]} h={h} />
-      <DiyRow dir={dir} dirSet={data[dir]} riders={riders} options={options[dir]} h={h} />
-    </section>
-  );
+  const dirSection = (dir: DirKey, label: string) => {
+    const dOpts = dir === "going" ? options.goingDrivers : options.backDrivers;
+    return (
+      <section>
+        <CarGrid dir={dir} band="onCampus" label="ON CAMPUS" directionLabel={label} cars={data[dir].onCampus} riders={riders} options={options[dir]} driverOptions={dOpts} h={h} />
+        <CarGrid dir={dir} band="offCampus" label="OFF CAMPUS" cars={data[dir].offCampus} riders={riders} options={options[dir]} driverOptions={dOpts} h={h} />
+        <DiyRow dir={dir} dirSet={data[dir]} riders={riders} options={options[dir]} h={h} />
+      </section>
+    );
+  };
 
   return (
     <div className="space-y-3">
@@ -174,38 +188,40 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
 
       {/* The sheet — laid out like the Google Sheets template, horizontally scrollable. */}
       <div className="-mx-4 overflow-x-auto px-4 pb-2 md:-mx-6 md:px-6" style={{ background: "#fff" }}>
-        <div className="flex w-max items-start">
-          {/* banner + grids + TOTAL (the banner spans both, like rows 1-2 of the sheet) */}
-          <div>
-            <input value={data.header} onChange={(e) => setData((s) => ({ ...s, header: e.target.value }))}
-              className="w-full px-3 py-1.5 text-center text-[18px] font-medium text-white outline-none" style={{ background: SHEET.banner }} />
-            <div className="flex items-stretch">
-              <div className="min-w-[420px]">
-                {dirSection("going", "GOING ➡️")}
-                <div className="h-[22px]" />
-                {dirSection("back", "BACK ⬅️")}
-                <div className="mt-[22px] flex h-[44px] w-full items-center justify-center px-3 text-center text-[14px] font-medium text-white" style={{ background: SHEET.warn }}>
-                  IF YOU SEE AN ERROR (&quot;I only have a ride there!&quot;) DM BLUM IMMEDIATELY
+        <div className="w-max">
+          <div className="flex items-start">
+            {/* banner + grids + TOTAL (the banner spans both, like rows 1-2 of the sheet) */}
+            <div>
+              <input value={data.header} onChange={(e) => setData((s) => ({ ...s, header: e.target.value }))}
+                className="w-full px-3 py-1.5 text-center text-[18px] font-medium text-white outline-none" style={{ background: SHEET.banner }} />
+              <div className="flex items-stretch">
+                <div className="min-w-[420px]">
+                  {dirSection("going", "GOING ➡️")}
+                  <div className="h-[22px]" />
+                  {dirSection("back", "BACK ⬅️")}
+                  <div className="mt-[22px] flex h-[44px] w-full items-center justify-center px-3 text-center text-[14px] font-medium text-white" style={{ background: SHEET.warn }}>
+                    IF YOU SEE AN ERROR (&quot;I only have a ride there!&quot;) DM BLUM IMMEDIATELY
+                  </div>
                 </div>
-                <div className="mt-[22px]">
-                  <DiscrepancyTracker rows={disc} riders={riders} />
+                <div className="w-[14px] shrink-0 self-stretch" style={{ background: SHEET.sep }} />
+                <TotalPanel riders={riders} drivers={drivers} grouped={grouped} selfIds={selfIds} placedNote={placedNote} onUnseatDrop={unseatDrop} />
+              </div>
+            </div>
+            {destination && (
+              <div className="ml-3 w-[480px] shrink-0">
+                <div className="px-1 py-0.5 text-[11px]" style={{ color: "var(--g-grey-600)" }}>Map shows GOING routes.</div>
+                <div className="h-[480px] overflow-hidden border" style={{ borderColor: "#e0e0e0" }}>
+                  <RouteMap destination={destination} cars={mapCars} />
                 </div>
               </div>
-              <div className="w-[14px] shrink-0 self-stretch" style={{ background: SHEET.sep }} />
-              <TotalPanel riders={riders} drivers={drivers} grouped={grouped} selfIds={selfIds} placedNote={placedNote} onUnseatDrop={unseatDrop} />
-            </div>
+            )}
           </div>
-          <div className="w-[14px] shrink-0 self-stretch" style={{ background: SHEET.sep }} />
-          <FunFactPanel questions={funFactQuestions} answers={funFactAnswers} questionId={data.funFactQuestionId}
-            onPickQuestion={(id) => setData((s) => ({ ...s, funFactQuestionId: id }))} riders={riders} />
-          {destination && (
-            <div className="ml-3 w-[520px] shrink-0">
-              <div className="px-1 py-0.5 text-[11px]" style={{ color: "var(--g-grey-600)" }}>Map shows GOING routes.</div>
-              <div className="h-[520px] overflow-hidden border" style={{ borderColor: "#e0e0e0" }}>
-                <RouteMap destination={destination} cars={mapCars} />
-              </div>
-            </div>
-          )}
+          {/* bottom row, like the sheet's footer area: discrepancy tracker + fun-fact side by side */}
+          <div className="mt-[22px] flex items-start gap-8">
+            <DiscrepancyTracker rows={disc} riders={riders} />
+            <FunFactPanel questions={funFactQuestions} answers={funFactAnswers} questionId={data.funFactQuestionId}
+              onPickQuestion={(id) => setData((s) => ({ ...s, funFactQuestionId: id }))} riders={riders} />
+          </div>
         </div>
       </div>
     </div>

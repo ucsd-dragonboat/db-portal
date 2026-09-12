@@ -18,6 +18,8 @@ export {
   reconcileDirSet,
   placeInDirSet,
   removeFromDirSet,
+  addDriverToDirSet,
+  removeCarFromDirSet,
   mirrorDirSet,
   groupNeedsRide,
   discrepancies,

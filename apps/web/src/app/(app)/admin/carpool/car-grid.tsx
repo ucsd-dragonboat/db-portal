@@ -12,6 +12,9 @@ export type GridHandlers = {
   drop: (dir: DirKey, target: PlaceTarget, payload: string) => void;
   setCap: (dir: DirKey, carId: string, cap: number) => void;
   toggleLock: (dir: DirKey, carId: string) => void;
+  /** Typing/dropping someone into an empty Driver cell creates their car in `band`. */
+  addDriver: (dir: DirKey, band: "onCampus" | "offCampus", riderId: string) => void;
+  removeCar: (dir: DirKey, carId: string) => void;
 };
 
 // Exact colors from the team's Google Sheets template.
@@ -34,13 +37,14 @@ function CarColumn({ dir, car, riders, options, rows, h }: {
   const cells = Array.from({ length: rows * cols }, (_, i) => i);
   return (
     <div className="shrink-0" style={{ width: cols * 100, outline: wide ? "2px solid #000" : undefined, outlineOffset: -1, zIndex: wide ? 1 : undefined }}>
-      <div className="flex h-[22px] items-center gap-0.5 px-1 text-[13px]" style={{ background: SHEET.driver, ...cellBorder }}
+      <div className="group flex h-[22px] items-center gap-0.5 px-1 text-[13px]" style={{ background: SHEET.driver, ...cellBorder }}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); h.drop(dir, { kind: "car", carId: car.id }, e.dataTransfer.getData("text/plain")); }}>
         <span className="min-w-0 flex-1 truncate font-medium" title={riders[car.driverId]?.name}>{riders[car.driverId]?.name ?? "?"}</span>
         <input type="number" min={1} max={15} value={car.capacity} onChange={(e) => h.setCap(dir, car.id, Number(e.target.value))}
           className="w-8 rounded-sm bg-white/60 px-0.5 text-center text-[11px] outline-none" title="Capacity incl. driver" />
         <button type="button" onClick={() => h.toggleLock(dir, car.id)} className="text-[11px]" title="Lock: optimizer won't change this car">{car.locked ? "🔒" : "🔓"}</button>
+        <button type="button" onClick={() => h.removeCar(dir, car.id)} tabIndex={-1} className="hidden text-[11px] text-black/40 hover:text-red-700 group-hover:inline" title="Remove this car (passengers become unplaced)">✕</button>
       </div>
       <div className="grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {cells.map((i) => {
@@ -62,12 +66,31 @@ function CarColumn({ dir, car, riders, options, rows, h }: {
   );
 }
 
+/** An empty spreadsheet column: typeable pink Driver cell (creates the car) over
+ * blank white cells — so the band always looks like the sheet's empty grid. */
+function EmptyColumn({ dir, band, driverOptions, rows, h }: {
+  dir: DirKey; band: "onCampus" | "offCampus"; driverOptions: NameOption[]; rows: number; h: GridHandlers;
+}) {
+  return (
+    <div className="w-[100px] shrink-0">
+      <NameCell value={null} options={driverOptions} onPick={(id) => h.addDriver(dir, band, id)}
+        onDropRider={(payload) => { const [k, id] = payload.split(":"); if (k === "rider") h.addDriver(dir, band, id); }}
+        className="!bg-[#fecccc]" />
+      {Array.from({ length: rows }, (_, i) => <div key={i} className="h-[22px] bg-white" style={cellBorder} />)}
+    </div>
+  );
+}
+
 /** One campus band of a direction: tan header row (with the red GOING/BACK cell on
- * the first band), then the "Driver" pink label column + flush car columns. */
-export function CarGrid({ dir, label, directionLabel, cars, riders, options, h }: {
-  dir: DirKey; label: string; directionLabel?: string; cars: Car[]; riders: Record<string, Rider>; options: NameOption[]; h: GridHandlers;
+ * the first band), then the "Driver" pink label column + flush car columns, padded
+ * with empty typeable columns so the grid always looks like the sheet. */
+export function CarGrid({ dir, band, label, directionLabel, cars, riders, options, driverOptions, h }: {
+  dir: DirKey; band: "onCampus" | "offCampus"; label: string; directionLabel?: string; cars: Car[];
+  riders: Record<string, Rider>; options: NameOption[]; driverOptions: NameOption[]; h: GridHandlers;
 }) {
   const rows = Math.max(4, ...cars.map((c) => Math.ceil((c.capacity - 1) / (c.capacity - 1 > 4 ? 2 : 1))));
+  const usedCols = cars.reduce((n, c) => n + (c.capacity - 1 > 4 ? 2 : 1), 0);
+  const emptyCols = Math.max(1, 6 - usedCols); // pad to ≥6 columns like the sheet, always ≥1 open
   return (
     <div className="text-[13px]" style={{ borderLeft: `1px solid ${SHEET.grid}`, borderTop: `1px solid ${SHEET.grid}` }}>
       <div className="flex">
@@ -82,7 +105,7 @@ export function CarGrid({ dir, label, directionLabel, cars, riders, options, h }
           <div style={{ background: SHEET.filler, height: rows * 22, ...cellBorder }} />
         </div>
         {cars.map((c) => <CarColumn key={c.id} dir={dir} car={c} riders={riders} options={options} rows={rows} h={h} />)}
-        {!cars.length && <div className="flex h-[22px] flex-1 items-center bg-white px-2 text-xs" style={{ color: "var(--g-grey-600)", ...cellBorder }}>no drivers</div>}
+        {Array.from({ length: emptyCols }, (_, i) => <EmptyColumn key={`e${i}`} dir={dir} band={band} driverOptions={driverOptions} rows={rows} h={h} />)}
       </div>
     </div>
   );
@@ -106,8 +129,11 @@ export function DiyRow({ dir, dirSet, riders, options, h }: {
           <NameCell key={pid} value={opt(riders, pid)} options={[]} onPick={() => {}}
             onClear={() => h.unseat(dir, pid)} dragPayload={`rider:${pid}:${dir}`} className="w-[100px]" />
         ))}
-        <NameCell value={null} options={options} onPick={(id) => h.place(dir, { kind: "diy" }, id)}
-          onDropRider={(payload) => h.drop(dir, { kind: "diy" }, payload)} className="w-[100px]" />
+        {/* pad with typeable cells so the row reads like the sheet's empty grid */}
+        {Array.from({ length: Math.max(1, 6 - dirSet.diy.length) }, (_, i) => (
+          <NameCell key={`e${i}`} value={null} options={options} onPick={(id) => h.place(dir, { kind: "diy" }, id)}
+            onDropRider={(payload) => h.drop(dir, { kind: "diy" }, payload)} className="w-[100px]" />
+        ))}
       </div>
     </div>
   );
