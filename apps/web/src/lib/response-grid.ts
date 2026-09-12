@@ -7,6 +7,14 @@ const choiceLabel = Object.fromEntries(ATTENDANCE_OPTIONS.map((o) => [o.value, o
 
 export type GridEvent = { id: string; title: string; starts_at: string };
 
+/** One stored answer → display text (arrays joined, booleans Yes/No, HTML flattened). */
+export function flattenAnswer(a: unknown): string {
+  if (a == null || a === "") return "";
+  if (Array.isArray(a)) return a.join(", ");
+  if (typeof a === "boolean") return a ? "Yes" : "No";
+  return htmlToText(String(a));
+}
+
 /** One row per responded member — shared by the admin Responses page (table + CSV) and the Sheets sync. */
 export function buildResponseGrid(input: {
   form: Form;
@@ -35,13 +43,8 @@ export function buildResponseGrid(input: {
     if (r.note) s += ` — ${r.note}`;
     return s;
   };
-  const ansCell = (uid: string, q: FormQuestion) => {
-    const a = (respBy.get(uid)?.answers as Record<string, unknown> | null)?.[q.id];
-    if (a == null || a === "") return "";
-    if (Array.isArray(a)) return a.join(", ");
-    if (typeof a === "boolean") return a ? "Yes" : "No";
-    return htmlToText(String(a));
-  };
+  const ansCell = (uid: string, q: FormQuestion) =>
+    flattenAnswer((respBy.get(uid)?.answers as Record<string, unknown> | null)?.[q.id]);
 
   const dueAt = form.due_at ? new Date(form.due_at) : null;
   const isLate = (uid: string) => {

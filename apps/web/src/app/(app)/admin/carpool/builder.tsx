@@ -1,145 +1,208 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import Icon from "@/components/icon";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
-import { assignCarpool, buildOsrmRouteUrl, carRoutePoints, parseOsrmRoute, type Car, type Destination, type Mode, type OsrmRoute, type Rider } from "@db/carpool";
+import {
+  assignCarpool, buildOsrmRouteUrl, carRoutePoints, discrepancies, groupNeedsRide, locationKey,
+  mirrorDirSet, parseOsrmRoute, placeInDirSet, reconcileDirSet, removeFromDirSet, splitByCampus,
+  upgradeCarpoolData,
+  type CarpoolDataV2, type Destination, type MatchText, type OsrmRoute, type Rider,
+} from "@db/carpool";
 import { saveCarpool } from "./actions";
+import { CarGrid, DiyRow, type DirKey, type GridHandlers } from "./car-grid";
+import { DiscrepancyTracker, FunFactPanel, TotalPanel } from "./side-panels";
 
 const RouteMap = dynamic(() => import("@/components/route-map"), { ssr: false });
 
-export type SavedCarpool = { data: { cars: Car[]; mode: Mode }; published: boolean };
+export type SavedCarpool = { data: unknown; published: boolean };
 const COLORS = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#7c3aed", "#db2777", "#0891b2", "#65a30d"];
 
-/** destination === null (day has no coordinates): manual assignment only — Optimize and the route map are disabled. */
-export default function CarpoolBuilder({ eventId, destination, riders, drivers, needsRide, saved }: {
-  eventId: string; destination: Destination | null; riders: Record<string, Rider>; drivers: { id: string; seats: number }[]; needsRide: string[]; saved: SavedCarpool | null;
+/** Sheets-style rides workspace: GOING/BACK sections of ON/OFF-CAMPUS car columns
+ * + DIY, TOTAL roster with campus grouping, fun-fact column, discrepancy tracker.
+ * destination === null → Optimize and the route map are disabled. */
+export default function CarpoolBuilder({ eventId, destination, riders, drivers, needsRide, saved, pickupNames, funFactQuestions, funFactAnswers }: {
+  eventId: string; destination: Destination | null; riders: Record<string, Rider>;
+  drivers: { id: string; seats: number }[]; needsRide: string[]; saved: SavedCarpool | null;
+  pickupNames: Record<string, string>;
+  funFactQuestions: { id: string; label: string }[];
+  funFactAnswers: Record<string, { userId: string; text: string }[]>;
 }) {
-  const initialCars = useMemo<Car[]>(() => {
-    // Start from saved cars, but drop drivers who no longer RSVP'd as drivers and add new ones.
-    const byId = new Map((saved?.data.cars ?? []).map((c) => [c.driverId, c]));
-    return drivers.map((d) => byId.get(d.id) ?? { id: d.id, driverId: d.id, capacity: d.seats, passengerIds: [] })
-      .map((c) => ({ ...c, passengerIds: c.passengerIds.filter((p) => riders[p]) }));
-  }, [drivers, saved, riders]);
+  const matchText = useMemo<MatchText>(
+    () => Object.fromEntries(Object.values(riders).map((r) => [r.id, `${r.name} ${pickupNames[r.id] ?? ""}`])),
+    [riders, pickupNames],
+  );
+  const riderIdSet = useMemo(() => new Set(Object.keys(riders)), [riders]);
 
-  const [cars, setCars] = useState<Car[]>(initialCars);
-  const [mode, setMode] = useState<Mode>(saved?.data.mode ?? "pickup");
-  const [onlyNeedsRide, setOnlyNeedsRide] = useState(true);
+  const initial = useMemo<CarpoolDataV2>(() => {
+    const up = upgradeCarpoolData(saved?.data, matchText);
+    return {
+      ...up,
+      going: reconcileDirSet(up.going, drivers, riderIdSet, matchText, up.collegeKeywords, "g"),
+      back: reconcileDirSet(up.back, drivers, riderIdSet, matchText, up.collegeKeywords, "b"),
+    };
+  }, [saved, drivers, riderIdSet, matchText]);
+
+  const [data, setData] = useState<CarpoolDataV2>(initial);
   const [routes, setRoutes] = useState<Record<string, OsrmRoute | null>>({});
   const [msg, setMsg] = useState<string | null>(null);
-  const [sel, setSel] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const driverIds = useMemo(() => new Set(cars.map((c) => c.driverId)), [cars]);
-  const seated = useMemo(() => new Set(cars.flatMap((c) => c.passengerIds)), [cars]);
-  const pool = useMemo(() => Object.values(riders).filter((r) => !driverIds.has(r.id) && !seated.has(r.id) && (!onlyNeedsRide || needsRide.includes(r.id))), [riders, driverIds, seated, onlyNeedsRide, needsRide]);
+  const placedGoing = useMemo(() => placedSet(data.going), [data.going]);
+  const placedBack = useMemo(() => placedSet(data.back), [data.back]);
+  const driverIdSet = useMemo(() => new Set(drivers.map((d) => d.id)), [drivers]);
+  // TOTAL "DIY" column: people who RSVP'd but neither drive nor need a ride.
+  const selfIds = useMemo(
+    () => Object.keys(riders).filter((id) => !driverIdSet.has(id) && !needsRide.includes(id)),
+    [riders, driverIdSet, needsRide],
+  );
+  const grouped = useMemo(() => groupNeedsRide(needsRide, matchText, data.collegeKeywords), [needsRide, matchText, data.collegeKeywords]);
+  const disc = useMemo(() => discrepancies(needsRide, data.going, data.back), [needsRide, data.going, data.back]);
+  const options = useMemo(() => {
+    const all = Object.values(riders).map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name));
+    return { going: all.filter((o) => !placedGoing.has(o.id)), back: all.filter((o) => !placedBack.has(o.id)) };
+  }, [riders, placedGoing, placedBack]);
+
+  const setDir = (dir: DirKey, f: (d: CarpoolDataV2[DirKey]) => CarpoolDataV2[DirKey]) =>
+    setData((s) => ({ ...s, [dir]: f(s[dir]) }));
+
+  const h: GridHandlers = {
+    place: (dir, target, riderId) => setDir(dir, (d) => {
+      const r = placeInDirSet(d, target, riderId);
+      if (r.error === "full") setMsg("Car is full");
+      return r.dir;
+    }),
+    unseat: (dir, riderId) => setDir(dir, (d) => removeFromDirSet(d, riderId)),
+    drop: (dir, target, payload) => {
+      const [kind, id] = payload.split(":");
+      if (kind !== "rider" || !riders[id]) return;
+      h.place(dir, target, id);
+    },
+    setCap: (dir, carId, cap) => setDir(dir, (d) => mapCarsIn(d, (c) => (c.id === carId ? { ...c, capacity: Math.max(1, cap) } : c))),
+    toggleLock: (dir, carId) => setDir(dir, (d) => mapCarsIn(d, (c) => (c.id === carId ? { ...c, locked: !c.locked } : c))),
+  };
+  const unseatDrop = (payload: string) => {
+    const [kind, id, origin] = payload.split(":");
+    if (kind !== "rider" || (origin !== "going" && origin !== "back")) return;
+    h.unseat(origin as DirKey, id);
+  };
+  const placedNote = (id: string) => {
+    const g = placedGoing.has(id), b = placedBack.has(id);
+    return g || b ? ` · ${g ? "G" : ""}${b ? "B" : ""}` : "";
+  };
 
   const optimize = () => {
     if (!destination) return;
+    const cars = [...data.going.onCampus, ...data.going.offCampus];
     const eligible: Record<string, Rider> = {};
-    for (const r of pool) eligible[r.id] = r;
+    for (const id of needsRide) if (!placedGoing.has(id)) eligible[id] = riders[id];
     for (const c of cars) for (const p of c.passengerIds) eligible[p] = riders[p]; // keep manual placements
-    const res = assignCarpool(cars, eligible, destination, { mode });
-    setCars(res.cars);
+    const res = assignCarpool(cars, eligible, destination, { mode: "pickup" });
+    setDir("going", (d) => ({ ...splitByCampus(res.cars, matchText, data.collegeKeywords), diy: d.diy }));
     setMsg(res.unassigned.length ? `${res.unassigned.length} rider(s) unassigned (no address or cars full)` : "Assigned");
   };
 
-  // Fetch real road routes from public OSRM (demo server; fair-use — one request per car).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!destination) { setRoutes({}); return; }
-      const next: Record<string, OsrmRoute | null> = {};
-      for (const c of cars) {
-        const pts = carRoutePoints(c, riders, destination, mode);
-        if (pts.length < 2) { next[c.id] = null; continue; }
-        try { const r = await fetch(buildOsrmRouteUrl(pts)); next[c.id] = parseOsrmRoute(await r.json()); }
-        catch { next[c.id] = null; }
-      }
-      if (!cancelled) setRoutes(next);
-    })();
-    return () => { cancelled = true; };
-  }, [cars, mode, riders, destination]);
-
-  const clickPool = (rid: string) => setSel(sel === rid ? null : rid);
-  const clickCar = (carId: string) => {
-    if (!sel) return;
-    setCars((cs) => cs.map((c) => {
-      const without = { ...c, passengerIds: c.passengerIds.filter((p) => p !== sel) };
-      if (c.id !== carId) return without;
-      if (without.passengerIds.length >= c.capacity - 1) { setMsg("Car is full"); return without; }
-      return { ...without, passengerIds: [...without.passengerIds, sel] };
-    }));
-    setSel(null);
+  const copyGoingToBack = () => {
+    if (placedSet(data.back).size && !confirm("Overwrite the BACK section with a copy of GOING?")) return;
+    setData((s) => ({ ...s, back: mirrorDirSet(s.going) }));
+    setMsg("Copied Going → Back — edit Back freely, they're independent now");
   };
-  const unseat = (rid: string) => setCars((cs) => cs.map((c) => ({ ...c, passengerIds: c.passengerIds.filter((p) => p !== rid) })));
-  const toggleLock = (carId: string) => setCars((cs) => cs.map((c) => (c.id === carId ? { ...c, locked: !c.locked } : c)));
-  const setCap = (carId: string, cap: number) => setCars((cs) => cs.map((c) => (c.id === carId ? { ...c, capacity: Math.max(1, cap) } : c)));
 
   const save = (published: boolean) => start(async () => {
-    const r = await saveCarpool(eventId, { cars, mode }, published);
+    const r = await saveCarpool(eventId, data, published);
     setMsg("error" in r && r.error ? r.error : published ? "Saved & published to members" : "Saved draft");
   });
 
-  const mapCars = destination ? cars.map((c, i) => ({ id: c.id, color: COLORS[i % COLORS.length], points: carRoutePoints(c, riders, destination, mode), route: routes[c.id] ?? null, label: riders[c.driverId]?.name ?? "?" })) : [];
+  // OSRM routes for the GOING cars only — debounced, and only refetched for cars
+  // whose route points actually changed (public demo server; be gentle).
+  const routeCache = useRef(new Map<string, { key: string; route: OsrmRoute | null }>());
+  const goingCars = useMemo(() => [...data.going.onCampus, ...data.going.offCampus], [data.going]);
+  const routeSig = useMemo(() => {
+    if (!destination) return "";
+    return JSON.stringify(goingCars.map((c) => [c.id, carRoutePoints(c, riders, destination, "pickup").map(locationKey).join("|")]));
+  }, [goingCars, riders, destination]);
+  useEffect(() => {
+    if (!destination) return; // routes stays {} — destination never changes per page
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const next: Record<string, OsrmRoute | null> = {};
+      for (const c of goingCars) {
+        const pts = carRoutePoints(c, riders, destination, "pickup");
+        const key = pts.map(locationKey).join("|");
+        const cached = routeCache.current.get(c.id);
+        if (cached && cached.key === key) { next[c.id] = cached.route; continue; }
+        if (pts.length < 2) { next[c.id] = null; routeCache.current.set(c.id, { key, route: null }); continue; }
+        try {
+          const r = await fetch(buildOsrmRouteUrl(pts));
+          next[c.id] = parseOsrmRoute(await r.json());
+        } catch { next[c.id] = null; }
+        routeCache.current.set(c.id, { key, route: next[c.id] });
+        if (cancelled) return;
+      }
+      if (!cancelled) setRoutes(next);
+    }, 600);
+    return () => { cancelled = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeSig]);
+
+  const mapCars = destination
+    ? goingCars.map((c, i) => ({ id: c.id, color: COLORS[i % COLORS.length], points: carRoutePoints(c, riders, destination, "pickup"), route: routes[c.id] ?? null, label: riders[c.driverId]?.name ?? "?" }))
+    : [];
+
+  const dirSection = (dir: DirKey, label: string) => (
+    <section className="space-y-1">
+      <div className="px-2 py-1 text-sm font-semibold text-white" style={{ background: "#e80b0b" }}>{label}</div>
+      <CarGrid dir={dir} label="ON CAMPUS" cars={data[dir].onCampus} riders={riders} options={options[dir]} h={h} />
+      <CarGrid dir={dir} label="OFF CAMPUS" cars={data[dir].offCampus} riders={riders} options={options[dir]} h={h} />
+      <DiyRow dir={dir} dirSet={data[dir]} riders={riders} options={options[dir]} h={h} />
+    </section>
+  );
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-      <div className="space-y-3">
-        <div className="card flex flex-wrap gap-2 text-sm">
-          <select value={mode} onChange={(e) => setMode(e.target.value as Mode)} className="input w-auto py-1"><option value="pickup">Pickup → event</option><option value="dropoff">Event → dropoff</option></select>
-          <button type="button" onClick={optimize} disabled={!destination} title={destination ? undefined : "Needs the day’s location coordinates — assign manually below"} className="btn-primary py-1 disabled:cursor-not-allowed">Optimize</button>
-          <button type="button" onClick={() => save(false)} disabled={pending} className="btn-secondary py-1">Save</button>
-          <button type="button" onClick={() => save(true)} disabled={pending} className="btn-secondary py-1">Publish</button>
-          <label className="flex items-center gap-1 text-xs w-full"><input type="checkbox" checked={onlyNeedsRide} onChange={(e) => setOnlyNeedsRide(e.target.checked)} /> Only people who asked for a ride</label>
+    <div className="space-y-3">
+      <div className="card flex flex-wrap items-center gap-2 text-sm">
+        <button type="button" onClick={optimize} disabled={!destination} title={destination ? "Auto-assign the Going section" : "Needs the day's location coordinates"} className="btn-primary py-1 disabled:cursor-not-allowed">Optimize</button>
+        <button type="button" onClick={copyGoingToBack} className="btn-secondary py-1">Copy Going → Back</button>
+        <button type="button" onClick={() => save(false)} disabled={pending} className="btn-secondary py-1">Save</button>
+        <button type="button" onClick={() => save(true)} disabled={pending} className="btn-secondary py-1">Publish</button>
+        <label className="flex min-w-64 flex-1 items-center gap-1 text-xs">Campus keywords
+          <input value={data.collegeKeywords.join(", ")}
+            onChange={(e) => setData((s) => ({ ...s, collegeKeywords: e.target.value.split(",").map((k) => k.trim()).filter(Boolean) }))}
+            className="input flex-1 py-1 text-xs" title="Comma-separated; matched against name + pickup spot" />
+        </label>
+        {msg && <span className="w-full text-xs" style={{ color: "var(--g-grey-600)" }}>{msg}</span>}
+      </div>
+      {!destination && <p className="card !p-3 text-xs text-amber-700">This day has no location coordinates, so Optimize and the route map are off — you can still build the sheet by hand.</p>}
+
+      <input value={data.header} onChange={(e) => setData((s) => ({ ...s, header: e.target.value }))}
+        className="w-full px-3 py-2 text-center text-lg font-semibold text-white outline-none" style={{ background: "#2f2f2f" }} />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-4">
+          {dirSection("going", "GOING ➡️")}
+          {dirSection("back", "BACK ⬅️")}
         </div>
-        {!destination && <p className="card !p-3 text-xs text-amber-700">This day has no location coordinates, so Optimize and the route map are off — you can still build cars by hand (click a person, then a car). Add the location via the day’s ✎ on the event overview to enable routing.</p>}
-        {msg && <p className="text-sm text-slate-600">{msg}</p>}
-        <div className="card">
-          <h3 className="text-sm font-semibold mb-1">Needs a seat ({pool.length})</h3>
-          <p className="text-[11px] text-slate-500 mb-2">Click a person, then a car.</p>
-          <ul className="text-sm divide-y divide-slate-100 max-h-60 overflow-y-auto">
-            {pool.map((r) => (
-              <li key={r.id}><button type="button" onClick={() => clickPool(r.id)} className={`w-full text-left px-1 py-1 rounded flex justify-between ${sel === r.id ? "bg-sky-100" : "hover:bg-slate-50"}`}>
-                <span>{r.name}</span>{!r.location && <span className="text-xs text-amber-600">no address</span>}</button></li>
-            ))}
-            {!pool.length && <li className="text-xs text-slate-400 py-1">Everyone is placed.</li>}
-          </ul>
-        </div>
-        <div className="space-y-2">
-          {cars.map((c, i) => {
-            const rt = routes[c.id];
-            return (
-              <div key={c.id} onClick={() => clickCar(c.id)} className={`card p-3 text-sm cursor-pointer ${sel ? "hover:border-sky-400" : ""}`} style={{ borderLeft: `4px solid ${COLORS[i % COLORS.length]}` }}>
-                <div className="flex justify-between items-center gap-2">
-                  <div className="font-medium"><Icon name="car" /> {riders[c.driverId]?.name}{!riders[c.driverId]?.location && <span className="text-xs text-amber-600 ml-1">(no address)</span>}</div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <label onClick={(e) => e.stopPropagation()}>cap <input type="number" min={1} max={15} value={c.capacity} onChange={(e) => setCap(c.id, Number(e.target.value))} className="input w-14 py-0.5 inline" /></label>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); toggleLock(c.id); }} title="Lock: optimizer won't change this car">{c.locked ? "🔒" : "🔓"}</button>
-                  </div>
-                </div>
-                <div className="text-xs text-slate-500">{c.passengerIds.length}/{c.capacity - 1} seats{rt && ` · ${Math.round(rt.durationMin)} min · ${(rt.distanceKm * 0.621371).toFixed(1)} mi`}</div>
-                <ol className="mt-1 text-xs list-decimal ml-4">
-                  {c.passengerIds.map((p) => (
-                    <li key={p} className="flex justify-between"><span>{riders[p]?.name ?? "?"}</span>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); unseat(p); }} className="text-slate-400 hover:text-red-600">✕</button></li>
-                  ))}
-                </ol>
-              </div>
-            );
-          })}
-          {!cars.length && <p className="card text-sm text-slate-500">No drivers yet — drivers come from RSVPs marked &quot;I can drive others&quot;.</p>}
+        <div className="space-y-3">
+          <TotalPanel riders={riders} drivers={drivers} grouped={grouped} selfIds={selfIds} placedNote={placedNote} onUnseatDrop={unseatDrop} />
+          <FunFactPanel questions={funFactQuestions} answers={funFactAnswers} questionId={data.funFactQuestionId}
+            onPickQuestion={(id) => setData((s) => ({ ...s, funFactQuestionId: id }))} riders={riders} />
+          <DiscrepancyTracker rows={disc} riders={riders} />
         </div>
       </div>
-      {destination ? (
-        <div className="card p-0 overflow-hidden min-h-[520px]">
+
+      {destination && (
+        <div className="card min-h-[420px] overflow-hidden p-0">
+          <div className="px-3 py-1 text-xs" style={{ color: "var(--g-grey-600)" }}>Map shows GOING routes.</div>
           <RouteMap destination={destination} cars={mapCars} />
-        </div>
-      ) : (
-        <div className="card flex min-h-[520px] items-center justify-center text-sm" style={{ color: "var(--g-grey-600)" }}>
-          <span>No map — this day has no location coordinates.</span>
         </div>
       )}
     </div>
   );
+}
+
+function placedSet(d: CarpoolDataV2["going"]): Set<string> {
+  return new Set([...[...d.onCampus, ...d.offCampus].flatMap((c) => c.passengerIds), ...d.diy]);
+}
+
+function mapCarsIn(d: CarpoolDataV2["going"], f: (c: CarpoolDataV2["going"]["onCampus"][number]) => CarpoolDataV2["going"]["onCampus"][number]) {
+  return { ...d, onCampus: d.onCampus.map(f), offCampus: d.offCampus.map(f) };
 }

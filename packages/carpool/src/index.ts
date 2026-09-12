@@ -6,7 +6,23 @@ export type {
   Mode,
   AssignOptions,
   AssignResult,
+  DirSet,
+  CarpoolDataV2,
+  LegacyCarpoolData,
 } from './types'
+export { DEFAULT_CARPOOL_HEADER, DEFAULT_COLLEGE_KEYWORDS } from './types'
+export {
+  matchKeyword,
+  splitByCampus,
+  upgradeCarpoolData,
+  reconcileDirSet,
+  placeInDirSet,
+  removeFromDirSet,
+  mirrorDirSet,
+  groupNeedsRide,
+  discrepancies,
+} from './sheet'
+export type { MatchText, PlaceTarget } from './sheet'
 export { haversineKm, locationKey } from './geo'
 export { assignCarpool, orderStops } from './assign'
 export {

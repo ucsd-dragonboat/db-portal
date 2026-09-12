@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import LocalTime from "@/components/local-time";
 import RsvpForm from "./rsvp-form";
 import type { Rsvp } from "@/lib/database.types";
-import type { Car } from "@db/carpool";
+import { upgradeCarpoolData } from "@db/carpool";
+import CarpoolSheetView from "@/components/carpool-sheet-view";
 import RaceDayView from "@/components/race-day-view";
 import RichText from "@/components/rich-text";
 import ConfirmForm from "@/components/confirm-form";
@@ -30,7 +31,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
     : { data: [] };
   const names: Record<string, string> = {};
   for (const t of teammates ?? []) names[t.id] = t.full_name || t.email;
-  const cars = ((carpool?.data as { cars?: Car[] } | null)?.cars ?? []);
+  const sheet = carpool ? upgradeCarpoolData(carpool.data, names) : null;
   const list = (rsvps ?? []) as (Rsvp & { profile: { full_name: string } | null })[];
   const mine = list.find((r) => r.user_id === userId) ?? null;
   const by = (s: Rsvp["status"]) => list.filter((r) => r.status === s);
@@ -58,18 +59,10 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
             <RaceDayView lineups={lineups} names={names} />
           </div>
         )}
-        {carpool && (
+        {sheet && (
           <div className="mt-6">
             <h2 className="font-semibold mb-2">Carpool</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {cars.map((c) => (
-                <div key={c.id} className="card text-sm">
-                  <div className="font-medium"><Icon name="car" /> {names[c.driverId] ?? "?"}</div>
-                  <ol className="ml-4 list-decimal text-xs mt-1">{c.passengerIds.map((p) => <li key={p}>{names[p] ?? "?"}</li>)}</ol>
-                  {!c.passengerIds.length && <div className="text-xs text-slate-400">no passengers</div>}
-                </div>
-              ))}
-            </div>
+            <CarpoolSheetView data={sheet} names={names} />
           </div>
         )}
         <div className="mt-6">

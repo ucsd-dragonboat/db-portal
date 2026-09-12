@@ -11,7 +11,8 @@ import ConfirmForm from "@/components/confirm-form";
 import EditDay from "@/components/edit-day";
 import Icon from "@/components/icon";
 import { createFormForGroup } from "@/app/(app)/admin/forms/actions";
-import type { Car } from "@db/carpool";
+import { upgradeCarpoolData } from "@db/carpool";
+import CarpoolSheetView from "@/components/carpool-sheet-view";
 import type { Rsvp } from "@/lib/database.types";
 
 /** One screen for a whole event group (e.g. a practice week): every day's attendance, lineups and rides. */
@@ -96,7 +97,7 @@ export default async function GroupOverviewPage({ params }: { params: Promise<{ 
           const seats = drivers.reduce((a, r) => a + (r.seats ?? 0), 0);
           const evLineups = (lineups ?? []).filter((l) => l.event_id === ev.id && (isAdmin || l.published));
           const cp = (carpools ?? []).find((c) => c.event_id === ev.id && (isAdmin || c.published));
-          const cars = ((cp?.data as { cars?: Car[] } | null)?.cars ?? []);
+          const sheet = cp ? upgradeCarpoolData(cp.data, names) : null;
           return (
             <section key={ev.id} className="card space-y-3 !p-4">
               <header className="relative">
@@ -141,14 +142,7 @@ export default async function GroupOverviewPage({ params }: { params: Promise<{ 
                 <div className="flex items-center justify-between text-sm font-medium"><span><Icon name="car" /> Rides</span>{isAdmin && <Link href={`/admin/carpool?event=${ev.id}`} className="btn-text -mr-3">Edit</Link>}</div>
                 {!cp && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>{isAdmin ? "Not set up yet." : "Not published yet."}</p>}
                 {cp && isAdmin && !cp.published && <span className="chip !py-0 text-[10px]">draft</span>}
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {cars.map((c) => (
-                    <div key={c.id} className="rounded border p-2 text-xs" style={{ borderColor: "var(--g-grey-300)" }}>
-                      <div className="font-medium"><Icon name="car" /> {names[c.driverId] ?? "?"} <span style={{ color: "var(--g-grey-600)" }}>({c.passengerIds.length}/{c.capacity - 1})</span></div>
-                      <ol className="ml-4 list-decimal">{c.passengerIds.map((p) => <li key={p}>{names[p] ?? "?"}</li>)}</ol>
-                    </div>
-                  ))}
-                </div>
+                {sheet && <CarpoolSheetView data={sheet} names={names} />}
               </div>
             </section>
           );
