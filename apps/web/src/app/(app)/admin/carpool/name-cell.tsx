@@ -34,13 +34,15 @@ export default function NameCell({ value, options, onPick, onClear, dragPayload,
     onDrop: (e: React.DragEvent) => { e.preventDefault(); setOver(false); onDropRider(e.dataTransfer.getData("text/plain")); },
   } : {};
 
-  const base = `flex h-7 items-center border-b px-1 text-sm ${over ? "ring-2 ring-inset ring-sky-400" : ""} ${className}`;
+  // Spreadsheet-cell look: 22px rows, 13px text, light gridlines like the template.
+  const base = `flex h-[22px] items-center px-1 text-[13px] ${over ? "ring-2 ring-inset ring-sky-400" : ""} ${className}`;
+  const border = { borderRight: "1px solid #e0e0e0", borderBottom: "1px solid #e0e0e0" };
 
-  if (disabled) return <div className={`${base} bg-slate-100`} style={{ borderColor: "var(--g-grey-300)" }} />;
+  if (disabled) return <div className={base} style={{ background: "#f3f3f3", ...border }} />;
 
   if (value) {
     return (
-      <div {...dropProps} className={`${base} justify-between gap-1 bg-white`} style={{ borderColor: "var(--g-grey-300)" }}>
+      <div {...dropProps} className={`${base} justify-between gap-1 bg-white`} style={border}>
         <span draggable={!!dragPayload} onDragStart={(e) => dragPayload && e.dataTransfer.setData("text/plain", dragPayload)}
           className={`min-w-0 flex-1 truncate ${dragPayload ? "cursor-grab" : ""}`}>{value.name}</span>
         {onClear && <button type="button" onClick={onClear} tabIndex={-1} aria-label={`Remove ${value.name}`} className="shrink-0 text-slate-300 hover:text-red-600">✕</button>}
@@ -49,7 +51,7 @@ export default function NameCell({ value, options, onPick, onClear, dragPayload,
   }
 
   return (
-    <div {...dropProps} className={`relative ${base} bg-white`} style={{ borderColor: "var(--g-grey-300)" }}>
+    <div {...dropProps} className={`relative ${base} bg-white`} style={border}>
       <input
         ref={inputRef}
         value={q}
@@ -67,10 +69,10 @@ export default function NameCell({ value, options, onPick, onClear, dragPayload,
           else { setQ(""); setOpen(false); }
         }}
         placeholder=""
-        className="w-full min-w-0 bg-transparent text-sm outline-none"
+        className="w-full min-w-0 bg-transparent text-[13px] outline-none"
       />
       {open && matches.length > 0 && (
-        <ul className="absolute left-0 top-full z-30 max-h-52 w-52 overflow-y-auto rounded-b border bg-white text-sm shadow-lg" style={{ borderColor: "var(--g-grey-300)" }}>
+        <ul className="absolute left-0 top-full z-30 max-h-52 w-52 overflow-y-auto border bg-white text-[13px] shadow-lg" style={{ borderColor: "#e0e0e0" }}>
           {matches.map((o, i) => (
             <li key={o.id}>
               <button type="button" onMouseDown={(e) => { e.preventDefault(); accept(o); }}

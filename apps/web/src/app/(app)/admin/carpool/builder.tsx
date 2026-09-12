@@ -9,7 +9,7 @@ import {
   type CarpoolDataV2, type Destination, type MatchText, type OsrmRoute, type Rider,
 } from "@db/carpool";
 import { saveCarpool } from "./actions";
-import { CarGrid, DiyRow, type DirKey, type GridHandlers } from "./car-grid";
+import { CarGrid, DiyRow, SHEET, type DirKey, type GridHandlers } from "./car-grid";
 import { DiscrepancyTracker, FunFactPanel, TotalPanel } from "./side-panels";
 
 const RouteMap = dynamic(() => import("@/components/route-map"), { ssr: false });
@@ -149,9 +149,8 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
     : [];
 
   const dirSection = (dir: DirKey, label: string) => (
-    <section className="space-y-1">
-      <div className="px-2 py-1 text-sm font-semibold text-white" style={{ background: "#e80b0b" }}>{label}</div>
-      <CarGrid dir={dir} label="ON CAMPUS" cars={data[dir].onCampus} riders={riders} options={options[dir]} h={h} />
+    <section>
+      <CarGrid dir={dir} label="ON CAMPUS" directionLabel={label} cars={data[dir].onCampus} riders={riders} options={options[dir]} h={h} />
       <CarGrid dir={dir} label="OFF CAMPUS" cars={data[dir].offCampus} riders={riders} options={options[dir]} h={h} />
       <DiyRow dir={dir} dirSet={data[dir]} riders={riders} options={options[dir]} h={h} />
     </section>
@@ -173,28 +172,42 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
       </div>
       {!destination && <p className="card !p-3 text-xs text-amber-700">This day has no location coordinates, so Optimize and the route map are off — you can still build the sheet by hand.</p>}
 
-      <input value={data.header} onChange={(e) => setData((s) => ({ ...s, header: e.target.value }))}
-        className="w-full px-3 py-2 text-center text-lg font-semibold text-white outline-none" style={{ background: "#2f2f2f" }} />
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-4">
-          {dirSection("going", "GOING ➡️")}
-          {dirSection("back", "BACK ⬅️")}
-        </div>
-        <div className="space-y-3">
-          <TotalPanel riders={riders} drivers={drivers} grouped={grouped} selfIds={selfIds} placedNote={placedNote} onUnseatDrop={unseatDrop} />
+      {/* The sheet — laid out like the Google Sheets template, horizontally scrollable. */}
+      <div className="-mx-4 overflow-x-auto px-4 pb-2 md:-mx-6 md:px-6" style={{ background: "#fff" }}>
+        <div className="flex w-max items-start">
+          {/* banner + grids + TOTAL (the banner spans both, like rows 1-2 of the sheet) */}
+          <div>
+            <input value={data.header} onChange={(e) => setData((s) => ({ ...s, header: e.target.value }))}
+              className="w-full px-3 py-1.5 text-center text-[18px] font-medium text-white outline-none" style={{ background: SHEET.banner }} />
+            <div className="flex items-stretch">
+              <div className="min-w-[420px]">
+                {dirSection("going", "GOING ➡️")}
+                <div className="h-[22px]" />
+                {dirSection("back", "BACK ⬅️")}
+                <div className="mt-[22px] flex h-[44px] w-full items-center justify-center px-3 text-center text-[14px] font-medium text-white" style={{ background: SHEET.warn }}>
+                  IF YOU SEE AN ERROR (&quot;I only have a ride there!&quot;) DM BLUM IMMEDIATELY
+                </div>
+                <div className="mt-[22px]">
+                  <DiscrepancyTracker rows={disc} riders={riders} />
+                </div>
+              </div>
+              <div className="w-[14px] shrink-0 self-stretch" style={{ background: SHEET.sep }} />
+              <TotalPanel riders={riders} drivers={drivers} grouped={grouped} selfIds={selfIds} placedNote={placedNote} onUnseatDrop={unseatDrop} />
+            </div>
+          </div>
+          <div className="w-[14px] shrink-0 self-stretch" style={{ background: SHEET.sep }} />
           <FunFactPanel questions={funFactQuestions} answers={funFactAnswers} questionId={data.funFactQuestionId}
             onPickQuestion={(id) => setData((s) => ({ ...s, funFactQuestionId: id }))} riders={riders} />
-          <DiscrepancyTracker rows={disc} riders={riders} />
+          {destination && (
+            <div className="ml-3 w-[520px] shrink-0">
+              <div className="px-1 py-0.5 text-[11px]" style={{ color: "var(--g-grey-600)" }}>Map shows GOING routes.</div>
+              <div className="h-[520px] overflow-hidden border" style={{ borderColor: "#e0e0e0" }}>
+                <RouteMap destination={destination} cars={mapCars} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {destination && (
-        <div className="card min-h-[420px] overflow-hidden p-0">
-          <div className="px-3 py-1 text-xs" style={{ color: "var(--g-grey-600)" }}>Map shows GOING routes.</div>
-          <RouteMap destination={destination} cars={mapCars} />
-        </div>
-      )}
     </div>
   );
 }
