@@ -8,7 +8,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export type EmailLookup = {
   userId: string | null;
-  /** Account has set a password — must sign in with it. */
+  /** Must sign in with a password: the account has one AND is an admin somewhere.
+   * Passwords protect admin access; a member who picked one up (e.g. via the reset
+   * page) keeps 1-click email sign-in like everyone else. */
   hasPassword: boolean;
   /** Name from an admin's roster (pending_members), if the email is on one. */
   pendingName: string;
@@ -30,8 +32,11 @@ export async function lookupEmail(email: string): Promise<EmailLookup> {
   // Exact match on the normalized email — ilike would treat % and _ in user input as wildcards.
   const { data: profile } = await admin.from("profiles").select("id").eq("email", email).maybeSingle();
   if (profile) {
-    const { data: hasPassword } = await admin.rpc("user_has_password", { uid: profile.id });
-    return { userId: profile.id, hasPassword: !!hasPassword, pendingName: "" };
+    const [{ data: hasPassword }, { data: adminRow }] = await Promise.all([
+      admin.rpc("user_has_password", { uid: profile.id }),
+      admin.from("memberships").select("user_id").eq("user_id", profile.id).eq("role", "admin").limit(1).maybeSingle(),
+    ]);
+    return { userId: profile.id, hasPassword: !!hasPassword && !!adminRow, pendingName: "" };
   }
   const { data: pending } = await admin.from("pending_members").select("full_name").eq("email", email).limit(1).maybeSingle();
   return { userId: null, hasPassword: false, pendingName: pending?.full_name?.trim() ?? "" };
