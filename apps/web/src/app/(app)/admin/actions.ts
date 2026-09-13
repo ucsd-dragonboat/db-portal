@@ -341,6 +341,19 @@ export async function updateMember(fd: FormData) {
   revalidatePath("/admin/members");
 }
 
+/** Members page checkbox: cap the roster (join code stops admitting new people at the cap). */
+export async function setMemberCap(_: AdminState, fd: FormData): Promise<AdminState> {
+  const { org } = await requireAdmin();
+  const supabase = await createClient();
+  const enabled = fd.get("enabled") === "on";
+  const cap = enabled ? Math.floor(Number(fd.get("cap"))) : null;
+  if (enabled && (!Number.isFinite(cap) || cap! < 1)) return { error: "Cap must be at least 1" };
+  const { error } = await supabase.from("organizations").update({ member_cap: cap }).eq("id", org.id);
+  if (error) return { error: error.message.includes("member_cap") ? "Run migration 0024_member_cap.sql first" : error.message };
+  revalidatePath("/admin/members");
+  return { ok: true };
+}
+
 export async function removePending(fd: FormData) {
   const { org } = await requireAdmin();
   const supabase = await createClient();

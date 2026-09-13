@@ -45,6 +45,7 @@ export type Organization = {
   id: string;
   name: string;
   join_code: string;
+  member_cap: number | null;
   created_by: string | null;
   created_at: string;
 };
