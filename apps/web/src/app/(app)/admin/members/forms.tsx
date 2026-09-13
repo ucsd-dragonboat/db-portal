@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import Icon from "@/components/icon";
-import { addMember, importMembers, updateMember, type AdminState } from "../actions";
+import { addMember, importMembers, setMemberCap, updateMember, type AdminState } from "../actions";
 import type { Profile } from "@/lib/database.types";
 
 const FIELDS: { name: keyof Profile; label: string; type?: string; w?: string }[] = [
@@ -34,6 +34,24 @@ function AddInner({ onDone }: { onDone: () => void }) {
       {state.error && <p style={{ color: "var(--g-red)" }}>{state.error}</p>}
       <button disabled={pending} className="btn-primary">{pending ? "Adding…" : "Add member"}</button>
       <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>If this email already has an account they join instantly; otherwise they’re auto-joined (with these details) the moment they sign up.</p>
+    </form>
+  );
+}
+
+export function MemberCapForm({ cap, count }: { cap: number | null; count: number }) {
+  const [state, action, pending] = useActionState<AdminState, FormData>(setMemberCap, {});
+  const [enabled, setEnabled] = useState(cap != null);
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2 text-sm">
+      <label className="flex items-center gap-1.5">
+        <input type="checkbox" name="enabled" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        Cap team size
+      </label>
+      {enabled && <input name="cap" type="number" min={1} defaultValue={cap ?? Math.max(count, 1)} className="input w-20 py-0.5" />}
+      <button disabled={pending} className="btn-text py-0.5 text-xs">{pending ? "Saving…" : "Save"}</button>
+      {enabled && <span className="text-xs" style={{ color: "var(--g-grey-600)" }}>Join code stops working at the cap; members you add here aren’t blocked.</span>}
+      {state.error && <span className="text-xs" style={{ color: "var(--g-red)" }}>{state.error}</span>}
+      {state.ok && <span className="text-xs" style={{ color: "var(--g-green)" }}>Saved</span>}
     </form>
   );
 }

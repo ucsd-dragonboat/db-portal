@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { removeMember, removePending, setMemberRole } from "../actions";
 import ConfirmForm from "@/components/confirm-form";
 import type { Membership, PendingMember, Profile } from "@/lib/database.types";
-import { AddMemberForm, ImportMembersForm, MemberRow } from "./forms";
+import { AddMemberForm, ImportMembersForm, MemberCapForm, MemberRow } from "./forms";
 
 export default async function AdminMembersPage() {
   const { org, userId } = await requireAdmin();
@@ -22,6 +22,7 @@ export default async function AdminMembersPage() {
       <div>
         <h1 className="text-2xl font-normal">Members <span style={{ color: "var(--g-grey-600)" }} className="font-normal">({members.length}{pend.length ? ` + ${pend.length} pending` : ""})</span></h1>
         <p className="text-sm" style={{ color: "var(--g-grey-600)" }}>Join code <span className="font-mono">{org.join_code}</span> — or add people below; they’re linked automatically when they sign up with that email.</p>
+        <MemberCapForm cap={org.member_cap ?? null} count={members.length} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
