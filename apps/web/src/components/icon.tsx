@@ -1,6 +1,6 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faArrowDown, faArrowUp, faBars, faCakeCandles, faCalendarCheck, faCalendarDays, faCar, faChair, faCheck, faChevronLeft, faChevronRight,
+  faArrowDown, faArrowUp, faBars, faCakeCandles, faCalendarCheck, faCalendarDays, faCar, faChair, faChartColumn, faCheck, faChevronLeft, faChevronRight,
   faCircleCheck, faCircleExclamation, faCircleQuestion, faCircleXmark, faClipboardList, faClone, faCrown,
   faEllipsisVertical,
   faBullhorn, faDragon, faEye, faFileLines, faFlagCheckered, faFolder, faGear, faHand, faHouse, faLink, faLocationDot,
@@ -16,6 +16,7 @@ export const ICONS = {
   calendar: faCalendarDays,   // 🗓 calendar page
   calendarCheck: faCalendarCheck, // 🗓✓ events (RSVP day cards)
   car: faCar,                 // 🚗 rides
+  chart: faChartColumn,       // 📊 statistics
   check: faCheck,             // ✓
   chevron: faChevronRight,
   left: faChevronLeft,        // ‹

@@ -10,6 +10,7 @@ const memberNav: NavItem[] = [
   { href: "/forms", label: "Forms", icon: "form", color: "var(--g-purple)" },
   { href: "/events", label: "Events", icon: "calendarCheck", color: "var(--g-green)" },
   { href: "/calendar", label: "Calendar", icon: "calendar", color: "var(--g-blue)" },
+  { href: "/statistics", label: "Statistics", icon: "chart", color: "#009688" },
   { href: "/profile", label: "My profile", icon: "user", color: "var(--g-grey-600)" },
 ];
 const adminNav: NavItem[] = [

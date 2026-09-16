@@ -22,8 +22,21 @@ export type Profile = {
   lat: number | null;
   lon: number | null;
   car_passengers: number;
+  attendance_adjustment: number;
   created_at: string;
   updated_at: string;
+};
+
+export type CarpoolTrip = {
+  id: string;
+  org_id: string;
+  event_id: string;
+  direction: "going" | "back";
+  driver_id: string;
+  passenger_ids: string[];
+  distance_km: number;
+  duration_min: number;
+  created_at: string;
 };
 
 export type PendingMember = {
@@ -245,7 +258,7 @@ export type Database = {
     Tables: {
       profiles: {
         Row: Row<Profile>;
-        Insert: Insert<Profile, "phone" | "weight_lb" | "gender" | "side_preference" | "can_steer" | "can_drum" | "address" | "city" | "zipcode" | "lat" | "lon" | "car_passengers" | "created_at" | "updated_at" | "full_name">;
+        Insert: Insert<Profile, "phone" | "weight_lb" | "gender" | "side_preference" | "can_steer" | "can_drum" | "address" | "city" | "zipcode" | "lat" | "lon" | "car_passengers" | "attendance_adjustment" | "created_at" | "updated_at" | "full_name">;
         Update: Partial<Profile>;
         Relationships: [];
       };
@@ -402,6 +415,16 @@ export type Database = {
         Relationships: [
           { foreignKeyName: "carpools_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
           { foreignKeyName: "carpools_event_id_fkey"; columns: ["event_id"]; isOneToOne: false; referencedRelation: "events"; referencedColumns: ["id"] },
+        ];
+      };
+      carpool_trips: {
+        Row: Row<CarpoolTrip>;
+        Insert: Insert<CarpoolTrip, "id" | "created_at">;
+        Update: Partial<CarpoolTrip>;
+        Relationships: [
+          { foreignKeyName: "carpool_trips_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
+          { foreignKeyName: "carpool_trips_event_id_fkey"; columns: ["event_id"]; isOneToOne: false; referencedRelation: "events"; referencedColumns: ["id"] },
+          { foreignKeyName: "carpool_trips_driver_id_fkey"; columns: ["driver_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ];
       };
     };
