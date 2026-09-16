@@ -6,6 +6,7 @@
 create table public.notification_prefs (
   user_id                 uuid not null references public.profiles(id) on delete cascade,
   org_id                  uuid not null references public.organizations(id) on delete cascade,
+  notify_email            text, -- optional override; null = send to the account's own email
   event_posted            boolean not null default false,
   deadline_reminder       boolean not null default false,
   event_signup            boolean not null default false, -- admin-only in the UI

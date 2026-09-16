@@ -15,13 +15,18 @@ const ADMIN_FIELDS: Field[] = [
   { name: "carpool_auto_generated", label: "The auto-carpool job finishes for an event" },
 ];
 
-export default function NotificationPrefsForm({ prefs, isAdmin }: { prefs: NotificationPrefs | null; isAdmin: boolean }) {
+export default function NotificationPrefsForm({ prefs, isAdmin, accountEmail }: { prefs: NotificationPrefs | null; isAdmin: boolean; accountEmail: string }) {
   const [state, action, pending] = useActionState<NotifState, FormData>(setNotificationPrefs, {});
   const checked = (name: keyof NotificationPrefs) => (prefs ? Boolean(prefs[name]) : false);
   const fields = isAdmin ? [...MEMBER_FIELDS, ...ADMIN_FIELDS] : MEMBER_FIELDS;
   return (
     <form action={action} className="card max-w-lg space-y-3 text-sm">
       <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>All off by default. Turn on the ones you want.</p>
+      <label className="block">
+        <span className="label">Send these to a different email (optional)</span>
+        <input name="notify_email" type="email" placeholder={accountEmail} defaultValue={prefs?.notify_email ?? ""} className="input" />
+        <span className="mt-1 block text-xs" style={{ color: "var(--g-grey-600)" }}>Leave blank to use your account email ({accountEmail}).</span>
+      </label>
       {fields.map((f) => (
         <label key={f.name} className="flex items-center gap-2">
           <input type="checkbox" name={f.name} defaultChecked={checked(f.name)} />

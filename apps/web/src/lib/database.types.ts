@@ -166,6 +166,7 @@ export type Event = {
 export type NotificationPrefs = {
   user_id: string;
   org_id: string;
+  notify_email: string | null; // optional override; null = send to the account's own email
   event_posted: boolean;
   deadline_reminder: boolean;
   event_signup: boolean;
@@ -443,7 +444,7 @@ export type Database = {
       };
       notification_prefs: {
         Row: Row<NotificationPrefs>;
-        Insert: Insert<NotificationPrefs, "event_posted" | "deadline_reminder" | "event_signup" | "form_submitted" | "carpool_auto_generated" | "updated_at">;
+        Insert: Insert<NotificationPrefs, "notify_email" | "event_posted" | "deadline_reminder" | "event_signup" | "form_submitted" | "carpool_auto_generated" | "updated_at">;
         Update: Partial<NotificationPrefs>;
         Relationships: [
           { foreignKeyName: "notification_prefs_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },

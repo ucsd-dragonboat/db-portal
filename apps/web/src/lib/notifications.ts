@@ -24,11 +24,12 @@ async function recipients(
     adminIds = new Set((data ?? []).map((m) => m.user_id));
     if (adminIds.size === 0) return [];
   }
-  const { data } = await admin.from("notification_prefs").select("user_id, profile:profiles(email, full_name)")
+  const { data } = await admin.from("notification_prefs").select("user_id, notify_email, profile:profiles(email, full_name)")
     .eq("org_id", orgId).eq(category as keyof NotificationPrefs, true);
-  return ((data ?? []) as unknown as { user_id: string; profile: Profile | null }[])
+  return ((data ?? []) as unknown as { user_id: string; notify_email: string | null; profile: Profile | null }[])
     .filter((r) => r.profile && r.user_id !== opts.excludeUserId && (!adminIds || adminIds.has(r.user_id)))
-    .map((r) => ({ email: r.profile!.email, name: r.profile!.full_name || r.profile!.email }));
+    // notify_email lets someone route these to an address other than their account's own.
+    .map((r) => ({ email: r.notify_email || r.profile!.email, name: r.profile!.full_name || r.profile!.email }));
 }
 
 /** New event(s) posted — everyone opted in, except the admin who posted them. */
