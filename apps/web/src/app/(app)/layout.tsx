@@ -1,9 +1,9 @@
 import { getSession } from "@/lib/session";
-import { signOut } from "@/app/(auth)/actions";
 import NavRail from "@/components/nav-rail";
 import Icon from "@/components/icon";
 import HeaderSearch from "@/components/header-search";
 import NewEventButton from "@/components/new-event-button";
+import UserMenu from "@/components/user-menu";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { profile, membership, isAdmin } = await getSession();
@@ -22,9 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="flex-1 sm:hidden" />
         {isAdmin && <NewEventButton />}
         <div className="hidden sm:block text-sm" style={{ color: "var(--g-grey-600)" }}>{profile.email}{isAdmin && " · admin"}</div>
-        <form action={signOut} title="Sign out">
-          <button className="flex h-9 w-9 items-center justify-center rounded-full text-white font-medium" style={{ background: "var(--g-blue)" }} aria-label="Sign out">{initial}</button>
-        </form>
+        <UserMenu initial={initial} />
       </header>
       <div className="flex flex-1">
         {membership && <NavRail isAdmin={isAdmin} />}

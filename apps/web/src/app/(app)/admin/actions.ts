@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cleanHtml } from "@/lib/html";
 import { disconnectGoogle } from "@/lib/google-sheets";
 import { createTeamCalendar, disconnectTeamCalendar, removeEventFromGoogle, syncEventToGoogle } from "@/lib/google-calendar";
+import { notifyEventPosted } from "@/lib/notifications";
 
 export type AdminState = { error?: string; ok?: boolean };
 
@@ -152,6 +153,7 @@ export async function createEventsBatch(input: {
   }))).select("id, starts_at");
   if (error) return { error: error.message };
   after(async () => { for (const d of data ?? []) await syncEventToGoogle(d.id); }); // mirror to the team Google Calendar
+  after(() => notifyEventPosted(org.id, (data ?? []).map((d) => d.id), userId));
   revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
   const order = new Map(input.items.map((it, i) => [it.starts_at, i]));
   revalidatePath("/groups", "layout");

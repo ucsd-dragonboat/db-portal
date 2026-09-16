@@ -3,6 +3,7 @@ import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { syncFormToSheet } from "@/lib/sheet-sync";
 import { parseAttendance } from "@/lib/attendance";
+import { notifyFormSubmitted } from "@/lib/notifications";
 import type { Database, FormQuestion, Json } from "@/lib/database.types";
 import { cleanHtml, htmlToText } from "@/lib/html";
 
@@ -56,6 +57,7 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
 
   // Mirror to the linked Google Sheet after the response is sent — never blocks the submitter.
   if (form.sheet_spreadsheet_id) after(() => syncFormToSheet(formId));
+  after(() => notifyFormSubmitted(form.org_id, formId, userId, form.title));
 
   revalidatePath(`/forms/${formId}`); revalidatePath("/forms"); revalidatePath("/events"); revalidatePath("/dashboard");
   return { saved: true };
