@@ -99,6 +99,22 @@ export async function deleteForm(fd: FormData) {
   redirect("/admin/forms");
 }
 
+/** Save a copy of a form's questions (and weight toggle) as a new template, via the ⋮ menu.
+ * "day" markers are stripped — they point at this form's specific event days, which a
+ * template (not linked to any events) can't meaningfully carry. */
+export async function saveAsTemplate(fd: FormData) {
+  const { org, userId } = await requireAdmin();
+  const supabase = await createClient();
+  const { data: src } = await supabase.from("forms").select("*").eq("id", String(fd.get("id"))).eq("org_id", org.id).single();
+  if (!src) return;
+  const questions = ((src.questions as unknown as FormQuestion[]) ?? []).filter((q) => q.type !== "day");
+  const { data: tpl } = await supabase.from("forms").insert({
+    org_id: org.id, created_by: userId, title: `${src.title} (template)`, description: src.description,
+    questions: questions as unknown as Json, ask_weight: src.ask_weight, status: "template",
+  }).select("id").single();
+  if (tpl) redirect(`/admin/forms/${tpl.id}`);
+}
+
 export async function duplicateForm(fd: FormData) {
   const { org, userId } = await requireAdmin();
   const supabase = await createClient();

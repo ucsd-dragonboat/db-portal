@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Icon from "@/components/icon";
 import ConfirmForm from "@/components/confirm-form";
-import { deleteForm, duplicateForm } from "./actions";
+import { deleteForm, duplicateForm, saveAsTemplate } from "./actions";
 
 /** ⋮ menu on a form or template card. Forms get Edit / Responses / Duplicate / Delete; templates just Edit / Delete. */
 export default function FormMenu({ id, title, kind = "form", className = "absolute right-1 top-1 z-10" }: {
@@ -32,6 +32,8 @@ export default function FormMenu({ id, title, kind = "form", className = "absolu
             <Link href={`/admin/forms/${id}/responses`} className="flex items-center gap-2 px-4 py-2 hover:bg-[var(--g-grey-50)]"><Icon name="form" /> Responses</Link>
             <form action={duplicateForm}><input type="hidden" name="id" value={id} />
               <button className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-[var(--g-grey-50)]"><Icon name="clone" /> Duplicate</button></form>
+            <form action={saveAsTemplate}><input type="hidden" name="id" value={id} />
+              <button className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-[var(--g-grey-50)]"><Icon name="file" /> Save as template</button></form>
           </>}
           <ConfirmForm action={deleteForm} message={`Delete ${what} “${title}”${kind === "form" ? " and all its responses" : ""}? This can’t be undone.`}>
             <input type="hidden" name="id" value={id} />
