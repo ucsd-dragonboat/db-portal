@@ -157,8 +157,22 @@ export type Event = {
   rsvp_deadline: string | null;
   google_event_id: string | null; // mirrored event in the org's team Google Calendar
   needs_info: boolean;            // imported from Google, awaiting kind/group/details
+  deadline_reminder_sent_at: string | null; // stamped once the "24h to RSVP deadline" email goes out
   created_by: string | null;
   created_at: string;
+};
+
+/** Per-user, per-org email notification preferences — all off by default. */
+export type NotificationPrefs = {
+  user_id: string;
+  org_id: string;
+  notify_email: string | null; // optional override; null = send to the account's own email
+  event_posted: boolean;
+  deadline_reminder: boolean;
+  event_signup: boolean;
+  form_submitted: boolean;
+  carpool_auto_generated: boolean;
+  updated_at: string;
 };
 
 /** One team Google Calendar per org — service-role-only table. */
@@ -209,6 +223,7 @@ export type Form = {
   sheet_spreadsheet_id: string | null;  // linked Google Sheet; responses mirror into it
   sheet_tab_id: number | null;          // tab gid; null until the first sync creates the tab
   sheet_linked_by: string | null;       // whose Google token the sync uses
+  deadline_reminder_sent_at: string | null; // stamped once the "24h to due date" email goes out
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -353,7 +368,7 @@ export type Database = {
       };
       events: {
         Row: Row<Event>;
-        Insert: Insert<Event, "id" | "kind" | "group_id" | "ends_at" | "location_name" | "location_lat" | "location_lon" | "notes" | "rsvp_deadline" | "google_event_id" | "needs_info" | "created_by" | "created_at">;
+        Insert: Insert<Event, "id" | "kind" | "group_id" | "ends_at" | "location_name" | "location_lat" | "location_lon" | "notes" | "rsvp_deadline" | "google_event_id" | "needs_info" | "deadline_reminder_sent_at" | "created_by" | "created_at">;
         Update: Partial<Event>;
         Relationships: [
           { foreignKeyName: "events_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
@@ -363,7 +378,7 @@ export type Database = {
       };
       forms: {
         Row: Row<Form>;
-        Insert: Insert<Form, "id" | "description" | "due_at" | "status" | "questions" | "ask_weight" | "carpools_generated_at" | "sheet_spreadsheet_id" | "sheet_tab_id" | "sheet_linked_by" | "created_by" | "created_at" | "updated_at">;
+        Insert: Insert<Form, "id" | "description" | "due_at" | "status" | "questions" | "ask_weight" | "carpools_generated_at" | "sheet_spreadsheet_id" | "sheet_tab_id" | "sheet_linked_by" | "deadline_reminder_sent_at" | "created_by" | "created_at" | "updated_at">;
         Update: Partial<Form>;
         Relationships: [
           { foreignKeyName: "forms_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
@@ -425,6 +440,15 @@ export type Database = {
           { foreignKeyName: "carpool_trips_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
           { foreignKeyName: "carpool_trips_event_id_fkey"; columns: ["event_id"]; isOneToOne: false; referencedRelation: "events"; referencedColumns: ["id"] },
           { foreignKeyName: "carpool_trips_driver_id_fkey"; columns: ["driver_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ];
+      };
+      notification_prefs: {
+        Row: Row<NotificationPrefs>;
+        Insert: Insert<NotificationPrefs, "notify_email" | "event_posted" | "deadline_reminder" | "event_signup" | "form_submitted" | "carpool_auto_generated" | "updated_at">;
+        Update: Partial<NotificationPrefs>;
+        Relationships: [
+          { foreignKeyName: "notification_prefs_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "notification_prefs_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
         ];
       };
     };
