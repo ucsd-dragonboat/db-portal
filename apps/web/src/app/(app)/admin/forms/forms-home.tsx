@@ -7,7 +7,7 @@ import LocalTime from "@/components/local-time";
 import { createForm, createFromTemplate, createTemplate } from "./actions";
 import FormMenu from "./form-menu";
 
-export type FormRow = { id: string; title: string; status: string; due_at: string | null; created_at: string; responses: number; events: number };
+export type FormRow = { id: string; title: string; status: string; due_at: string | null; created_at: string; responses: number; events: number; ask_weight: boolean; qLabels: string[] };
 export type TemplateRow = { id: string; title: string; ask_weight: boolean; qLabels: string[] };
 
 const STATUS: Record<string, [string, string]> = { draft: ["Draft", "var(--g-grey-600)"], open: ["Accepting responses", "var(--g-green)"], closed: ["Closed", "#b06000"] };
@@ -87,7 +87,7 @@ export default function FormsHome({ forms, templates, memberCount }: { forms: Fo
               return (
                 <div key={f.id} className="card card-hover relative flex flex-col !p-0">
                   <Link href={`/admin/forms/${f.id}`} className="block h-32">
-                    <Thumb lines={[]} />
+                    <Thumb lines={[...(f.ask_weight ? ["What's your current weight?"] : []), ...(f.events ? ["Will you be attending …? *"] : []), ...f.qLabels]} />
                   </Link>
                   <div className="flex items-start justify-between gap-1 p-3 pt-2 text-sm">
                     <div className="min-w-0">
