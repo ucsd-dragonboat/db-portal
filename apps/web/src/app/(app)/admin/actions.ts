@@ -354,6 +354,18 @@ export async function setMemberCap(_: AdminState, fd: FormData): Promise<AdminSt
   return { ok: true };
 }
 
+/** Statistics page: manual delta added on top of the RSVP-derived attendance count. */
+export async function setAttendanceAdjustment(_: AdminState, fd: FormData): Promise<AdminState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const value = Math.trunc(Number(fd.get("value")));
+  if (!Number.isFinite(value)) return { error: "Must be a whole number" };
+  const { error } = await supabase.from("profiles").update({ attendance_adjustment: value }).eq("id", String(fd.get("user_id")));
+  if (error) return { error: error.message.includes("attendance_adjustment") ? "Run migration 0025_carpool_trips.sql first" : error.message };
+  revalidatePath("/statistics");
+  return { ok: true };
+}
+
 export async function removePending(fd: FormData) {
   const { org } = await requireAdmin();
   const supabase = await createClient();

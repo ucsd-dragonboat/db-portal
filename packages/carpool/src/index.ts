@@ -41,3 +41,5 @@ export {
 export type { OsrmRoute } from './routing'
 export { buildOsrmTableUrl, parseOsrmTable, optimizeCarpool } from './optimize'
 export type { CostMatrix, OptimizeOptions } from './optimize'
+export { computeDriverStats, computePairStats } from './stats'
+export type { Trip, DriverStats, PairStat } from './stats'
