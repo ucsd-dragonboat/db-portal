@@ -16,7 +16,7 @@ export default async function AdminFormsPage() {
     qLabels: ((t.questions as unknown as FormQuestion[]) ?? []).map((q) => htmlToText(q.label)).filter(Boolean).slice(0, 4),
   }));
   const forms: FormRow[] = (allForms ?? []).filter((f) => f.status !== "template").map((f) => ({
-    id: f.id, title: f.title, status: f.status, due_at: f.due_at, created_at: f.created_at, ask_weight: f.ask_weight,
+    id: f.id, title: f.title, status: f.status, due_at: f.due_at, created_at: f.created_at, updated_at: f.updated_at, ask_weight: f.ask_weight,
     responses: (f.form_responses as unknown as { count: number }[])[0]?.count ?? 0, events: (f.form_events as unknown as { count: number }[])[0]?.count ?? 0,
     qLabels: ((f.questions as unknown as FormQuestion[]) ?? []).map((q) => htmlToText(q.label)).filter(Boolean).slice(0, 4),
   }));
