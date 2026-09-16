@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import type { FormQuestion, Profile, Rsvp } from "@/lib/database.types";
-import type { Rider } from "@db/carpool";
+import { upgradeCarpoolData, type Rider } from "@db/carpool";
 import { riderFromRsvp } from "@/lib/riders";
 import { flattenAnswer } from "@/lib/response-grid";
 import { htmlToText } from "@/lib/html";
@@ -20,10 +20,16 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
 
   // Home: Google Forms-style day picker (red). Selecting a day opens its carpool workspace.
   if (!event) {
-    const { data: cps } = (events ?? []).length
-      ? await supabase.from("carpools").select("event_id, published").in("event_id", (events ?? []).map((e) => e.id))
-      : { data: [] };
+    const eventIds = (events ?? []).map((e) => e.id);
+    const [{ data: cps }, { data: yesRsvps }] = eventIds.length
+      ? await Promise.all([
+          supabase.from("carpools").select("event_id, published, data").in("event_id", eventIds),
+          supabase.from("rsvps").select("event_id").in("event_id", eventIds).eq("status", "yes"),
+        ])
+      : [{ data: [] }, { data: [] }];
     const cpBy = new Map((cps ?? []).map((c) => [c.event_id, c]));
+    const goingBy = new Map<string, number>();
+    for (const r of yesRsvps ?? []) goingBy.set(r.event_id, (goingBy.get(r.event_id) ?? 0) + 1);
     return (
       <div className="-m-4 md:-m-6 min-h-full">
         <div className="border-b px-4 py-5 md:px-8" style={{ background: "var(--g-red-soft)", borderColor: "var(--g-grey-300)" }}>
@@ -37,8 +43,16 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
           <DayCardGrid hrefBase="/admin/carpool?event=" color="var(--g-red)" soft="var(--g-red-soft)" empty="No event days yet — create days under Events."
             days={(events ?? []).map((e) => {
               const cp = cpBy.get(e.id);
-              return { id: e.id, title: e.title, starts_at: e.starts_at,
-                meta: cp ? (cp.published ? "rides published" : "rides drafted") : "no rides yet",
+              const going = goingBy.get(e.id) ?? 0;
+              let lines: string[] | undefined;
+              if (cp) {
+                const d = upgradeCarpoolData(cp.data, {});
+                const cars = [...d.going.onCampus, ...d.going.offCampus];
+                const seated = cars.reduce((n, c) => n + c.passengerIds.length + 1, 0);
+                lines = [d.header, `${cars.length} car${cars.length === 1 ? "" : "s"} · ${seated} seated`];
+              }
+              return { id: e.id, title: e.title, starts_at: e.starts_at, lines,
+                meta: `${cp ? (cp.published ? "Published" : "Unpublished") : "No rides yet"} · ${going} going`,
                 metaColor: cp?.published ? "var(--g-green)" : undefined };
             })} />
         </div></div>
