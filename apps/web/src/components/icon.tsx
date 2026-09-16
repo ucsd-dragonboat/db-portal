@@ -1,6 +1,7 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faArrowDown, faArrowUp, faBars, faCakeCandles, faCalendarCheck, faCalendarDays, faCar, faChair, faChartColumn, faCheck, faChevronLeft, faChevronRight,
+  faArrowDown, faArrowDownAZ, faArrowUp, faBars, faCakeCandles, faCalendarCheck, faCalendarDays, faCar, faChair, faChartColumn, faCheck, faChevronLeft, faChevronRight,
+  faList,
   faCircleCheck, faCircleExclamation, faCircleQuestion, faCircleXmark, faClipboardList, faClone, faCrown,
   faEllipsisVertical,
   faBullhorn, faDragon, faEye, faFileLines, faFlagCheckered, faFolder, faGear, faHand, faHouse, faLink, faLocationDot,
@@ -35,6 +36,7 @@ export const ICONS = {
   hand: faHand,               // 🙋 needs a ride
   house: faHouse,             // 🏠 address
   link: faLink,               // 🔗 copy link
+  list: faList,               // ☰ list view
   maybe: faCircleQuestion,    // 🤔
   menu: faBars,               // ☰
   moon: faMoon,               // 🌚 attendance
@@ -47,7 +49,8 @@ export const ICONS = {
   race: faFlagCheckered,      // 🏁 race
   search: faMagnifyingGlass,
   seat: faChair,              // 💺 seats
-  table: faTableCells,        // ▦
+  sortAz: faArrowDownAZ,      // ⇅ sort menu
+  table: faTableCells,        // ▦ grid view
   sun: faSun,                 // 🌝 attendance
   trash: faTrashCan,          // 🗑 delete
   up: faArrowUp,              // ↑

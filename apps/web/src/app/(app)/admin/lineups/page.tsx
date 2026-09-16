@@ -42,8 +42,7 @@ export default async function AdminLineupsPage({ searchParams }: { searchParams:
           </div>
         </div>
         <div className="px-4 py-5 md:px-8"><div className="mx-auto max-w-[1100px]">
-          <h2 className="mb-3 text-base">Days</h2>
-          <DayCardGrid hrefBase="/admin/lineups?event=" color="var(--g-blue)" soft="var(--g-blue-soft)" empty="No event days yet — create days under Events."
+          <DayCardGrid hrefBase="/admin/lineups?event=" storageKey="lineups" color="var(--g-blue)" soft="var(--g-blue-soft)" empty="No event days yet — create days under Events."
             days={(events ?? []).map((e) => {
               const c = byEvent.get(e.id);
               return { id: e.id, title: e.title, starts_at: e.starts_at,

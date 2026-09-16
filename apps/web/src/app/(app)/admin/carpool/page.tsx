@@ -39,8 +39,7 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
           </div>
         </div>
         <div className="px-4 py-5 md:px-8"><div className="mx-auto max-w-[1100px]">
-          <h2 className="mb-3 text-base">Days</h2>
-          <DayCardGrid hrefBase="/admin/carpool?event=" color="var(--g-red)" soft="var(--g-red-soft)" empty="No event days yet — create days under Events."
+          <DayCardGrid hrefBase="/admin/carpool?event=" storageKey="carpool" color="var(--g-red)" soft="var(--g-red-soft)" empty="No event days yet — create days under Events."
             days={(events ?? []).map((e) => {
               const cp = cpBy.get(e.id);
               const going = goingBy.get(e.id) ?? 0;
