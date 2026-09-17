@@ -14,6 +14,13 @@ export function cleanHtml(html: string): string {
 /** True when the stored value is editor HTML (vs. legacy plain text). */
 export const isHtml = (s: string) => /^\s*</.test(s);
 
+/** Escape plain text for interpolation into HTML we build by hand (notification
+ * emails). Names, event titles and form titles are all user-typed — without this
+ * a member could put markup in their own display name and have it render inside
+ * an admin's inbox. */
+export const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
 /** Flatten editor HTML to readable plain text (for CSV / sheet cells). */
 export function htmlToText(html: string): string {
   if (!isHtml(html)) return html;

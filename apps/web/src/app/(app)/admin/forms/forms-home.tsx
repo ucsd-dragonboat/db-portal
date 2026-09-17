@@ -57,7 +57,7 @@ export default function FormsHome({ forms, templates, memberCount }: { forms: Fo
                 <form action={createFromTemplate}>
                   <input type="hidden" name="template_id" value={t.id} />
                   <button className="block h-32 w-40 overflow-hidden rounded-lg border bg-white transition hover:border-[var(--g-purple)]" style={{ borderColor: "var(--g-grey-300)" }}>
-                    <Thumb lines={[...(t.ask_weight ? ["What's your current weight?"] : []), "Will you be attending …? *", ...t.qLabels]} color="var(--g-green)" soft="var(--g-purple-soft)" />
+                    <Thumb lines={[...(t.ask_weight ? ["What's your current weight?"] : []), "Will you be attending …? *", ...t.qLabels]} color="var(--g-green)" soft="var(--g-purple-soft)" height="h-full" />
                   </button>
                 </form>
                 <div className="mt-2 truncate text-sm">{t.title}</div>
@@ -79,7 +79,7 @@ export default function FormsHome({ forms, templates, memberCount }: { forms: Fo
       {/* recent forms */}
       <div className="px-4 py-5 md:px-8">
         <div className="mx-auto max-w-[1100px]">
-          <BrowseGrid items={items} storageKey="forms" color="var(--g-purple)" soft="var(--g-purple-soft)"
+          <BrowseGrid items={items} storageKey="forms" color="var(--g-purple)" soft="var(--g-purple-soft)" thumbHeight="h-32"
             heading={q.trim() ? `Results for “${q.trim()}”` : "Recent forms"}
             empty={q.trim() ? "No forms match your search." : "No forms yet — start one above. Forms bundle events (each gets the attendance + ride question) with your own custom questions."}
             sorts={[{ key: "date", label: "Date created" }, { key: "modified", label: "Last modified" }, { key: "title", label: "Title" }]} />

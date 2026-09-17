@@ -9,19 +9,18 @@ export default async function StatisticsPage() {
   const { org, isAdmin } = await requireOrg();
   const supabase = await createClient();
 
-  const [{ data: members }, { data: events }, { data: trips }] = await Promise.all([
+  // Attendance is counted in Postgres (migration 0027) rather than by pulling every
+  // RSVP row down: the old `.in("event_id", <every event id>)` both overflowed the
+  // request URL once an org had a few hundred events and shipped one row per RSVP.
+  const [{ data: members }, { data: trips }, { data: counts }] = await Promise.all([
     supabase.from("memberships").select("*, profile:profiles(*)").eq("org_id", org.id),
-    supabase.from("events").select("id").eq("org_id", org.id),
     supabase.from("carpool_trips").select("*").eq("org_id", org.id),
+    supabase.rpc("attendance_counts", { org: org.id }),
   ]);
   const roster = ((members ?? []) as (Membership & { profile: Profile })[]).sort((a, b) => a.profile.full_name.localeCompare(b.profile.full_name));
-  const eventIds = (events ?? []).map((e) => e.id);
-  const { data: yesRsvps } = eventIds.length
-    ? await supabase.from("rsvps").select("user_id").in("event_id", eventIds).eq("status", "yes")
-    : { data: [] as { user_id: string }[] };
 
   const attendanceYes: Record<string, number> = {};
-  for (const r of yesRsvps ?? []) attendanceYes[r.user_id] = (attendanceYes[r.user_id] ?? 0) + 1;
+  for (const r of counts ?? []) attendanceYes[r.user_id] = Number(r.n);
 
   const carpoolTrips: Trip[] = ((trips ?? []) as CarpoolTrip[]).map((t) => ({
     driverId: t.driver_id, passengerIds: t.passenger_ids, distanceKm: t.distance_km, durationMin: t.duration_min,
