@@ -94,15 +94,17 @@ function SortMenu({ sorts, value, onPick, color }: { sorts: BrowseSort[]; value:
   );
 }
 
-function ViewToggle({ view, onPick, color, soft }: { view: View; onPick: (v: View) => void; color: string; soft: string }) {
-  const btn = (v: View, icon: "list" | "table", label: string) => (
-    <button type="button" onClick={() => onPick(v)} aria-label={label} title={label} aria-pressed={view === v}
-      className="flex h-8 w-8 items-center justify-center rounded-full"
-      style={view === v ? { background: soft, color } : grey}>
-      <Icon name={icon} />
+/** One button that flips between the two layouts. Like Google Drive, it shows the
+ * icon of the layout you'd switch *to*, so the icon changes each time it's clicked. */
+function ViewToggle({ view, onPick, color }: { view: View; onPick: (v: View) => void; color: string }) {
+  const next: View = view === "grid" ? "list" : "grid";
+  const label = next === "list" ? "Switch to list view" : "Switch to grid view";
+  return (
+    <button type="button" onClick={() => onPick(next)} aria-label={label} title={label}
+      className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-[var(--g-grey-50)]" style={{ color }}>
+      <Icon name={next === "list" ? "list" : "table"} />
     </button>
   );
-  return <div className="flex items-center gap-1">{btn("list", "list", "List view")}{btn("grid", "table", "Grid view")}</div>;
 }
 
 /** Google Drive-style browser: a heading row with sort + view controls, then the
@@ -133,7 +135,7 @@ export default function BrowseGrid({ items, sorts, storageKey, color, soft, empt
         <h2 className="text-base">{heading}</h2>
         <div className="flex items-center gap-1">
           {sorts.length > 1 && <SortMenu sorts={sorts} value={sort} onPick={(k) => save({ sort: k })} color={color} />}
-          <ViewToggle view={view} onPick={(v) => save({ view: v })} color={color} soft={soft} />
+          <ViewToggle view={view} onPick={(v) => save({ view: v })} color={color} />
         </div>
       </div>
 
