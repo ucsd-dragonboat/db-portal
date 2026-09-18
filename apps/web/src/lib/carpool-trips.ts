@@ -53,6 +53,7 @@ export async function recordCarpoolTrips(orgId: string, eventId: string, data: C
 
   type Row = { org_id: string; event_id: string; direction: "going" | "back"; driver_id: string; passenger_ids: string[]; distance_km: number; duration_min: number };
   const rows: Row[] = [];
+  let routed = 0, failed = 0;
   for (const [direction, dirSet] of [["going", data.going], ["back", data.back]] as const) {
     const mode = direction === "going" ? "pickup" : "dropoff";
     for (const car of [...dirSet.onCampus, ...dirSet.offCampus]) {
@@ -61,10 +62,16 @@ export async function recordCarpoolTrips(orgId: string, eventId: string, data: C
       if (passengerIds.length === 0) continue;
       const points = carRoutePoints({ ...car, passengerIds }, riders, destination, mode);
       const route = await fetchRoute(points);
-      if (!route) continue;
+      if (!route) { failed++; continue; }
+      routed++;
       rows.push({ org_id: orgId, event_id: eventId, direction, driver_id: car.driverId, passenger_ids: passengerIds, distance_km: route.distanceKm, duration_min: route.durationMin });
     }
   }
+
+  // If every car we tried to route failed, OSRM is down rather than the carpool
+  // being empty — leave the stored trips alone. Replacing them would wipe this
+  // event's mileage for good (nothing backfills it).
+  if (failed > 0 && routed === 0) return;
 
   await admin.from("carpool_trips").delete().eq("event_id", eventId);
   if (rows.length) await admin.from("carpool_trips").insert(rows);

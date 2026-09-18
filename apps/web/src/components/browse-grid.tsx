@@ -47,10 +47,11 @@ function compare(a: BrowseItem, b: BrowseItem, key: BrowseSort["key"]): number {
 }
 
 /** Mini document thumbnail: colored top bar + content lines, like the Google Forms
- * home cards. Exported for one-off thumbnails outside a grid (the template strip). */
-export function Thumb({ lines, color, soft }: { lines: string[] | undefined; color: string; soft: string }) {
+ * home cards. Exported for one-off thumbnails outside a grid (the template strip),
+ * where `height` is "h-full" to fill a fixed-size tile. */
+export function Thumb({ lines, color, soft, height = "h-24" }: { lines: string[] | undefined; color: string; soft: string; height?: string }) {
   return (
-    <div className="h-24 overflow-hidden rounded-t-lg p-3" style={{ background: soft }}>
+    <div className={`${height} overflow-hidden rounded-t-lg p-3`} style={{ background: soft }}>
       <div className="mx-auto h-full w-[85%] rounded-sm bg-white p-2 shadow-sm">
         <div className="h-1.5 w-full rounded-sm" style={{ background: color }} />
         {lines?.length
@@ -110,9 +111,11 @@ function ViewToggle({ view, onPick, color }: { view: View; onPick: (v: View) => 
 /** Google Drive-style browser: a heading row with sort + view controls, then the
  * items as cards or as rows. Both views render the same BrowseItems. The chosen
  * sort and view persist per page in localStorage. */
-export default function BrowseGrid({ items, sorts, storageKey, color, soft, empty, heading }: {
+export default function BrowseGrid({ items, sorts, storageKey, color, soft, empty, heading, thumbHeight }: {
   items: BrowseItem[]; sorts: BrowseSort[]; storageKey: string;
   color: string; soft: string; empty: string; heading?: React.ReactNode;
+  /** Tailwind height class for the card thumbnails (default "h-24"). */
+  thumbHeight?: string;
 }) {
   const raw = useSyncExternalStore(subscribe, () => readPref(storageKey), () => null);
   const saved = useMemo(() => {
@@ -145,7 +148,7 @@ export default function BrowseGrid({ items, sorts, storageKey, color, soft, empt
         <div className="grid gap-5 grid-cols-[repeat(auto-fill,minmax(210px,1fr))]">
           {sorted.map((it) => (
             <div key={it.id} className="card card-hover relative flex flex-col !p-0">
-              <Link href={it.href} className="block"><Thumb lines={it.lines} color={color} soft={soft} /></Link>
+              <Link href={it.href} className="block"><Thumb lines={it.lines} color={color} soft={soft} height={thumbHeight} /></Link>
               <div className="flex items-start justify-between gap-1 p-3 pt-2 text-sm">
                 <div className="min-w-0">
                   <Link href={it.href} className="block truncate font-medium hover:underline">{it.title}</Link>

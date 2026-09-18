@@ -58,7 +58,10 @@ export async function POST(req: Request) {
   try {
     const { data: syncs } = await supabase.from("google_calendar_sync").select("org_id");
     for (const s of syncs ?? []) gcal[s.org_id] = await pullGoogleCalendar(s.org_id);
-  } catch { /* table may not exist until migration 0023 runs */ }
+  } catch (e) {
+    // Expected until migration 0023 runs; after that it's a real failure, so log it.
+    console.error("[cron] google calendar pull failed:", e);
+  }
 
   // And "deadline in ~24h" reminders — each row is stamped once it's processed,
   // so a form/event whose deadline first enters the window gets exactly one email.
@@ -72,7 +75,10 @@ export async function POST(req: Request) {
     const { data: soonEvents } = await supabase.from("events").select("id, org_id, title, rsvp_deadline")
       .not("rsvp_deadline", "is", null).gte("rsvp_deadline", now.toISOString()).lt("rsvp_deadline", soon).is("deadline_reminder_sent_at", null);
     for (const e of soonEvents ?? []) { await notifyEventDeadline(e); reminders++; }
-  } catch { /* columns may not exist until migration 0026 runs */ }
+  } catch (e) {
+    // Expected until migration 0026 runs; after that it's a real failure, so log it.
+    console.error("[cron] deadline reminders failed:", e);
+  }
 
   return NextResponse.json({ processed: Object.keys(report).length, report, gcal, reminders });
 }

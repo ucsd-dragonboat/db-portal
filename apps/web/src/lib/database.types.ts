@@ -463,6 +463,7 @@ export type Database = {
       user_has_password: { Args: { uid: string }; Returns: boolean };
       rotate_join_code: { Args: { org: string }; Returns: string };
       hit_rate_limit: { Args: { p_key: string; p_max: number; p_window: string }; Returns: boolean };
+      attendance_counts: { Args: { org: string }; Returns: { user_id: string; n: number }[] };
       admin_add_member: {
         Args: { p_org: string; p_email: string; p_full_name?: string; p_address?: string | null; p_city?: string | null; p_zipcode?: string | null; p_lat?: number | null; p_lon?: number | null; p_car_passengers?: number | null; p_gender?: string | null; p_weight_lb?: number | null };
         Returns: string;
