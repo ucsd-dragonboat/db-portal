@@ -7,7 +7,7 @@ import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { cleanHtml } from "@/lib/html";
 import { disconnectGoogle } from "@/lib/google-sheets";
-import { createTeamCalendar, disconnectTeamCalendar, removeEventFromGoogle, syncEventToGoogle } from "@/lib/google-calendar";
+import { createTeamCalendar, disconnectTeamCalendar, linkExistingCalendar, removeEventFromGoogle, syncEventToGoogle } from "@/lib/google-calendar";
 import { notifyEventPosted } from "@/lib/notifications";
 
 export type AdminState = { error?: string; ok?: boolean };
@@ -381,18 +381,22 @@ export async function disconnectGoogleAccount() {
   revalidatePath("/admin/settings");
 }
 
-/** Create the team Google Calendar and mirror recent + future events into it. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function connectTeamCalendarAction(_prev: { error?: string } | null, _fd: FormData): Promise<{ error?: string } | null> {
+/** Connect the team Google Calendar — a new one, or an existing one the admin picks —
+ * and mirror recent + future events into it. */
+export async function connectTeamCalendarAction(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
   const { org, userId } = await requireAdmin();
+  // Empty value = make a new calendar (the original behavior); otherwise the id of
+  // one the admin already has.
+  const calendarId = String(fd.get("calendar_id") ?? "").trim();
   try {
-    await createTeamCalendar(org.id, userId, org.name);
+    if (calendarId) await linkExistingCalendar(org.id, userId, calendarId);
+    else await createTeamCalendar(org.id, userId, org.name);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "failed";
     if (msg === "google_unlinked") return { error: "Your Google connection expired — reconnect above and try again." };
     if (/insufficient|scope/i.test(msg)) return { error: "Your Google connection predates calendar access. Disconnect above, connect again (the consent screen now includes Calendar), then retry." };
     if (/has not been used|accessNotConfigured|is disabled/i.test(msg)) return { error: "The Google Calendar API isn't enabled in your Google Cloud project — APIs & Services → Library → Google Calendar API → Enable, wait a minute, then retry." };
-    return { error: `Couldn't create the calendar: ${msg.slice(0, 200)}` };
+    return { error: `Couldn't ${calendarId ? "link that calendar" : "create the calendar"}: ${msg.slice(0, 200)}` };
   }
   revalidatePath("/admin/settings"); revalidatePath("/admin/events");
   return null;

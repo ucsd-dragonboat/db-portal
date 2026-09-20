@@ -55,13 +55,28 @@ export async function getCalendarSync(orgId: string): Promise<GoogleCalendarSync
   return data ?? null;
 }
 
-/** Create the team calendar in the admin's Google account and mirror recent + future events into it. */
-export async function createTeamCalendar(orgId: string, userId: string, name: string): Promise<{ pushed: number }> {
+export type WritableCalendar = { id: string; summary: string; primary: boolean };
+
+/** The admin's calendars that can actually receive events — a calendar shared with
+ * them read-only can't. Used to offer an existing calendar instead of a new one. */
+export async function listWritableCalendars(userId: string): Promise<WritableCalendar[]> {
   const token = await getAccessToken(userId);
-  const cal = await calFetch(token, `${CAL_BASE}/calendars`, { method: "POST", body: JSON.stringify({ summary: name }) });
+  const data = await calFetch(token, `${CAL_BASE}/users/me/calendarList?minAccessRole=writer&maxResults=250`);
+  return ((data.items ?? []) as { id?: string; summary?: string; primary?: boolean; accessRole?: string; deleted?: boolean }[])
+    .filter((c) => c.id && !c.deleted && (c.accessRole === "owner" || c.accessRole === "writer"))
+    .map((c) => ({ id: c.id!, summary: c.summary?.trim() || c.id!, primary: !!c.primary }));
+}
+
+/** Store the mapping and mirror recent + future portal events into `calendarId`.
+ * Shared by "create a new calendar" and "use one I already have". */
+async function connectCalendar(orgId: string, userId: string, calendarId: string, syncToken: string | null): Promise<{ pushed: number }> {
+  const token = await getAccessToken(userId);
   const admin = createAdminClient();
+  // Any ids we're holding belong to the previously linked calendar — drop them so
+  // the push below re-creates those events in the newly chosen one.
+  await admin.from("events").update({ google_event_id: null }).eq("org_id", orgId).not("google_event_id", "is", null);
   const { error } = await admin.from("google_calendar_sync").upsert(
-    { org_id: orgId, user_id: userId, calendar_id: cal.id as string, sync_token: null }, { onConflict: "org_id" });
+    { org_id: orgId, user_id: userId, calendar_id: calendarId, sync_token: syncToken }, { onConflict: "org_id" });
   if (error) throw new Error(error.message);
 
   const since = new Date(Date.now() - 30 * 86400e3).toISOString();
@@ -69,12 +84,46 @@ export async function createTeamCalendar(orgId: string, userId: string, name: st
   let pushed = 0;
   for (const ev of events ?? []) {
     try {
-      const g = await calFetch(token, eventsUrl(cal.id), { method: "POST", body: JSON.stringify(toGoogle(ev)) });
+      const g = await calFetch(token, eventsUrl(calendarId), { method: "POST", body: JSON.stringify(toGoogle(ev)) });
       await admin.from("events").update({ google_event_id: g.id }).eq("id", ev.id);
       pushed++;
     } catch (err) { console.error("[gcal] initial push", ev.id, err); }
   }
   return { pushed };
+}
+
+/** Create a fresh team calendar in the admin's Google account and mirror events into it. */
+export async function createTeamCalendar(orgId: string, userId: string, name: string): Promise<{ pushed: number }> {
+  const token = await getAccessToken(userId);
+  const cal = await calFetch(token, `${CAL_BASE}/calendars`, { method: "POST", body: JSON.stringify({ summary: name }) });
+  // Nothing pre-existing on a brand-new calendar, so no token to seed: the first
+  // pull does its normal bounded initial sync.
+  return connectCalendar(orgId, userId, cal.id as string, null);
+}
+
+/** Use a calendar the admin already has. Everything on it up to now stays put: we
+ * take a sync token as of this moment and store it, so the first cron pull is
+ * incremental from here rather than importing the calendar's back-history as
+ * "missing info" events. Changes made after linking still flow in. */
+export async function linkExistingCalendar(orgId: string, userId: string, calendarId: string): Promise<{ pushed: number }> {
+  const token = await getAccessToken(userId);
+  let syncToken: string | null = null;
+  try {
+    let pageToken: string | undefined;
+    for (;;) {
+      const params = new URLSearchParams({ maxResults: "250", singleEvents: "true", timeMin: new Date().toISOString() });
+      if (pageToken) params.set("pageToken", pageToken);
+      const data = await calFetch(token, eventsUrl(calendarId, `?${params}`));
+      if (data.nextPageToken) { pageToken = data.nextPageToken; continue; } // items intentionally ignored
+      syncToken = (data.nextSyncToken as string) ?? null;
+      break;
+    }
+  } catch (err) {
+    // Couldn't seed a token — fall back to a normal initial sync rather than
+    // failing the link. Worst case the calendar's recent history imports.
+    console.error("[gcal] seed sync token", calendarId, err);
+  }
+  return connectCalendar(orgId, userId, calendarId, syncToken);
 }
 
 /** Unlink the team calendar: keep the Google calendar and the portal events, drop the mapping. */
