@@ -1,7 +1,7 @@
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
-import { getCalendarSync } from "@/lib/google-calendar";
+import { getCalendarSync, listWritableCalendars } from "@/lib/google-calendar";
 import { deletePickupLocation, deleteSavedLocation, disconnectGoogleAccount, disconnectTeamCalendarAction, rotateJoinCode } from "../actions";
 import TeamCalendarForm from "./team-calendar-form";
 import PickupForm from "./pickup-form";
@@ -17,6 +17,10 @@ export default async function AdminSettingsPage() {
   ]);
   const google = await getGoogleConnection(userId).catch(() => null); // null until migration 0022 runs
   const calSync = await getCalendarSync(org.id).catch(() => null);    // null until migration 0023 runs
+  // Offer the admin's existing calendars alongside "create a new one". Empty when
+  // Google isn't connected yet, the scope is missing, or the API is off — the
+  // form then just shows the original create button.
+  const calendars = google && !calSync ? await listWritableCalendars(userId).catch(() => []) : [];
   return (
     <div className="max-w-2xl space-y-6">
       <div>
@@ -84,10 +88,11 @@ export default async function AdminSettingsPage() {
             ) : (
               <div className="flex items-center justify-between gap-2">
                 <span className="text-slate-500">
-                  Two-way calendar sync: creates a “{org.name}” calendar in your Google account, mirrors portal events into it,
-                  and pulls your Google-side edits back. Deleting there only unlinks here; Google-created events land in “Missing info”.
+                  Two-way calendar sync: mirrors portal events into a calendar in your Google account — a new “{org.name}” one,
+                  or any calendar you already have — and pulls your Google-side edits back. Deleting there only unlinks here;
+                  Google-created events land in “Missing info”.
                 </span>
-                <TeamCalendarForm />
+                <TeamCalendarForm calendars={calendars} />
               </div>
             )}
           </div>
