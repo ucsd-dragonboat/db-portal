@@ -1,6 +1,6 @@
 import { toChoice, ATTENDANCE_OPTIONS } from "@/lib/attendance";
 import { htmlToText } from "@/lib/html";
-import { fmtDateTime } from "@/lib/format";
+import { fmtSortable } from "@/lib/format";
 import type { Form, FormQuestion, FormResponse, Profile, Rsvp } from "@/lib/database.types";
 
 const choiceLabel = Object.fromEntries(ATTENDANCE_OPTIONS.map((o) => [o.value, o.label.replace(/ [^\w\s]+$/u, "")]));
@@ -52,7 +52,7 @@ export function buildResponseGrid(input: {
     return !!dueAt && !!r && new Date(r.first_submitted_at ?? r.submitted_at) > dueAt;
   };
   const header = ["Name", "Email", "Weight (lb)", "Phone", ...events.map((e) => e.title), ...questions.map((q) => htmlToText(q.label)), "Submitted", "On time"];
-  const rows: (string | number)[][] = responded.map((p) => [p.full_name, p.email, p.weight_lb ?? "", p.phone ?? "", ...events.map((e) => rideCell(rsvpBy.get(`${e.id}:${p.id}`))), ...questions.map((q) => ansCell(p.id, q)), fmtDateTime(respBy.get(p.id)!.submitted_at), dueAt ? (isLate(p.id) ? "Late" : "On time") : ""]);
+  const rows: (string | number)[][] = responded.map((p) => [p.full_name, p.email, p.weight_lb ?? "", p.phone ?? "", ...events.map((e) => rideCell(rsvpBy.get(`${e.id}:${p.id}`))), ...questions.map((q) => ansCell(p.id, q)), fmtSortable(respBy.get(p.id)!.submitted_at), dueAt ? (isLate(p.id) ? "Late" : "On time") : ""]);
   const lateFlags = responded.map((p) => isLate(p.id));
 
   return { questions, profiles, responded, missing, header, rows, lateFlags };
