@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Dialog from "@/components/dialog";
 import ConfirmForm from "@/components/confirm-form";
-import { linkSheet, searchSheets, unlinkSheet, type DriveSearch, type LinkState } from "./actions";
+import { linkSheet, resyncSheet, searchSheets, unlinkSheet, type DriveSearch, type LinkState } from "./actions";
 
 const SheetsGlyph = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden className="inline-block align-[-3px]">
@@ -48,6 +48,10 @@ export default function SheetsLink({ formId, connected, googleEmail, linkedUrl, 
         <a href={linkedUrl} target="_blank" rel="noopener" className="btn-secondary flex items-center gap-2">
           <SheetsGlyph /> View in Sheets
         </a>
+        <form action={resyncSheet}>
+          <input type="hidden" name="form_id" value={formId} />
+          <button className="btn-text py-0.5 text-xs" title="Rewrite the sheet from the current responses">Re-sync</button>
+        </form>
         <ConfirmForm action={unlinkSheet} message="Unlink this sheet? Responses stop syncing; the sheet keeps its data.">
           <input type="hidden" name="form_id" value={formId} />
           <button className="btn-text py-0.5 text-xs" title="Unlink sheet">Unlink</button>
