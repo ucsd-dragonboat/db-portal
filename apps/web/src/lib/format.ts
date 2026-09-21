@@ -11,5 +11,11 @@ const t: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
 
 /** tz = undefined → browser/local timezone (only meaningful on the client). */
 export const fmtDateTime = (iso: string, tz: string | undefined = TEAM_TZ) => new Date(iso).toLocaleString(undefined, { ...dt, timeZone: tz });
+
+/** "2026-09-21 14:30" — sorts chronologically when sorted as text, which is what
+ * spreadsheet/table columns do. Still the team timezone, not UTC. (sv-SE is just
+ * a locale that happens to format ISO-style.) */
+export const fmtSortable = (iso: string, tz: string | undefined = TEAM_TZ) =>
+  new Date(iso).toLocaleString("sv-SE", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 export const fmtDate = (iso: string, tz: string | undefined = TEAM_TZ) => new Date(iso).toLocaleDateString(undefined, { ...d, timeZone: tz });
 export const fmtTime = (iso: string, tz: string | undefined = TEAM_TZ) => new Date(iso).toLocaleTimeString(undefined, { ...t, timeZone: tz });
