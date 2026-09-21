@@ -56,6 +56,20 @@ export async function linkSheet(_prev: LinkState, fd: FormData): Promise<LinkSta
   return null;
 }
 
+/** Rewrite the linked sheet from scratch, on demand. The sync otherwise only runs
+ * when someone submits a response, so a form nobody is filling in any more keeps
+ * whatever its tab last received (e.g. the old "Submitted" date format). */
+export async function resyncSheet(fd: FormData): Promise<void> {
+  const { org } = await requireAdmin();
+  const formId = String(fd.get("form_id"));
+  const supabase = await createClient();
+  // Confirm the form is this org's before touching anything in Google.
+  const { data: form } = await supabase.from("forms").select("id").eq("id", formId).eq("org_id", org.id).maybeSingle();
+  if (!form) return;
+  await syncFormToSheet(formId); // full-grid rewrite; admin is watching, so not deferred
+  revalidatePath(`/admin/forms/${formId}/responses`);
+}
+
 export async function unlinkSheet(fd: FormData): Promise<void> {
   const { org } = await requireAdmin();
   const formId = String(fd.get("form_id"));
