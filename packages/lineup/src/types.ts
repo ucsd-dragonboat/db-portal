@@ -5,7 +5,7 @@ export type BoatType = 'open' | 'womens' | 'mixed';
 export interface Paddler {
   id: string;
   name: string;
-  /** Weight in kilograms. */
+  /** Weight, in whatever unit the caller uses throughout — the portal feeds pounds. */
   weight: number;
   gender: Gender;
   sidePreference?: Side | 'either' | null;

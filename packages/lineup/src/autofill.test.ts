@@ -122,4 +122,35 @@ describe('autoFill', () => {
     expect(lineup.seats.flat().every(Boolean)).toBe(true);
     expect(Math.abs(sideWeights(lineup, roster).diff)).toBeLessThanOrEqual(10);
   });
+
+  describe('eligible (who is attending that day)', () => {
+    it('only seats eligible paddlers, leaving the rest unplaced', () => {
+      const roster = synthRoster(30, seeded(3), () => 'male');
+      const eligible = new Set(['p0', 'p1', 'p2', 'p3', 'p4']);
+      const { lineup, unplaced } = autoFill(emptyLineup('open'), roster, { rng: seeded(4), eligible });
+
+      const seated = lineup.seats.flat().filter(Boolean) as string[];
+      expect(seated).toHaveLength(5);
+      expect(seated.every((id) => eligible.has(id))).toBe(true);
+      expect(unplaced).toHaveLength(0); // nobody eligible was left over
+    });
+
+    it('never unseats someone already in the boat who is not eligible', () => {
+      const roster = synthRoster(30, seeded(5), () => 'male');
+      const seeded0 = placePaddler(emptyLineup('open'), { kind: 'seat', row: 0, side: 'left' }, 'p9', roster);
+      const { lineup } = autoFill(seeded0.lineup, roster, {
+        rng: seeded(6),
+        eligible: new Set(['p0', 'p1', 'p2']),
+      });
+
+      expect(findPaddler(lineup, 'p9')).toEqual({ kind: 'seat', row: 0, side: 'left' });
+      expect(lineupPaddlerIds(lineup).sort()).toEqual(['p0', 'p1', 'p2', 'p9']);
+    });
+
+    it('fills the whole roster when no eligible set is given', () => {
+      const roster = synthRoster(30, seeded(7), () => 'male');
+      const { lineup } = autoFill(emptyLineup('open'), roster, { rng: seeded(8) });
+      expect(lineup.seats.flat().filter(Boolean)).toHaveLength(20);
+    });
+  });
 });
