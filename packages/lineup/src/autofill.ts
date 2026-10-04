@@ -6,9 +6,15 @@ export interface AutoFillOptions {
   rng?: () => number;
   /**
    * When a paddler prefers a side, they get it if that side is lighter, or if
-   * putting them there leaves the boat within this many kg of balance. Default 10.
+   * putting them there leaves the boat within this much weight of balance. Default 10.
    */
   sidePreferenceTolerance?: number;
+  /**
+   * Restrict seating to these paddler ids — the people attending that day. Anyone
+   * outside it is left alone (including anyone already seated: this only governs
+   * who gets picked up, never who gets removed). Omitted = the whole roster.
+   */
+  eligible?: Set<string>;
 }
 
 export interface AutoFillResult {
@@ -41,9 +47,13 @@ export function autoFill(lineup: Lineup, roster: Roster, opts: AutoFillOptions =
     .sort((a, b) => Math.abs(a.row - middle) - Math.abs(b.row - middle));
 
   const inBoat = new Set(lineupPaddlerIds(lineup));
+  const eligible = opts.eligible;
   const candidates = shuffle(
     Object.values(roster).filter(
-      (p) => !inBoat.has(p.id) && (lineup.boatType !== 'womens' || p.gender === 'female'),
+      (p) =>
+        !inBoat.has(p.id) &&
+        (!eligible || eligible.has(p.id)) &&
+        (lineup.boatType !== 'womens' || p.gender === 'female'),
     ),
     rng,
   ).sort((a, b) => b.weight - a.weight);

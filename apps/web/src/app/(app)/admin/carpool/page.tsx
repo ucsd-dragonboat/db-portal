@@ -63,7 +63,8 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
   const pickupNames: Record<string, string> = {};
   let saved: SavedCarpool | null = null;
   const [{ data: rs }, { data: cp }, { data: pickups }, { data: formLinks }] = await Promise.all([
-    supabase.from("rsvps").select("*, profile:profiles(*)").eq("event_id", event.id).in("status", ["yes", "maybe"]),
+    // Yes only — a Maybe isn't attending until they change it (see lib/attendees.ts).
+    supabase.from("rsvps").select("*, profile:profiles(*)").eq("event_id", event.id).eq("status", "yes"),
     supabase.from("carpools").select("*").eq("event_id", event.id).maybeSingle(),
     supabase.from("pickup_locations").select("*").eq("org_id", org.id),
     supabase.from("form_events").select("form:forms(id, questions)").eq("event_id", event.id),

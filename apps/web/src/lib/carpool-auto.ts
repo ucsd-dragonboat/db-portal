@@ -63,7 +63,8 @@ export async function generateCarpoolForEvent(
   const destination = { lat: event.location_lat, lon: event.location_lon, label: event.location_name ?? event.title };
 
   const [{ data: rs }, { data: pickups }] = await Promise.all([
-    supabase.from("rsvps").select("*, profile:profiles(*)").eq("event_id", eventId).in("status", ["yes", "maybe"]),
+    // Yes only — a Maybe isn't attending until they change it (see lib/attendees.ts).
+    supabase.from("rsvps").select("*, profile:profiles(*)").eq("event_id", eventId).eq("status", "yes"),
     supabase.from("pickup_locations").select("*").eq("org_id", orgId),
   ]);
   const pickupBy = new Map((pickups ?? []).map((p) => [p.id, p]));

@@ -1,178 +1,178 @@
 import Link from "next/link";
+import { randomUUID } from "crypto";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
-import LocalTime from "@/components/local-time";
+import { attendeesForDays } from "@/lib/attendees";
+import { fmtDate } from "@/lib/format";
 import Icon from "@/components/icon";
-import DayCardGrid from "@/components/day-cards";
-import type { Roster, Lineup, BoatType } from "@db/lineup";
-import type { LineupRow, Profile } from "@/lib/database.types";
-import LineupBuilder from "./builder";
-import RaceDaySections from "./race-day";
+import BrowseGrid, { type BrowseItem } from "@/components/browse-grid";
+import type { Event, LineupRow, Profile } from "@/lib/database.types";
+import type { Lineup, Roster } from "@db/lineup";
+import LineupBuilder, { type BuilderDay } from "./builder";
+import type { FilingGroup } from "./file-dialog";
 
-type Params = { event?: string; lineup?: string; blank?: string; new?: string; division?: string; dtype?: string; boat?: string; adddiv?: string };
+/** `event` is kept for the "Lineups" links on the Events, Group and Responses pages —
+ * it now narrows the list to that day's event instead of opening a per-day workspace. */
+type Params = { set?: string; new?: string; event?: string };
 
+/** A lineup is built first and filed to an event's days later, so the home screen
+ * lists sets grouped by event rather than making you pick a day up front. */
 export default async function AdminLineupsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = await searchParams;
-  const { event: eventId, lineup: lineupId, blank } = sp;
   const { org } = await requireAdmin();
   const supabase = await createClient();
 
-  const { data: events } = await supabase.from("events").select("id, title, starts_at").eq("org_id", org.id).order("starts_at", { ascending: false }).limit(30);
-
-  // Home: Google Forms-style day picker (blue). Selecting a day opens its lineup workspace.
-  // Only needs per-day counts for the days shown — not the full lineup rows (fat jsonb).
-  if (!eventId && !blank) {
-    const { data: lineups } = (events ?? []).length
-      ? await supabase.from("lineups").select("event_id, published").eq("org_id", org.id).in("event_id", (events ?? []).map((e) => e.id))
-      : { data: [] };
-    const byEvent = new Map<string, { n: number; pub: number }>();
-    for (const l of lineups ?? []) {
-      if (!l.event_id) continue;
-      const c = byEvent.get(l.event_id) ?? { n: 0, pub: 0 };
-      c.n += 1; if (l.published) c.pub += 1;
-      byEvent.set(l.event_id, c);
-    }
-    return (
-      <div className="-m-4 md:-m-6 min-h-full">
-        <div className="border-b px-4 py-5 md:px-8" style={{ background: "var(--g-blue-tint)", borderColor: "var(--g-grey-300)" }}>
-          <div className="mx-auto max-w-[1100px]">
-            <h1 className="text-2xl font-normal" style={{ color: "var(--g-blue)" }}><Icon name="boat" /> Lineups</h1>
-            <p className="mt-1 text-sm" style={{ color: "var(--g-grey-600)" }}>Pick a day to build its boat lineups — the roster is whoever RSVP’d yes/maybe. Or start from the full roster:</p>
-            <Link href="/admin/lineups?blank=1" className="btn-secondary mt-3 inline-block">Blank lineup (full roster)</Link>
-          </div>
-        </div>
-        <div className="px-4 py-5 md:px-8"><div className="mx-auto max-w-[1100px]">
-          <DayCardGrid hrefBase="/admin/lineups?event=" storageKey="lineups" color="var(--g-blue)" soft="var(--g-blue-soft)" empty="No event days yet — create days under Events."
-            days={(events ?? []).map((e) => {
-              const c = byEvent.get(e.id);
-              return { id: e.id, title: e.title, starts_at: e.starts_at,
-                meta: c ? `${c.n} lineup${c.n === 1 ? "" : "s"}${c.pub ? ` · ${c.pub} published` : " · draft"}` : "no lineups yet",
-                metaColor: c?.pub ? "var(--g-green)" : undefined };
-            })} />
-        </div></div>
-      </div>
-    );
-  }
-
-  // Day workspace (or blank full-roster mode). Fetch only this day's lineups (blank mode: the untied ones).
-  const lineupQuery = supabase.from("lineups").select("*").eq("org_id", org.id).order("created_at", { ascending: true });
-  const [{ data: members }, { data: lineups }] = await Promise.all([
+  // Events available for filing: recent groups and their days.
+  const [{ data: groupRows }, { data: dayRows }, { data: members }] = await Promise.all([
+    supabase.from("event_groups").select("id, name").eq("org_id", org.id).order("created_at", { ascending: false }).limit(30),
+    supabase.from("events").select("id, title, starts_at, group_id").eq("org_id", org.id).order("starts_at", { ascending: false }).limit(120),
     supabase.from("memberships").select("profile:profiles(*)").eq("org_id", org.id),
-    eventId ? lineupQuery.eq("event_id", eventId) : lineupQuery.is("event_id", null),
   ]);
-  const event = eventId ? (events ?? []).find((e) => e.id === eventId) ?? null : null;
-  let dayIds: string[] | null = null;
-  if (eventId) {
-    const { data: rs } = await supabase.from("rsvps").select("user_id, status").eq("event_id", eventId).in("status", ["yes", "maybe"]);
-    dayIds = (rs ?? []).map((r) => r.user_id);
-  }
-  // Full org roster: seated non-RSVP paddlers still render; the bench filters to the day by default.
+  const days = (dayRows ?? []) as Pick<Event, "id" | "title" | "starts_at" | "group_id">[];
+  const attending = await attendeesForDays(supabase, days.map((d) => d.id));
+  const groups: FilingGroup[] = (groupRows ?? []).map((g) => ({
+    id: g.id,
+    name: g.name,
+    days: days.filter((d) => d.group_id === g.id)
+      .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+      .map((d) => ({ id: d.id, label: fmtDate(d.starts_at), attending: (attending.get(d.id) ?? []).length })),
+  }));
+
   const roster: Roster = {};
   for (const m of members ?? []) {
     const p = m.profile as unknown as Profile;
     if (!p) continue;
-    roster[p.id] = { id: p.id, name: p.full_name || p.email, weight: p.weight_lb ?? 0, gender: p.gender, sidePreference: p.side_preference, canSteer: p.can_steer, canDrum: p.can_drum };
+    roster[p.id] = { id: p.id, name: p.full_name || p.email, weight: p.weight_lb ?? 0,
+      gender: p.gender, sidePreference: p.side_preference, canSteer: p.can_steer, canDrum: p.can_drum };
   }
 
-  const forEvent = (lineups ?? []) as LineupRow[];
-  const practiceRows = forEvent.filter((l) => !l.division);
-  const raceRows = forEvent.filter((l) => l.division);
-  const current = lineupId ? forEvent.find((l) => l.id === lineupId) ?? null : null;
+  // ---- builder ---------------------------------------------------------------
+  if (sp.set || sp.new) {
+    const setId = sp.set ?? randomUUID();
+    const { data: rows } = sp.set
+      ? await supabase.from("lineups").select("*").eq("org_id", org.id).eq("set_id", sp.set).order("created_at")
+      : { data: [] as LineupRow[] };
+    const dayOf = new Map(days.map((d) => [d.id, d]));
 
-  // Race-day context for the builder: from the selected row, or from ?division=…&new=1 (new race).
-  const division = current?.division ?? (sp.new === "1" ? (sp.division || null) : null);
-  const boatLabel = current?.boat_label ?? (division ? sp.boat || "A" : null);
-  const boatType = (current?.boat_type ?? (division ? (sp.dtype as BoatType) || "open" : "open")) as BoatType;
-  const siblings = division
-    ? raceRows.filter((l) => l.division === division && l.boat_label !== boatLabel)
-        .map((l) => ({ name: `${l.division} ${l.boat_label ?? ""}`.trim(), lineup: l.data as unknown as Lineup }))
-    : [];
+    // Group the set's rows back into day tabs, in event order.
+    const byDay = new Map<string | null, LineupRow[]>();
+    for (const r of (rows ?? []) as LineupRow[]) {
+      const list = byDay.get(r.event_id);
+      if (list) list.push(r); else byDay.set(r.event_id, [r]);
+    }
+    const initialDays: BuilderDay[] = [...byDay.entries()]
+      .sort((a, b) => (dayOf.get(a[0] ?? "")?.starts_at ?? "").localeCompare(dayOf.get(b[0] ?? "")?.starts_at ?? ""))
+      .map(([eventId, rs]) => ({
+        eventId,
+        label: eventId ? fmtDate(dayOf.get(eventId)?.starts_at ?? "") : "Unfiled",
+        boats: rs.map((r) => ({ rowId: r.id, name: r.name, division: r.division, boatLabel: r.boat_label,
+          data: (r.data && (r.data as unknown as Lineup).seats ? (r.data as unknown as Lineup) : { boatType: r.boat_type, drummer: null, steer: null, seats: Array.from({ length: 10 }, () => [null, null]) }) as Lineup })),
+      }));
 
-  const showChooser = !!eventId && forEvent.length === 0 && !sp.new && !sp.adddiv;
-  const addDivision = sp.adddiv === "1";
+    const filedIds = initialDays.map((d) => d.eventId).filter((x): x is string => !!x);
+    const initialAttendees = Object.fromEntries(filedIds.map((id) => [id, (attending.get(id) ?? []).map((p) => p.id)]));
+    const firstRow = (rows ?? [])[0] as LineupRow | undefined;
+    const groupOfSet = filedIds.length ? dayOf.get(filedIds[0])?.group_id ?? null : null;
+
+    return (
+      <div className="space-y-4">
+        <Link href="/admin/lineups" className="btn-text text-sm">← All lineups</Link>
+        <LineupBuilder
+          setId={setId}
+          roster={roster}
+          groups={groups}
+          initialDays={initialDays}
+          initialName={firstRow?.name ?? ""}
+          initialPublished={!!firstRow?.published}
+          initialGroupId={groupOfSet}
+          initialAttendees={initialAttendees}
+        />
+      </div>
+    );
+  }
+
+  // ---- home: sets grouped by event -------------------------------------------
+  const { data: allRows } = await supabase.from("lineups")
+    .select("id, name, event_id, set_id, published, created_at, updated_at").eq("org_id", org.id)
+    .order("created_at", { ascending: false });
+
+  type SetRow = { setId: string; name: string; published: boolean; boats: number; dayIds: Set<string>; created: string; updated: string };
+  const sets = new Map<string, SetRow>();
+  for (const r of allRows ?? []) {
+    const key = r.set_id ?? r.id; // pre-migration rows stand alone
+    const s = sets.get(key);
+    if (s) {
+      s.boats++; s.published ||= r.published;
+      if (r.event_id) s.dayIds.add(r.event_id);
+      if (r.updated_at > s.updated) s.updated = r.updated_at;
+    } else {
+      sets.set(key, { setId: key, name: r.name, published: r.published, boats: 1,
+        dayIds: new Set(r.event_id ? [r.event_id] : []), created: r.created_at, updated: r.updated_at });
+    }
+  }
+
+  const groupNameOf = (dayIds: Set<string>) => {
+    for (const id of dayIds) {
+      const gid = dayOfGroup(days, id);
+      if (gid) return (groupRows ?? []).find((g) => g.id === gid)?.name ?? null;
+    }
+    return null;
+  };
+  const sections = new Map<string, { title: string; items: BrowseItem[] }>();
+  for (const s of sets.values()) {
+    const gname = groupNameOf(s.dayIds) ?? "Unfiled";
+    const section = sections.get(gname) ?? { title: gname, items: [] };
+    section.items.push({
+      id: s.setId,
+      href: `/admin/lineups?set=${s.setId}`,
+      title: s.name || "Untitled lineup",
+      lines: [`${s.boats} boat${s.boats === 1 ? "" : "s"}`, s.dayIds.size ? `${s.dayIds.size} day${s.dayIds.size === 1 ? "" : "s"}` : "not linked to an event"],
+      meta: `${s.published ? "Published" : "Draft"} · ${s.boats} boat${s.boats === 1 ? "" : "s"}`,
+      metaColor: s.published ? "var(--g-green)" : undefined,
+      date: s.created,
+      modified: s.updated,
+    });
+    sections.set(gname, section);
+  }
+  let ordered = [...sections.values()].sort((a, b) => (a.title === "Unfiled" ? -1 : b.title === "Unfiled" ? 1 : a.title.localeCompare(b.title)));
+  // Arriving from an event/group/responses "Lineups" link: show just that event.
+  const focusGroup = sp.event ? (groupRows ?? []).find((g) => g.id === dayOfGroup(days, sp.event!))?.name : null;
+  if (focusGroup) ordered = ordered.filter((s) => s.title === focusGroup);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Link href="/admin/lineups" className="btn-text -ml-3" style={{ color: "var(--g-blue)" }}>← Lineups</Link>
-        <h1 className="text-2xl font-normal">{event ? event.title : "Blank lineup"}</h1>
-        {event && <span className="text-sm" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={event.starts_at} /></span>}
-        {!event && <span className="text-sm" style={{ color: "var(--g-grey-600)" }}>full roster — not tied to a day</span>}
-      </div>
-
-      {showChooser ? (
-        <div>
-          <p className="mb-3 text-sm" style={{ color: "var(--g-grey-600)" }}>Start this day’s lineups from:</p>
-          <div className="flex flex-wrap gap-4">
-            <TemplateCard href={`/admin/lineups?event=${eventId}&adddiv=1`} icon="race" title="Race day"
-              blurb="Divisions (Open, Mixed 500m, …) with boats A/B and a lineup per race." />
-            <TemplateCard href={`/admin/lineups?event=${eventId}&new=practice`} icon="boat" title="Practice"
-              blurb="One boat at a time from the day’s RSVPs." />
-            <TemplateCard href={`/admin/lineups?event=${eventId}&new=custom`} icon="pen" title="Custom"
-              blurb="Blank boat with the whole team on the bench." />
+    <div className="-m-4 md:-m-6 min-h-full">
+      <div className="border-b px-4 py-5 md:px-8" style={{ background: "var(--g-blue-soft)", borderColor: "var(--g-grey-300)" }}>
+        <div className="mx-auto flex max-w-[1100px] items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-normal" style={{ color: "var(--g-blue)" }}><Icon name="boat" /> Lineups</h1>
+            <p className="mt-1 text-sm" style={{ color: "var(--g-grey-600)" }}>Build a lineup, then link it to an event and the days it covers.</p>
           </div>
+          <Link href="/admin/lineups?new=1" className="btn-primary whitespace-nowrap"><Icon name="plus" /> New lineup</Link>
         </div>
-      ) : (
-        <>
-          {(raceRows.length > 0 || addDivision) && (
-            <RaceDaySections eventId={eventId!} rows={raceRows} currentId={current?.id ?? null} />
-          )}
-          {addDivision && (
-            <form method="GET" action="/admin/lineups" className="card flex flex-wrap items-end gap-2 text-sm">
-              <input type="hidden" name="event" value={eventId!} />
-              <input type="hidden" name="new" value="1" />
-              <input type="hidden" name="boat" value="A" />
-              <label className="grid gap-1">Division name
-                <input name="division" required placeholder="e.g. Mixed 500m" className="input w-48" />
-              </label>
-              <label className="grid gap-1">Type (for warnings)
-                <select name="dtype" className="input w-auto" defaultValue="mixed">
-                  <option value="open">Open</option><option value="mixed">Mixed</option><option value="womens">Women&apos;s</option>
-                </select>
-              </label>
-              <button className="btn-primary">Add division</button>
-              <Link href={`/admin/lineups?event=${eventId}`} className="btn-text">Cancel</Link>
-            </form>
-          )}
-          {practiceRows.length > 0 && (
-            <div className="flex flex-wrap gap-2 text-sm">
-              {practiceRows.map((l) => (
-                <Link key={l.id} href={`/admin/lineups?${eventId ? `event=${eventId}&` : "blank=1&"}lineup=${l.id}`}
-                  className={`rounded-full border px-3 py-1 ${l.id === lineupId ? "border-sky-600 bg-sky-50" : "border-slate-300"}`}>
-                  {l.name} <span className="text-slate-400">· {l.boat_type}{l.published ? " · published" : ""}</span>
-                </Link>
-              ))}
-              <Link href={`/admin/lineups${eventId ? `?event=${eventId}&new=practice` : "?blank=1"}`} className={`rounded-full border px-3 py-1 ${!lineupId && !division ? "border-sky-600 bg-sky-50" : "border-dashed border-slate-300"}`}>+ New</Link>
-            </div>
-          )}
-          {!addDivision && (current || sp.new || raceRows.length === 0) && (
-            <LineupBuilder
-              key={current?.id ?? `new:${division ?? ""}:${boatLabel ?? ""}:${sp.new ?? ""}`}
-              roster={roster}
-              eventId={eventId ?? null}
-              initial={current ? { id: current.id, name: current.name, boatType: current.boat_type as BoatType, published: current.published, data: current.data as unknown as Lineup } : null}
-              defaultBoatType={boatType}
-              division={division}
-              boatLabel={boatLabel}
-              siblings={siblings}
-              dayIds={dayIds}
-              initialWholeTeam={sp.new === "custom" || !eventId}
-            />
-          )}
-        </>
-      )}
+      </div>
+      <div className="space-y-6 px-4 py-5 md:px-8">
+        {focusGroup && (
+          <p className="mx-auto max-w-[1100px] text-sm" style={{ color: "var(--g-grey-600)" }}>
+            Showing <b>{focusGroup}</b> · <Link href="/admin/lineups" className="underline">all lineups</Link>
+          </p>
+        )}
+        {!ordered.length && (
+          <p className="mx-auto max-w-[1100px] text-sm" style={{ color: "var(--g-grey-600)" }}>
+            {focusGroup ? "No lineups for this event yet — start one above." : "No lineups yet — start one above."}
+          </p>
+        )}
+        {ordered.map((s) => (
+          <div key={s.title} className="mx-auto max-w-[1100px]">
+            <BrowseGrid items={s.items} storageKey={`lineups-${s.title}`} color="var(--g-blue)" soft="var(--g-blue-soft)"
+              heading={s.title} empty="Nothing here." thumbHeight="h-24"
+              sorts={[{ key: "modified", label: "Last modified" }, { key: "date", label: "Date created" }, { key: "title", label: "Title" }]} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function TemplateCard({ href, icon, title, blurb }: { href: string; icon: "race" | "boat" | "pen"; title: string; blurb: string }) {
-  return (
-    <Link href={href} className="w-52 rounded-lg border bg-white p-3 transition-colors hover:border-[var(--g-blue)]" style={{ borderColor: "var(--g-grey-300)" }}>
-      <div className="mb-2 flex h-20 items-center justify-center rounded" style={{ background: "var(--g-blue-tint)", color: "var(--g-blue)" }}>
-        <Icon name={icon} className="text-2xl" />
-      </div>
-      <div className="text-sm font-medium">{title}</div>
-      <div className="mt-0.5 text-xs" style={{ color: "var(--g-grey-600)" }}>{blurb}</div>
-    </Link>
-  );
+function dayOfGroup(days: Pick<Event, "id" | "group_id">[], eventId: string): string | null {
+  return days.find((d) => d.id === eventId)?.group_id ?? null;
 }
