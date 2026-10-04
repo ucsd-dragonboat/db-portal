@@ -66,7 +66,7 @@ Import the repo, set **Root Directory** to `apps/web`, add the two `NEXT_PUBLIC_
 - Nominatim usage policy: max 1 request/s, and it requires an identifying User-Agent (set in `profile/actions.ts`). We only geocode when an address changes.
 - Public OSRM is a demo server with no SLA. If it's down, the carpool map falls back to dashed straight lines; assignment itself never needs the network.
 
-## Roadmap
+## To Do
 
 - [x] Auth, teams (create/join by code), admin/member roles, RLS
 - [x] Board with pinned announcements
@@ -81,9 +81,10 @@ Import the repo, set **Root Directory** to `apps/web`, add the two `NEXT_PUBLIC_
 - [ ] File-upload questions (waiver screenshots) — needs Supabase Storage bucket
 - [ ] Branching questions (e.g. "carpooling vs flying" sections)
 - [ ] Attendance history & stats per paddler
-- [ ] Multiple lineups per practice shown side-by-side; race-day mode (heats)
+- [x] Multiple lineups per practice shown side-by-side; race-day mode (heats)
 - [ ] Notifications (email via Supabase / Resend free tier)
 - [ ] Boat risk assessment (weather/wind/tide APIs — Open-Meteo is free)
 - [ ] Multi-org switching for users in more than one team
+- [ ] Migrate Supabase server to West coast one
 
 <!-- deploy kick: verify restored Vercel git connection, 2026-09-02 -->
