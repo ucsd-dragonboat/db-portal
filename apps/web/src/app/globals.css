@@ -108,3 +108,50 @@ button.sheet-cell:hover { background: #f5f6fa; border-color: #c8cde0; }
 .gsheet thead .labels th { font-weight: 700; white-space: nowrap; }
 .gsheet tbody tr:hover td { background: #f5f6fa; }
 .gsheet tr.pending td { background: #fffbeb; }
+
+/* ---------- Lineup boats ----------
+   Cloned from Brandon's standalone builder so the boat-editing UI looks like the
+   tool the coaches already use: boat cards side by side, tall seat rows with the
+   row number between the sides, pill-shaped drummer/steer, and a two-tone
+   left/right balance bar. Tokens below are that file's, not the portal's. */
+.lu { --blue:#006A96; --blue-sel:#E1EFF5; --navy:#182B49; --yellow:#FFCD00;
+  --text:#182B49; --text-2:#747678; --divider:#E2E2DE; --border:#B6B1A9; --error:#B91C1C; }
+.lu-boats { display: flex; gap: 16px; align-items: flex-start; overflow-x: auto; padding-bottom: 16px; }
+.lu-boat { flex: none; width: 320px; background: #fff; border: 1px solid var(--divider);
+  border-radius: 8px; padding: 0 16px 16px; }
+.lu-head { display: flex; align-items: center; gap: 6px; padding: 16px 0 8px; }
+.lu-name { flex: 0 1 auto; min-width: 0; border: 1px solid transparent; background: transparent;
+  border-radius: 4px; font: 600 14px Inter, system-ui, sans-serif; color: var(--text); padding: 2px 4px; }
+.lu-name:hover { border-color: var(--divider); }
+.lu-name:focus { outline: 2px solid var(--blue); outline-offset: -1px; }
+.lu-size { font: 500 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-2); }
+.lu-acts { margin-left: auto; display: flex; gap: 4px; }
+.lu-acts button { color: var(--text-2); font-size: 12px; }
+.lu-acts button:hover { color: var(--text); }
+.lu-acts button.del:hover { color: var(--error); }
+
+.lu-callout { font: 600 12px Inter, system-ui, sans-serif; }
+.lu-ok { color: #15803D; } .lu-warn { color: #B45309; } .lu-bad { color: var(--error); } .lu-none { color: var(--text-2); }
+.lu-bar { display: flex; height: 6px; border-radius: 999px; overflow: hidden; background: var(--divider); margin: 6px 0; }
+.lu-legend { display: flex; justify-content: space-between; font: 400 12px Inter, system-ui, sans-serif; color: var(--text-2); }
+
+.lu-end-label { display: flex; align-items: center; justify-content: center; gap: 6px;
+  font: 500 12px Inter, system-ui, sans-serif; color: var(--text-2); margin: 6px 0; }
+.lu-end-label b { text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.lu-ends .lu-seat { border-radius: 999px; max-width: 200px; margin: 0 auto; }
+
+.lu-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.lu-num { width: 22px; text-align: center; font: 400 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-2); }
+.lu-seat { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left;
+  min-height: 44px; padding: 4px 8px; border: 1px solid var(--divider); border-radius: 6px;
+  background: #fff; font: inherit; color: inherit; cursor: pointer; }
+.lu-seat:hover { border-color: var(--border); }
+.lu-seat.empty { border-style: dashed; background: #FBFDFF; color: var(--text-2);
+  justify-content: center; font-size: 13px; }
+.lu-seat.sel { background: var(--blue-sel); border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.lu-seat.target { border-color: var(--blue); border-style: solid; background: var(--blue-sel); }
+.lu-seat.g-open { border-left: 4px solid var(--blue); }
+.lu-seat.g-women { border-left: 4px solid #D6336C; }
+.lu-seat .nm { font-weight: 500; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lu-seat .sub { font-size: 12px; color: var(--text-2); }
+.lu-diff { width: 56px; text-align: center; font: 600 12px Inter, system-ui, sans-serif; color: var(--text-2); }

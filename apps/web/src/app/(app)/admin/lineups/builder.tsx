@@ -4,10 +4,10 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   autoFill, emptyLineup, getSeat, lineupPaddlerIds, lineupWarnings, placePaddler, removePaddler,
-  seatDifferenceKeys, seatedElsewhere, swapSeats, toMastersheet,
+  seatedElsewhere, swapSeats, toMastersheet,
   type BoatType, type Lineup, type Roster, type Seat,
 } from "@db/lineup";
-import BoatGrid, { type Sel } from "./boat-grid";
+import BoatCard, { type Sel } from "./boat-grid";
 import FileDialog, { type FilingGroup } from "./file-dialog";
 import { deleteLineupSet, fetchAttendees, saveLineupSet, type BoatInput } from "./actions";
 
@@ -56,7 +56,7 @@ export default function LineupBuilder({ setId, roster, groups, initialDays, init
   const [msg, setMsg] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [wholeTeam, setWholeTeam] = useState(false);
-  const [compareTo, setCompareTo] = useState<string | null>(null);
+  const [showDiffs, setShowDiffs] = useState(false);
   const [filing, setFiling] = useState(false);
   const [pending, start] = useTransition();
 
@@ -91,22 +91,34 @@ export default function LineupBuilder({ setId, roster, groups, initialDays, init
     ...lineupPaddlerIds(lineup).filter((pid) => elsewhere.has(pid)).map((pid) => `${roster[pid]?.name ?? pid} is also in ${elsewhere.get(pid)!.join(", ")}`),
   ], [lineup, roster, elsewhere]);
 
-  const diffKeys = useMemo(() => {
-    if (!compareTo || !boat) return undefined;
-    const other = days.find((d) => d.key === compareTo)?.boats.find((b) => b.name === boat.name);
-    return other ? seatDifferenceKeys(boat.lineup, other.lineup) : undefined;
-  }, [compareTo, days, boat]);
 
   // ---- mutation helpers -----------------------------------------------------
-  const setBoatLineup = (next: Lineup) =>
-    setDays((ds) => ds.map((d, i) => (i !== dayIdx ? d : { ...d, boats: d.boats.map((b) => (b.key === boat?.key ? { ...b, lineup: next } : b)) })));
-  const apply = (r: { lineup: Lineup; error?: string }) => { setError(r.error ?? null); if (!r.error) setBoatLineup(r.lineup); };
+  /** All boats of a day are on screen at once, so edits address a boat by key. */
+  const setLineupByKey = (key: string, next: Lineup) =>
+    setDays((ds) => ds.map((d, i) => (i !== dayIdx ? d : { ...d, boats: d.boats.map((b) => (b.key === key ? { ...b, lineup: next } : b)) })));
+  const setBoatLineup = (next: Lineup) => { if (boat) setLineupByKey(boat.key, next); };
+  const setBoatIdxByKey = (key: string) => {
+    const i = day.boats.findIndex((b) => b.key === key);
+    if (i >= 0 && i !== boatIdx) { setBoatIdx(i); setSel(null); }
+  };
+  const renameBoatByKey = (key: string, v: string) =>
+    setDays((ds) => ds.map((d, i) => (i !== dayIdx ? d : { ...d, boats: d.boats.map((b) => (b.key === key ? { ...b, name: v } : b)) })));
+  const removeBoatByKey = (key: string) => {
+    if (day.boats.length <= 1) return;
+    setDays((ds) => ds.map((d, i) => (i !== dayIdx ? d : { ...d, boats: d.boats.filter((b) => b.key !== key) })));
+    setBoatIdx(0); setSel(null);
+  };
+  const apply = (r: { lineup: Lineup; error?: string }, key: string) => { setError(r.error ?? null); if (!r.error) setLineupByKey(key, r.lineup); };
 
-  const clickSeat = (seat: Seat) => {
+  const clickSeat = (seat: Seat, key?: string) => {
+    const bKey = key ?? boat?.key;
+    if (!bKey) return;
+    const target = day.boats.find((b) => b.key === bKey)?.lineup ?? lineup;
+    const active = bKey === boat?.key ? sel : null; // selecting in another boat starts fresh
     setMsg(null);
-    if (!sel) { if (getSeat(lineup, seat)) setSel({ kind: "seat", seat }); return; }
-    if (sel.kind === "roster") { apply(placePaddler(lineup, seat, sel.id, roster, { soft })); setSel(null); return; }
-    apply(swapSeats(lineup, sel.seat, seat, roster, { soft })); setSel(null);
+    if (!active) { if (getSeat(target, seat)) setSel({ kind: "seat", seat }); return; }
+    if (active.kind === "roster") { apply(placePaddler(target, seat, active.id, roster, { soft }), bKey); setSel(null); return; }
+    apply(swapSeats(target, active.seat, seat, roster, { soft }), bKey); setSel(null);
   };
   const clickBench = (pid: string) => {
     setMsg(null);
@@ -129,12 +141,6 @@ export default function LineupBuilder({ setId, roster, groups, initialDays, init
   };
 
   const addBoat = () => setDays((ds) => ds.map((d, i) => (i !== dayIdx ? d : { ...d, boats: [...d.boats, newBoat(`Boat ${d.boats.length + 1}`, lineup.boatType)] })));
-  const removeBoat = () => {
-    if (day.boats.length <= 1 || !boat) return;
-    setDays((ds) => ds.map((d, i) => (i !== dayIdx ? d : { ...d, boats: d.boats.filter((b) => b.key !== boat.key) })));
-    setBoatIdx(0);
-  };
-  const renameBoat = (v: string) => setDays((ds) => ds.map((d, i) => (i !== dayIdx ? d : { ...d, boats: d.boats.map((b) => (b.key === boat?.key ? { ...b, name: v } : b)) })));
   const changeBoatType = (bt: BoatType) => setBoatLineup({ ...emptyLineup(bt), drummer: lineup.drummer, steer: lineup.steer });
 
   /** Copy this day's boats and seating onto another day — the usual "Sunday starts from Saturday". */
@@ -218,10 +224,6 @@ export default function LineupBuilder({ setId, roster, groups, initialDays, init
               <option value="">Copy {day.label} to…</option>
               {days.filter((d) => d.key !== day.key).map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
             </select>
-            <select value={compareTo ?? ""} onChange={(e) => setCompareTo(e.target.value || null)} className="input w-auto py-0.5 text-xs" title="Highlight seats that differ">
-              <option value="">Compare with…</option>
-              {days.filter((d) => d.key !== day.key).map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
-            </select>
           </>
         )}
       </div>
@@ -242,25 +244,41 @@ export default function LineupBuilder({ setId, roster, groups, initialDays, init
 
       <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
         <div className="space-y-3">
-          {/* boat tabs + per-boat toolbar */}
           <div className="card flex flex-wrap items-center gap-2 text-sm">
-            {day.boats.map((b, i) => (
-              <button key={b.key} type="button" onClick={() => { setBoatIdx(i); setSel(null); }}
-                className={`chip ${i === boatIdx ? "!bg-[var(--g-blue-tint)] font-medium" : ""}`}>{b.name}</button>
-            ))}
-            <button type="button" onClick={addBoat} className="btn-text py-0.5 text-xs">+ boat</button>
+            <span className="text-xs" style={{ color: "var(--g-grey-600)" }}>
+              Editing <b>{boat?.name ?? "—"}</b> · click a paddler then a seat
+            </span>
             <span className="flex-1" />
-            {boat && <input value={boat.name} onChange={(e) => renameBoat(e.target.value)} className="input w-32" title="Boat name" />}
             <select value={lineup.boatType} onChange={(e) => changeBoatType(e.target.value as BoatType)} className="input w-auto">
               <option value="open">Open</option><option value="mixed">Mixed</option><option value="womens">Women&apos;s</option>
             </select>
             <button type="button" onClick={fill} className="btn-secondary">Auto-fill</button>
-            <button type="button" onClick={() => setBoatLineup(emptyLineup(lineup.boatType))} className="btn-secondary">Clear</button>
             <button type="button" onClick={removeSelected} disabled={sel?.kind !== "seat"} className="btn-secondary">Unseat</button>
-            {day.boats.length > 1 && <button type="button" onClick={removeBoat} className="text-red-600 text-xs underline">Remove boat</button>}
+            <label className="flex items-center gap-1 text-xs" style={{ color: "var(--g-grey-600)" }}>
+              <input type="checkbox" checked={showDiffs} onChange={(e) => setShowDiffs(e.target.checked)} />row differences
+            </label>
+            <button type="button" onClick={addBoat} className="btn-secondary">+ Boat</button>
           </div>
 
-          <BoatGrid lineup={lineup} roster={roster} sel={sel} onClickSeat={clickSeat} diffKeys={diffKeys} />
+          {/* Boats sit side by side and scroll, like the standalone builder. */}
+          <div className="lu lu-boats">
+            {day.boats.map((b) => (
+              <div key={b.key} onPointerDownCapture={() => setBoatIdxByKey(b.key)}>
+                <BoatCard
+                  name={b.name}
+                  lineup={b.lineup}
+                  roster={roster}
+                  sel={boat?.key === b.key ? sel : null}
+                  onClickSeat={(s) => { setBoatIdxByKey(b.key); clickSeat(s, b.key); }}
+                  onRename={(v) => renameBoatByKey(b.key, v)}
+                  onClear={() => setLineupByKey(b.key, emptyLineup(b.lineup.boatType))}
+                  onRemove={() => removeBoatByKey(b.key)}
+                  canRemove={day.boats.length > 1}
+                  showDiffs={showDiffs}
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         <aside className="card space-y-2 self-start">
