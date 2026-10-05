@@ -8,7 +8,7 @@ import type { Feature, LineString } from "geojson";
 
 export type MapCar = { id: string; color: string; label: string; points: LatLon[]; route: OsrmRoute | null };
 
-// Free tiles from OpenFreeMap (no API key). Routes from public OSRM.
+// Free tiles from OpenFreeMap (no API key). Routes from lib/routing.ts (free OSRM / Valhalla / keyed fallbacks).
 const STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
 export default function RouteMap({ destination, cars }: { destination: Destination; cars: MapCar[] }) {

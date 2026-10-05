@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import {
-  addDriverToDirSet, assignCarpool, buildOsrmRouteUrl, carRoutePoints, discrepancies, groupNeedsRide,
-  locationKey, mirrorDirSet, parseOsrmRoute, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
+  addDriverToDirSet, assignCarpool, carRoutePoints, discrepancies, groupNeedsRide,
+  locationKey, mirrorDirSet, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
   removeFromDirSet, splitByCampus, upgradeCarpoolData,
   type CarpoolDataV2, type CarpoolGuest, type Destination, type MatchText, type OsrmRoute, type Rider,
 } from "@db/carpool";
-import { saveCarpool } from "./actions";
+import { routeCar, saveCarpool } from "./actions";
 import { CarGrid, DiyRow, SHEET, type DirKey, type GridHandlers } from "./car-grid";
 import { DiscrepancyTracker, FunFactPanel, TotalPanel } from "./side-panels";
 
@@ -138,8 +138,8 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
     setMsg("error" in r && r.error ? r.error : published ? "Saved & published to members" : "Saved draft");
   });
 
-  // OSRM routes for the GOING cars only — debounced, and only refetched for cars
-  // whose route points actually changed (public demo server; be gentle).
+  // Routes for the GOING cars only — debounced, and only refetched for cars whose
+  // route points actually changed (free, rate-limited servers; be gentle).
   const routeCache = useRef(new Map<string, { key: string; route: OsrmRoute | null }>());
   const goingCars = useMemo(() => [...data.going.onCampus, ...data.going.offCampus], [data.going]);
   const routeSig = useMemo(() => {
@@ -158,8 +158,7 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
         if (cached && cached.key === key) { next[c.id] = cached.route; continue; }
         if (pts.length < 2) { next[c.id] = null; routeCache.current.set(c.id, { key, route: null }); continue; }
         try {
-          const r = await fetch(buildOsrmRouteUrl(pts));
-          next[c.id] = parseOsrmRoute(await r.json());
+          next[c.id] = await routeCar(pts);
         } catch { next[c.id] = null; }
         routeCache.current.set(c.id, { key, route: next[c.id] });
         if (cancelled) return;
