@@ -63,7 +63,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
     ? { ...s, events: s.events.filter((e) => e.event_id !== eid), questions: s.questions.filter((q) => !(q.type === "day" && q.event_id === eid)) }
     : { ...s, events: [...s.events, { event_id: eid, prompt: null }], questions: [...s.questions, dayMarker(eid)] });
   const setPrompt = (eid: string, prompt: string) => set("events", f.events.map((e) => (e.event_id === eid ? { ...e, prompt: prompt || null } : e)));
-  const addQ = () => { const q: FormQuestion = { id: uid(), type: "single_choice", label: "", required: true, options: ["Option 1"] }; set("questions", [...f.questions, q]); setFocus(q.id); };
+  const addQ = () => { const q: FormQuestion = { id: uid(), type: "single_choice", label: "", required: false, options: ["Option 1"] }; set("questions", [...f.questions, q]); setFocus(q.id); };
   const updQ = (qid: string, patch: Partial<FormQuestion>) => set("questions", f.questions.map((q) => (q.id === qid ? { ...q, ...patch } : q)));
   const delQ = (qid: string) => set("questions", f.questions.filter((q) => q.id !== qid));
   const dupQ = (qid: string) => { const i = f.questions.findIndex((q) => q.id === qid); const c = { ...f.questions[i], id: uid() }; const a = [...f.questions]; a.splice(i + 1, 0, c); set("questions", a); setFocus(c.id); };
