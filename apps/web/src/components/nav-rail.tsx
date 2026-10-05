@@ -21,6 +21,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/events", label: "Events", icon: "calendarCheck", color: "var(--g-green)" },
   { href: "/admin/members", label: "Members", icon: "users", color: "#009688" },
   { href: "/admin/settings", label: "Settings", icon: "gear", color: "var(--g-grey-600)" },
+  { href: "/admin/status", label: "Status", icon: "pulse", color: "var(--g-red)" },
 ];
 
 export default function NavRail({ isAdmin }: { isAdmin: boolean }) {
