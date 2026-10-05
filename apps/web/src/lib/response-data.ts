@@ -6,12 +6,14 @@ import type { GridEvent } from "@/lib/response-grid";
  * (RLS client) and the Sheets sync (admin client) so the grids can't diverge. */
 export async function fetchResponseGridInput(supabase: SupabaseClient<Database>, form: Form) {
   const [{ data: links }, { data: responses }, { data: members }, { data: pickups }] = await Promise.all([
-    supabase.from("form_events").select("*, event:events(id, title, starts_at)").eq("form_id", form.id).order("sort_order"),
+    supabase.from("form_events").select("*, event:events(id, title, starts_at, kind)").eq("form_id", form.id).order("sort_order"),
     supabase.from("form_responses").select("*").eq("form_id", form.id),
     supabase.from("memberships").select("profile:profiles(*)").eq("org_id", form.org_id),
     supabase.from("pickup_locations").select("id, name").eq("org_id", form.org_id),
   ]);
-  const events = (links ?? []).map((l) => l.event).filter(Boolean) as GridEvent[];
+  // The day's own custom prompt (if the admin set one) rides along on the event, because
+  // it's what heads that day's column.
+  const events = (links ?? []).filter((l) => l.event).map((l) => ({ ...l.event, prompt: l.prompt })) as GridEvent[];
   const { data: rsvps } = events.length
     ? await supabase.from("rsvps").select("*").in("event_id", events.map((e) => e.id))
     : { data: [] as Rsvp[] };

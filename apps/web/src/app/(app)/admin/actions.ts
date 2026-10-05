@@ -9,6 +9,7 @@ import { cleanHtml } from "@/lib/html";
 import { disconnectGoogle } from "@/lib/google-sheets";
 import { createTeamCalendar, disconnectTeamCalendar, linkExistingCalendar, removeEventFromGoogle, syncEventToGoogle } from "@/lib/google-calendar";
 import { notifyEventPosted } from "@/lib/notifications";
+import { syncSheetsForMember } from "@/lib/sheet-sync";
 
 export type AdminState = { error?: string; ok?: boolean };
 
@@ -340,6 +341,7 @@ export async function updateMember(fd: FormData) {
     full_name: String(fd.get("full_name") ?? "").trim(), address: str(fd.get("address")), city: str(fd.get("city")), zipcode: str(fd.get("zipcode")),
     lat: optNum(fd.get("lat")), lon: optNum(fd.get("lon")), car_passengers: optNum(fd.get("car_passengers")) ?? 0, gender: (g as "male" | "female" | "other" | null), weight_lb: optNum(fd.get("weight_lb")),
   }).eq("id", String(fd.get("user_id")));
+  after(() => syncSheetsForMember(String(fd.get("user_id"))));
   revalidatePath("/admin/members");
 }
 

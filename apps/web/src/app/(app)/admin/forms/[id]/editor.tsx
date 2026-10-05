@@ -12,7 +12,9 @@ import RichEditor from "@/components/rich-editor";
 import RichText from "@/components/rich-text";
 import AttendanceFields from "@/components/attendance-fields";
 import ConfirmForm from "@/components/confirm-form";
+import { attendancePrompt } from "@/lib/attendance";
 import { htmlToText } from "@/lib/html";
+import { patternError, testPattern } from "@/lib/pattern";
 
 type EventOpt = { id: string; title: string; kind: string; starts_at: string; group_id: string | null };
 type GroupOpt = { id: string; name: string };
@@ -25,6 +27,8 @@ const TYPES: { value: QuestionType; label: string; icon: string }[] = [
   { value: "number", label: "Number", icon: "#" },
   { value: "info", label: "Info block (no answer)", icon: "¶" },
 ];
+/** Question types whose answer is free text, so an answer pattern means something. */
+const PATTERN_TYPES: QuestionType[] = ["short_text", "long_text", "number"];
 const uid = () => Math.random().toString(36).slice(2, 9);
 const toLocal = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "");
 
@@ -83,6 +87,10 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
   });
 
   const isTemplate = f.status === "template";
+  // The label as plain text is exactly what heads this question's column in the sheet,
+  // so a pass here means a parser reading that header will match too.
+  const promptMismatch = (q: FormQuestion) => !!q.prompt_pattern && !testPattern(q.prompt_pattern, htmlToText(q.label));
+  const mismatches = f.questions.filter(promptMismatch).length;
   const statusChip = { draft: ["Draft", "var(--g-grey-100)", "var(--g-grey-600)"], open: ["Accepting responses", "var(--g-green-soft)", "var(--g-green)"], closed: ["Closed", "#fef7e0", "#b06000"], template: ["Template", "var(--g-purple-soft)", "var(--g-purple)"] }[f.status];
 
   return (
@@ -98,6 +106,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
       </div>
       {isTemplate && <p className="rounded bg-white/70 p-2 text-center text-xs" style={{ color: "var(--g-grey-600)" }}>Template — edits here change how new forms start when an admin picks this card. Days are added on each form, not on the template.</p>}
       {msg && <p className="text-xs text-center" style={{ color: "var(--g-green)" }}>{msg}</p>}
+      {mismatches > 0 && <p className="rounded p-2 text-center text-xs" style={{ background: "var(--g-yellow-soft)", color: "#b06000" }}>⚠ {mismatches} question{mismatches > 1 ? "s don’t" : " doesn’t"} match the wording rule {mismatches > 1 ? "they carry" : "it carries"} — anything reading the Google Sheet’s column headers may miss {mismatches > 1 ? "them" : "it"}. You can still save.</p>}
 
       {/* header card */}
       <div className="gf-header space-y-2">
@@ -141,7 +150,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
                 <span>{ev.title}</span><span className={`text-[10px] ${groupName ? "" : "uppercase"}`} style={{ color: "var(--g-grey-600)" }}>{groupName ?? ev.kind}</span>
                 <span className="ml-auto text-xs" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={ev.starts_at} /></span>
               </label>
-              {on && <input value={on.prompt ?? ""} onChange={(e) => setPrompt(ev.id, e.target.value)} placeholder={`Custom prompt (default: “Will you be attending ${ev.title}?”)`} className="input-line ml-9 w-[calc(100%-2.25rem)] text-xs" />}
+              {on && <input value={on.prompt ?? ""} onChange={(e) => setPrompt(ev.id, e.target.value)} placeholder={`Custom prompt (default: “${attendancePrompt(null, ev)}”)`} className="input-line ml-9 w-[calc(100%-2.25rem)] text-xs" />}
             </div>
           );
         })}
@@ -184,7 +193,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
                 <div className="flex flex-1 items-baseline gap-2 text-base">
                   <Icon name={dayIdx % 2 ? "moon" : "sun"} />
                   <input value={fe.prompt ?? ""} onChange={(e) => setPrompt(fe.event_id, e.target.value)}
-                    placeholder={`Will you be attending ${ev?.title ?? "this day"}?`} className="input-line flex-1 text-base" />
+                    placeholder={ev ? attendancePrompt(null, ev) : "Will you be attending this day?"} className="input-line flex-1 text-base" />
                   <span className="gf-required">*</span>
                 </div>
                 <span className="flex items-center gap-1">
@@ -214,7 +223,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
                     : <span className="text-base" style={{ color: "var(--g-grey-600)" }}>{q.type === "info" ? "Title (optional)" : "Question"}</span>}
               </div>
               {active && (
-                <select value={q.type} onChange={(e) => updQ(q.id, { type: e.target.value as QuestionType, options: ["single_choice", "multi_choice"].includes(e.target.value) ? (q.options?.length ? q.options : ["Option 1"]) : undefined, ...(e.target.value === "info" ? { required: false } : {}) })} className="input w-48">
+                <select value={q.type} onChange={(e) => updQ(q.id, { type: e.target.value as QuestionType, ...(PATTERN_TYPES.includes(e.target.value as QuestionType) ? {} : { answer_pattern: undefined, answer_error: undefined }), options: ["single_choice", "multi_choice"].includes(e.target.value) ? (q.options?.length ? q.options : ["Option 1"]) : undefined, ...(e.target.value === "info" ? { required: false } : {}) })} className="input w-48">
                   {TYPES.map((x) => <option key={x.value} value={x.value}>{x.icon} {x.label}</option>)}
                 </select>
               )}
@@ -222,6 +231,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
             {active && <RichEditor value={q.help ?? ""} onChange={(html) => updQ(q.id, { help: html || undefined })} minRows={q.type === "info" ? 5 : 2} placeholder={q.type === "info" ? "Write the info members will read — headings, bullets and links work" : "Description (optional)"} className={q.type === "info" ? "" : "text-xs"} />}
             {!active && q.help && <RichText text={q.help} className={q.type === "info" ? "" : "!text-xs"} />}
             {q.type === "info" && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>Read-only info card — members don’t answer anything here.</p>}
+            {promptMismatch(q) && <p className="text-xs" style={{ color: "#b06000" }}>⚠ This wording doesn’t match its rule <code>{q.prompt_pattern}</code>.</p>}
 
             {(q.type === "single_choice" || q.type === "multi_choice") && (
               <div className="space-y-1">
@@ -248,6 +258,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
                 {q.type !== "info" && <label className="flex items-center gap-2 text-xs"><span>Required</span><input type="checkbox" checked={!!q.required} onChange={(e) => updQ(q.id, { required: e.target.checked })} className="accent-[var(--g-purple)] w-4 h-4" /></label>}
               </div>
             )}
+            {active && q.type !== "info" && <Validation q={q} onChange={(patch) => updQ(q.id, patch)} />}
           </div>
         );
       })}
@@ -261,6 +272,51 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         <ConfirmForm action={deleteForm} message={`Delete “${f.title || "this form"}” and all its responses? This can’t be undone.`}><input type="hidden" name="id" value={id} /><button className="btn-danger-text">Delete form</button></ConfirmForm>
         <span style={{ color: "var(--g-grey-600)" }}>Members get name / weight / phone / address from their profile automatically.</span>
       </div>
+    </div>
+  );
+}
+
+/** Regex rules for one question: what its answer must look like, and what its own
+ * wording must keep saying. Opens by itself when a rule is already set. */
+function Validation({ q, onChange }: { q: FormQuestion; onChange: (patch: Partial<FormQuestion>) => void }) {
+  const hasRule = !!(q.answer_pattern || q.prompt_pattern);
+  const [open, setOpen] = useState(hasRule);
+  return (
+    <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)} className="text-xs">
+      <summary className="cursor-pointer select-none" style={{ color: "var(--g-grey-600)" }}>Validation{hasRule ? " (on)" : ""}</summary>
+      <div className="mt-2 space-y-3">
+        <p style={{ color: "var(--g-grey-600)" }}>Patterns are regular expressions, written bare or as <code>/pattern/flags</code> (flags: i, m, s, u). They match anywhere in the text — wrap in <code>^…$</code> to require the whole thing.</p>
+        {PATTERN_TYPES.includes(q.type) && <>
+          <PatternField label="Answer must match" value={q.answer_pattern} onChange={(v) => onChange({ answer_pattern: v })} />
+          {q.answer_pattern && <div><label className="label">Error message shown to members</label>
+            <input value={q.answer_error ?? ""} onChange={(e) => onChange({ answer_error: e.target.value || undefined })} placeholder={`“${htmlToText(q.label) || "This question"}” isn’t in the expected format.`} className="input-line w-full" /></div>}
+        </>}
+        <PatternField label="Question wording must match" hint="Carried into every form made from this one. A mismatch warns but never blocks saving." value={q.prompt_pattern} onChange={(v) => onChange({ prompt_pattern: v })} sample={htmlToText(q.label)} />
+      </div>
+    </details>
+  );
+}
+
+/** One pattern input with its compile error and a sample to try it against. `sample`
+ * seeds the tester (the question's wording, for the wording rule). */
+function PatternField({ label, hint, value, onChange, sample: seed = "" }: { label: string; hint?: string; value?: string; onChange: (v: string | undefined) => void; sample?: string }) {
+  const [sample, setSample] = useState<string | null>(null);
+  const text = sample ?? seed;
+  const err = patternError(value);
+  return (
+    <div className="space-y-1">
+      <label className="label">{label}</label>
+      <input value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)} placeholder="e.g. /^\d{3}-\d{4}$/" className="input-line w-full font-mono" spellCheck={false} />
+      {hint && <p style={{ color: "var(--g-grey-600)" }}>{hint}</p>}
+      {err && <p style={{ color: "var(--g-red)" }}>{err}</p>}
+      {value && !err && (
+        <div className="flex items-center gap-2">
+          <input value={text} onChange={(e) => setSample(e.target.value)} placeholder="Try a sample…" className="input-line flex-1" />
+          {text && (testPattern(value, text)
+            ? <span style={{ color: "var(--g-green)" }}>✓ matches</span>
+            : <span style={{ color: "var(--g-red)" }}>✗ no match</span>)}
+        </div>
+      )}
     </div>
   );
 }

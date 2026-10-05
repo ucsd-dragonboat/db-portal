@@ -18,4 +18,13 @@ export const fmtDateTime = (iso: string, tz: string | undefined = TEAM_TZ) => ne
 export const fmtSortable = (iso: string, tz: string | undefined = TEAM_TZ) =>
   new Date(iso).toLocaleString("sv-SE", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 export const fmtDate = (iso: string, tz: string | undefined = TEAM_TZ) => new Date(iso).toLocaleDateString(undefined, { ...d, timeZone: tz });
+
+/** "Saturday" / "10/10" for the attendance prompt. Locale is pinned to en-US — unlike
+ * the display helpers above, which pass undefined to follow the viewer — because this
+ * wording becomes a Google Sheets column header that gets matched by a regex, and it
+ * must not drift with whatever locale the server happens to run under. */
+export const fmtWeekday = (iso: string, tz: string | undefined = TEAM_TZ) =>
+  new Date(iso).toLocaleDateString("en-US", { weekday: "long", timeZone: tz });
+export const fmtMonthDay = (iso: string, tz: string | undefined = TEAM_TZ) =>
+  new Date(iso).toLocaleDateString("en-US", { month: "numeric", day: "numeric", timeZone: tz });
 export const fmtTime = (iso: string, tz: string | undefined = TEAM_TZ) => new Date(iso).toLocaleTimeString(undefined, { ...t, timeZone: tz });
