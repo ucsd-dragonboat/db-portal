@@ -2,11 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import type { FormQuestion, Json } from "@/lib/database.types";
 import { cleanHtml, isHtml } from "@/lib/html";
 import { defaultSheetColumns } from "@/lib/google-sheets";
+import { syncFormToSheet } from "@/lib/sheet-sync";
 
 /** Start a form from a template. "practice" = the automatic weight question is on; "blank" = custom questions only. */
 export async function createForm(fd: FormData) {
@@ -87,6 +89,8 @@ export async function saveForm(id: string, p: FormPayload) {
       .insert(p.events.map((e, i) => ({ form_id: id, event_id: e.event_id, prompt: e.prompt, sort_order: i })));
     if (e2) return { error: e2.message };
   }
+  // Labels and linked days are the sheet's header row. No-op when no sheet is linked.
+  after(() => syncFormToSheet(id));
   revalidatePath(`/admin/forms/${id}`); revalidatePath("/admin/forms"); revalidatePath("/forms"); revalidatePath("/dashboard");
   return { ok: true };
 }

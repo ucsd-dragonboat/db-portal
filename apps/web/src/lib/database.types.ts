@@ -208,6 +208,14 @@ export type FormQuestion = {
   required?: boolean;
   options?: string[];
   event_id?: string; // type "day" only: position marker for that day's attendance question
+  /** The answer has to match this regex. See lib/pattern.ts for the accepted forms. */
+  answer_pattern?: string;
+  /** What the member is told when answer_pattern fails. */
+  answer_error?: string;
+  /** The question's own wording has to match this regex. Set on a template and carried
+   * into every form made from it, so a question whose text is read downstream — a
+   * Google Sheets column header, say — can't be reworded into something unrecognisable. */
+  prompt_pattern?: string;
 };
 
 export type Form = {

@@ -6,6 +6,7 @@ import { parseAttendance } from "@/lib/attendance";
 import { notifyFormSubmitted } from "@/lib/notifications";
 import type { Database, FormQuestion, Json } from "@/lib/database.types";
 import { cleanHtml, htmlToText } from "@/lib/html";
+import { testPattern } from "@/lib/pattern";
 
 export type SubmitState = { error?: string; saved?: boolean };
 
@@ -50,6 +51,12 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
     else val = String(fd.get(key) ?? "").trim() || null;
     const empty = val === null || (Array.isArray(val) && !val.length);
     if (q.required && empty) return { error: `"${htmlToText(q.label)}" is required.` };
+    if (!empty && q.answer_pattern && ["short_text", "long_text", "number"].includes(q.type)) {
+      // Paragraph answers are stored as HTML — match the text the member typed, not the tags.
+      const text = q.type === "long_text" ? htmlToText(val as string) : String(val);
+      if (!testPattern(q.answer_pattern, text))
+        return { error: q.answer_error?.trim() || `"${htmlToText(q.label)}" isn't in the expected format.` };
+    }
     answers[q.id] = val;
   }
   const { error } = await supabase.from("form_responses").upsert({ form_id: formId, user_id: user.id, answers, submitted_at: new Date().toISOString() });

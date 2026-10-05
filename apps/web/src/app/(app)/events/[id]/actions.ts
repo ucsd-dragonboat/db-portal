@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { parseAttendance } from "@/lib/attendance";
 import { notifyEventSignup } from "@/lib/notifications";
+import { syncSheetsForEvent } from "@/lib/sheet-sync";
 
 export type RsvpState = { error?: string; saved?: boolean };
 
@@ -18,6 +19,7 @@ export async function submitRsvp(_: RsvpState, formData: FormData): Promise<Rsvp
   const { error } = await supabase.from("rsvps").upsert({ event_id: eventId, user_id: user.id, ...values });
   if (error) return { error: error.message };
   after(() => notifyEventSignup(eventId, user.id, values.status, values.ride));
+  after(() => syncSheetsForEvent(eventId));
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/events");
   return { saved: true };

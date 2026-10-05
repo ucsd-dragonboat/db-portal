@@ -11,6 +11,7 @@ const RichEditor = dynamic(() => import("@/components/rich-editor"), {
 });
 import { submitForm, type SubmitState } from "./actions";
 import AttendanceFields from "@/components/attendance-fields";
+import { attendancePrompt } from "@/lib/attendance";
 import LocalTime from "@/components/local-time";
 import type { Event, FormQuestion, PickupLocation, Rsvp } from "@/lib/database.types";
 import Icon from "@/components/icon";
@@ -66,7 +67,7 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
           const { event, prompt } = it.day;
           dayIdx += 1;
           return (
-            <Q key={event.id} required title={prompt || <><Icon name={dayIdx % 2 ? "moon" : "sun"} /> Will you be attending {event.title}?</>}
+            <Q key={event.id} required title={prompt || <><Icon name={dayIdx % 2 ? "moon" : "sun"} /> {attendancePrompt(null, event)}</>}
               meta={<><LocalTime iso={event.starts_at} />{event.location_name && <> · <Icon name="pin" /> {event.location_name}</>}</>} help={event.notes ?? undefined}>
               <AttendanceFields prefix={`ev_${event.id}_`} existing={rsvpBy[event.id] ?? null} pickups={pickups} defaultSeats={defaultSeats} />
             </Q>

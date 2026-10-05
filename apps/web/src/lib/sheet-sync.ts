@@ -21,6 +21,25 @@ export async function syncFormToSheet(formId: string): Promise<void> {
   }
 }
 
+/** Re-sync every sheet-linked form that shows this day's attendance. Goes through
+ * form_events because an RSVP made on the event page carries no form_id. */
+export async function syncSheetsForEvent(eventId: string): Promise<void> {
+  const { data } = await createAdminClient().from("form_events").select("form:forms(id, sheet_spreadsheet_id)").eq("event_id", eventId);
+  await syncLinked((data ?? []).map((r) => r.form));
+}
+
+/** Re-sync every sheet-linked form this member is a row in — the grid only has rows for
+ * members who responded, so their responses are exactly the forms that can change. */
+export async function syncSheetsForMember(userId: string): Promise<void> {
+  const { data } = await createAdminClient().from("form_responses").select("form:forms(id, sheet_spreadsheet_id)").eq("user_id", userId);
+  await syncLinked((data ?? []).map((r) => r.form));
+}
+
+async function syncLinked(forms: ({ id: string; sheet_spreadsheet_id: string | null } | null)[]) {
+  const ids = new Set(forms.filter((f) => f?.sheet_spreadsheet_id).map((f) => f!.id));
+  await Promise.all([...ids].map(syncFormToSheet));
+}
+
 /** Find the form's tab by stored gid; create it (with the form's current title) when absent. */
 async function resolveTab(token: string, form: Form): Promise<{ sheetId: number; title: string }> {
   const tabs = await getSheetTabs(token, form.sheet_spreadsheet_id!);

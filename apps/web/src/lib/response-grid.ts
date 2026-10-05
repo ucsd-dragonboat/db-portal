@@ -1,11 +1,13 @@
-import { toChoice, ATTENDANCE_OPTIONS } from "@/lib/attendance";
+import { toChoice, ATTENDANCE_OPTIONS, attendancePrompt } from "@/lib/attendance";
 import { htmlToText } from "@/lib/html";
 import { fmtSortable } from "@/lib/format";
 import type { Form, FormQuestion, FormResponse, Profile, Rsvp } from "@/lib/database.types";
 
 const choiceLabel = Object.fromEntries(ATTENDANCE_OPTIONS.map((o) => [o.value, o.label.replace(/ [^\w\s]+$/u, "")]));
 
-export type GridEvent = { id: string; title: string; starts_at: string };
+/** `prompt` and `kind` are here so the day's column header can be the attendance
+ * question itself, not just the day's title. */
+export type GridEvent = { id: string; title: string; starts_at: string; kind: string; prompt: string | null };
 
 /** One stored answer → display text (arrays joined, booleans Yes/No, HTML flattened). */
 export function flattenAnswer(a: unknown): string {
@@ -51,7 +53,9 @@ export function buildResponseGrid(input: {
     const r = respBy.get(uid);
     return !!dueAt && !!r && new Date(r.first_submitted_at ?? r.submitted_at) > dueAt;
   };
-  const header = ["Name", "Email", "Weight (lb)", "Phone", ...events.map((e) => e.title), ...questions.map((q) => htmlToText(q.label)), "Submitted", "On time"];
+  // Day columns are headed by the attendance question as the member saw it, and custom
+  // columns by the question's own text — so a sheet's header row reads like the form.
+  const header = ["Name", "Email", "Weight (lb)", "Phone", ...events.map((e) => attendancePrompt(e.prompt, e)), ...questions.map((q) => htmlToText(q.label)), "Submitted", "On time"];
   const rows: (string | number)[][] = responded.map((p) => [p.full_name, p.email, p.weight_lb ?? "", p.phone ?? "", ...events.map((e) => rideCell(rsvpBy.get(`${e.id}:${p.id}`))), ...questions.map((q) => ansCell(p.id, q)), fmtSortable(respBy.get(p.id)!.submitted_at), dueAt ? (isLate(p.id) ? "Late" : "On time") : ""]);
   const lateFlags = responded.map((p) => isLate(p.id));
 
