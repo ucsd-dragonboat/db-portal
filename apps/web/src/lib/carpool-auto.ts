@@ -1,16 +1,14 @@
 // Auto-generates a draft carpool for one event from its RSVPs — the server-side
 // twin of the admin builder's Optimize button, upgraded with real drive times:
-// one OSRM `table` request gives the time+distance matrix between every home,
+// one routing `table` request (lib/routing.ts) gives the time+distance matrix between every home,
 // pickup point, and the destination, and `optimizeCarpool` local-searches for
 // the cheapest assignment. Called by the /api/cron/carpools route after a
 // form's due date passes.
 
 import {
-  buildOsrmTableUrl,
   locationKey,
   mirrorDirSet,
   optimizeCarpool,
-  parseOsrmTable,
   splitByCampus,
   DEFAULT_CARPOOL_HEADER,
   DEFAULT_COLLEGE_KEYWORDS,
@@ -24,6 +22,7 @@ import {
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { Json, Profile, Rsvp } from "@/lib/database.types";
 import { riderFromRsvp } from "@/lib/riders";
+import { driveMatrix } from "@/lib/routing";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -33,19 +32,6 @@ export type GenerateResult =
   | { error: string };
 
 const EMPTY_MATRIX: CostMatrix = { index: new Map(), durationMin: [], distanceKm: [] };
-
-async function fetchMatrix(points: LatLon[]): Promise<CostMatrix> {
-  try {
-    const res = await fetch(buildOsrmTableUrl(points), {
-      headers: { "User-Agent": "db-portal-carpool" },
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!res.ok) return EMPTY_MATRIX;
-    return parseOsrmTable(points, await res.json()) ?? EMPTY_MATRIX;
-  } catch {
-    return EMPTY_MATRIX; // optimizeCarpool falls back to haversine estimates
-  }
-}
 
 export async function generateCarpoolForEvent(
   supabase: AdminClient,
@@ -95,7 +81,7 @@ export async function generateCarpoolForEvent(
   }
   points.push({ lat: destination.lat, lon: destination.lon });
 
-  const matrix = await fetchMatrix(points);
+  const matrix = (await driveMatrix(points)) ?? EMPTY_MATRIX; // empty: optimizeCarpool falls back to haversine
   const res = optimizeCarpool(cars, riders, destination, matrix);
 
   // v2 sheet: optimized cars into Going split by campus keyword; Back starts as a

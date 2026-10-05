@@ -41,5 +41,7 @@ export {
 export type { OsrmRoute } from './routing'
 export { buildOsrmTableUrl, parseOsrmTable, optimizeCarpool } from './optimize'
 export type { CostMatrix, OptimizeOptions } from './optimize'
+export { ROUTE_PROVIDERS, MATRIX_PROVIDERS, decodePolyline } from './providers'
+export type { HttpRequest, ProviderKeys, RouteProvider, MatrixProvider } from './providers'
 export { computeDriverStats, computePairStats } from './stats'
 export type { Trip, DriverStats, PairStat } from './stats'
