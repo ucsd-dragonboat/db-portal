@@ -56,6 +56,13 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
       <input type="hidden" name="form_id" value={formId} />
       {header}
 
+      {events.length > 0 && (
+        <Q title={<><Icon name="house" /> Different address just for these rides?</>}
+          help="Optional. If you're driving from or need picking up somewhere other than your profile address this time, enter it once here — it applies to every day below where you chose your home address. Your profile isn't changed.">
+          <input name="ride_address" placeholder="Street address and city (leave blank to use your home address)" className="input-line w-full" />
+        </Q>
+      )}
+
       {askWeight && (
         <Q title={<><Icon name="weight" /> What&apos;s your current weight? (lb)</>} help="Coaches need this to make lineups. Leave as-is if unchanged — saved to your profile.">
           <input name="weight_lb" type="number" step="0.1" min={60} max={450} defaultValue={weightLb ?? ""} placeholder="Your answer" className="input-line w-1/2" />
@@ -99,6 +106,7 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
       })}
 
       {state.error && <p className="text-sm" style={{ color: "var(--g-red)" }}>{state.error}</p>}
+      {state.warning && <p className="text-sm" style={{ color: "#b06000" }}>{state.warning}</p>}
       {state.saved && <div className="gf-card text-sm"><Icon name="yes" /> Your response has been recorded. You can resubmit any time before the form closes — the latest one counts.</div>}
       <div className="flex items-center justify-between pt-1">
         <button disabled={pending} className="btn-purple">{pending ? "Submitting…" : submittedAt ? "Update response" : "Submit"}</button>

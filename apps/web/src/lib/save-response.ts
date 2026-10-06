@@ -7,8 +7,9 @@ import { notifyFormSubmitted } from "@/lib/notifications";
 import type { Database, FormQuestion, Json } from "@/lib/database.types";
 import { cleanHtml, htmlToText } from "@/lib/html";
 import { testPattern } from "@/lib/pattern";
+import { attachPickupCoords, notFoundWarning } from "@/lib/geocode";
 
-export type SubmitState = { error?: string; saved?: boolean };
+export type SubmitState = { error?: string; saved?: boolean; warning?: string };
 
 /** Validates and saves weight / attendance / answers for `userId` using their own (RLS-scoped) client. */
 export async function saveResponse(supabase: SupabaseClient<Database>, userId: string, fd: FormData): Promise<SubmitState> {
@@ -26,15 +27,22 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
   if (w) await supabase.from("profiles").update({ weight_lb: Number(w) }).eq("id", user.id);
 
   // 2. per-event attendance → rsvps (validate all, then one batched upsert)
-  const rsvpRows = [];
+  // A ride-only address typed once at the top applies to every day where the member
+  // is driving or riding from "home" — a per-day address or pickup spot still wins.
+  const rideAddress = String(fd.get("ride_address") ?? "").trim();
+  const parsed = [];
   for (const l of links ?? []) {
     const v = parseAttendance(fd, `ev_${l.event_id}_`);
     if (!v) return { error: "Please answer every attendance question." };
-    rsvpRows.push({ event_id: l.event_id, user_id: user.id, form_id: formId, ...v });
+    if (rideAddress && (v.ride === "driver" || v.ride === "needs_ride") && !v.pickup_address && !v.pickup_location_id) v.pickup_address = rideAddress;
+    parsed.push({ event_id: l.event_id, user_id: user.id, form_id: formId, ...v });
   }
-  if (rsvpRows.length) {
+  let warning: string | undefined;
+  if (parsed.length) {
+    const { rows: rsvpRows, notFound } = await attachPickupCoords(supabase, user.id, parsed);
+    warning = notFoundWarning(notFound);
     const { error } = await supabase.from("rsvps").upsert(rsvpRows);
-    if (error) return { error: error.message };
+    if (error) return { error: error.message.includes("pickup_lat") ? "Run migration 0029_rsvp_pickup_coords.sql first" : error.message };
   }
 
   // 3. custom answers
@@ -67,5 +75,5 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
   after(() => notifyFormSubmitted(form.org_id, formId, userId, form.title));
 
   revalidatePath(`/forms/${formId}`); revalidatePath("/forms"); revalidatePath("/events"); revalidatePath("/dashboard");
-  return { saved: true };
+  return { saved: true, warning };
 }

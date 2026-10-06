@@ -194,6 +194,9 @@ export type Rsvp = {
   seats: number | null;
   pickup_location_id: string | null;
   pickup_address: string | null;
+  /** Geocoded pickup_address — null when blank or not found (migration 0029). */
+  pickup_lat: number | null;
+  pickup_lon: number | null;
   note: string | null;
   form_id: string | null;
   updated_at: string;
@@ -414,7 +417,7 @@ export type Database = {
       };
       rsvps: {
         Row: Row<Rsvp>;
-        Insert: Insert<Rsvp, "ride" | "seats" | "pickup_location_id" | "pickup_address" | "note" | "form_id" | "updated_at">;
+        Insert: Insert<Rsvp, "ride" | "seats" | "pickup_location_id" | "pickup_address" | "pickup_lat" | "pickup_lon" | "note" | "form_id" | "updated_at">;
         Update: Partial<Rsvp>;
         Relationships: [
           { foreignKeyName: "rsvps_event_id_fkey"; columns: ["event_id"]; isOneToOne: false; referencedRelation: "events"; referencedColumns: ["id"] },
