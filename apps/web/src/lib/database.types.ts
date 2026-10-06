@@ -27,6 +27,20 @@ export type Profile = {
   updated_at: string;
 };
 
+/** One run of the carpool algorithm (cron or an admin's Optimize) — migration 0031. */
+export type CarpoolRun = {
+  id: string;
+  org_id: string;
+  event_id: string;
+  carpool_id: string | null;
+  trigger: "cron" | "manual";
+  status: "queued" | "running" | "done" | "skipped" | "error";
+  detail: string | null;
+  provider: string | null;
+  started_at: string;
+  finished_at: string | null;
+};
+
 export type CarpoolTrip = {
   id: string;
   org_id: string;
@@ -446,6 +460,12 @@ export type Database = {
           { foreignKeyName: "carpools_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
           { foreignKeyName: "carpools_event_id_fkey"; columns: ["event_id"]; isOneToOne: false; referencedRelation: "events"; referencedColumns: ["id"] },
         ];
+      };
+      carpool_runs: {
+        Row: Row<CarpoolRun>;
+        Insert: Insert<CarpoolRun, "id" | "carpool_id" | "detail" | "provider" | "started_at" | "finished_at">;
+        Update: Partial<CarpoolRun>;
+        Relationships: [];
       };
       carpool_trips: {
         Row: Row<CarpoolTrip>;

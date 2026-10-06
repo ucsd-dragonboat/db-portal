@@ -48,7 +48,7 @@ const OPTIONAL_ENV: [string, string][] = [
 const TABLES: (keyof Database["public"]["Tables"])[] = [
   "profiles", "pending_members", "organizations", "memberships", "announcements", "saved_locations", "pickup_locations",
   "user_calendar_tokens", "user_google_tokens", "google_calendar_sync", "event_folders", "event_groups", "events", "forms",
-  "form_events", "form_responses", "rsvps", "lineups", "carpools", "carpool_trips", "notification_prefs",
+  "form_events", "form_responses", "rsvps", "lineups", "carpools", "carpool_trips", "carpool_runs", "notification_prefs",
 ];
 
 // ---- Google ----
@@ -328,6 +328,19 @@ const CHECKS: Check[] = [
     },
   },
 
+  {
+    id: "cron.lastRun", group: "Auto-carpool", label: "Last carpool algorithm run", description: "The newest auto-carpool or Optimize run, and whether any past-due form is still waiting for the cron.",
+    async run(ctx) {
+      const admin = createAdminClient();
+      const { data: r, error } = await admin.from("carpool_runs")
+        .select("trigger, status, detail, provider, started_at").eq("org_id", ctx.orgId).order("started_at", { ascending: false }).limit(1).maybeSingle();
+      if (error) return fail(error.message.includes("carpool_runs") ? "Run migration 0031_carpool_runs.sql first." : error.message);
+      const { data: waiting } = await admin.from("forms").select("id, due_at").eq("org_id", ctx.orgId).in("status", ["open", "closed"]).not("due_at", "is", null).lt("due_at", new Date(Date.now() - 30 * 60000).toISOString()).is("carpools_generated_at", null);
+      const lastText = r ? `Last: ${r.trigger} ${r.status} at ${new Date(r.started_at).toLocaleString("en-US")}${r.detail ? ` (${r.detail})` : ""}${r.provider ? ` via ${r.provider}` : ""}.` : "No runs recorded yet.";
+      if (waiting?.length) return warn(`${waiting.length} form(s) past due for 30+ min but not processed — is the Supabase pg_cron job (migration 0014) pointed at this site with the right CRON_SECRET? ${lastText}`);
+      return r?.status === "error" ? warn(lastText) : ok(lastText);
+    },
+  },
   ...routingChecks,
   {
     id: "geocode.nominatim", group: "Maps", label: "Geocoding · Nominatim", description: "Looks up an address (used when a member saves a new home address).",
