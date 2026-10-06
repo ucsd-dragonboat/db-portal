@@ -30,6 +30,12 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
         <div className="ml-2 mt-3 pl-3 border-l-2 text-sm space-y-1" style={{ borderColor: "var(--g-purple)" }}>
           <div className="font-medium">How many can you drive (excluding you)?</div>
           <input name={`${prefix}seats`} type="number" min={1} max={14} required defaultValue={existing?.seats ?? (defaultSeats ? defaultSeats : 3)} className="input-line w-40" />
+          <div className="font-medium pt-2"><Icon name="house" /> Where are you driving from?</div>
+          <select name={`${prefix}pickup`} value={pickup === "other" ? "other" : "home"} onChange={(e) => setPickup(e.target.value)} className="input">
+            <option value="home">My home address (from my profile)</option>
+            <option value="other">Somewhere else this time…</option>
+          </select>
+          {pickup === "other" && <input name={`${prefix}pickup_address`} defaultValue={existing?.pickup_address ?? ""} placeholder="Street address and city" className="input-line" required />}
         </div>
       )}
       {choice === "yes_needs_ride" && (
@@ -40,7 +46,7 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
             {pickups.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             <option value="other">Other…</option>
           </select>
-          {pickup === "other" && <input name={`${prefix}pickup_address`} defaultValue={existing?.pickup_address ?? ""} placeholder="Address, complex name, or house acronym" className="input-line" required />}
+          {pickup === "other" && <input name={`${prefix}pickup_address`} defaultValue={existing?.pickup_address ?? ""} placeholder="Address, complex name, or house acronym — just for this ride" className="input-line" required />}
         </div>
       )}
       {showNote && <input name={`${prefix}note`} defaultValue={existing?.note ?? ""} placeholder="Note (optional, e.g. arriving late)" className="input-line mt-3 text-sm" />}

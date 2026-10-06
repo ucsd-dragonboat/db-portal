@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { regenerateCalendarToken } from "@/lib/calendar-token";
 import { syncSheetsForMember } from "@/lib/sheet-sync";
-import { buildNominatimSearchUrl, parseNominatimResult } from "@db/carpool";
+import { geocode } from "@/lib/geocode";
 
 export type ProfileState = { error?: string; saved?: boolean; geocoded?: boolean };
 
@@ -25,14 +25,8 @@ export async function saveProfile(_: ProfileState, formData: FormData): Promise<
 
   // Geocode via Nominatim only when the address changed (free API, 1 req/s policy).
   if (address && full !== prevFull) {
-    try {
-      const res = await fetch(buildNominatimSearchUrl(full), {
-        headers: { "User-Agent": "db-team-portal (contact via app admin)" },
-      });
-      const loc = parseNominatimResult(await res.json());
-      if (loc) { lat = loc.lat; lon = loc.lon; geocoded = true; }
-      else { lat = null; lon = null; }
-    } catch { lat = null; lon = null; }
+    const loc = await geocode(full);
+    lat = loc?.lat ?? null; lon = loc?.lon ?? null; geocoded = !!loc;
   } else if (!address) { lat = null; lon = null; }
 
   const { error } = await supabase.from("profiles").update({

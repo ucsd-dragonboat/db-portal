@@ -15,6 +15,7 @@ export default function RsvpForm({ eventId, existing, defaultSeats, pickups }: {
       <AttendanceFields prefix="a_" existing={existing} pickups={pickups} defaultSeats={defaultSeats} />
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
       {state.saved && <p className="text-sm text-green-700">Saved!</p>}
+      {state.warning && <p className="text-sm" style={{ color: "#b06000" }}>{state.warning}</p>}
       <button disabled={pending} className="btn-purple">{existing ? "Update RSVP" : "Submit RSVP"}</button>
     </form>
   );

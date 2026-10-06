@@ -6,8 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { parseAttendance } from "@/lib/attendance";
 import { notifyEventSignup } from "@/lib/notifications";
 import { syncSheetsForEvent } from "@/lib/sheet-sync";
+import { attachPickupCoords, notFoundWarning } from "@/lib/geocode";
 
-export type RsvpState = { error?: string; saved?: boolean };
+export type RsvpState = { error?: string; saved?: boolean; warning?: string };
 
 export async function submitRsvp(_: RsvpState, formData: FormData): Promise<RsvpState> {
   const supabase = await createClient();
@@ -16,11 +17,12 @@ export async function submitRsvp(_: RsvpState, formData: FormData): Promise<Rsvp
   const eventId = String(formData.get("event_id"));
   const values = parseAttendance(formData, "a_");
   if (!values) return { error: "Please pick an option" };
-  const { error } = await supabase.from("rsvps").upsert({ event_id: eventId, user_id: user.id, ...values });
-  if (error) return { error: error.message };
+  const { rows: [row], notFound } = await attachPickupCoords(supabase, user.id, [{ event_id: eventId, user_id: user.id, ...values }]);
+  const { error } = await supabase.from("rsvps").upsert(row);
+  if (error) return { error: error.message.includes("pickup_lat") ? "Run migration 0029_rsvp_pickup_coords.sql first" : error.message };
   after(() => notifyEventSignup(eventId, user.id, values.status, values.ride));
   after(() => syncSheetsForEvent(eventId));
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/events");
-  return { saved: true };
+  return { saved: true, warning: notFoundWarning(notFound) };
 }
