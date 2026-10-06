@@ -26,6 +26,8 @@ export {
   groupNeedsRide,
   discrepancies,
   layoutMembers,
+  movedRiders,
+  seatSnapshot,
 } from './sheet'
 export type { MatchText, PlaceTarget } from './sheet'
 export { haversineKm, locationKey } from './geo'

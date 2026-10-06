@@ -63,6 +63,10 @@ export type CarpoolDataV2 = {
   guests: CarpoolGuest[]
   going: DirSet
   back: DirSet
+  /** Where each placed rider was (locationKey) when the layout was last built or
+   * saved. A rider whose current spot differs has moved since — the builder offers
+   * to re-seat just them. Missing on older rows. */
+  seatedAt?: Record<string, string>
 }
 
 /** The pre-sheet shape ({ cars, mode }) still stored on old rows. */

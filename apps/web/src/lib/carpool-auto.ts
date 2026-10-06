@@ -9,6 +9,7 @@ import {
   locationKey,
   mirrorDirSet,
   optimizeCarpool,
+  seatSnapshot,
   splitByCampus,
   DEFAULT_CARPOOL_HEADER,
   DEFAULT_COLLEGE_KEYWORDS,
@@ -22,7 +23,8 @@ import {
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { Json, Profile, Rsvp } from "@/lib/database.types";
 import { riderFromRsvp } from "@/lib/riders";
-import { driveMatrix } from "@/lib/routing";
+import { driveMatrixWithSource } from "@/lib/routing";
+import { updateRun } from "@/lib/carpool-runs";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -33,19 +35,36 @@ export type GenerateResult =
 
 const EMPTY_MATRIX: CostMatrix = { index: new Map(), durationMin: [], distanceKm: [] };
 
+/** Generates one day's draft carpool and, when given a carpool_runs row, keeps it
+ * up to date (running → done / skipped / error) so admins can watch it happen. */
 export async function generateCarpoolForEvent(
   supabase: AdminClient,
   orgId: string,
   eventId: string,
+  runId: string | null = null,
 ): Promise<GenerateResult> {
+  await updateRun(supabase, runId, { status: "running" });
+  let out: Built;
+  try { out = await build(supabase, orgId, eventId); }
+  catch (e) { out = { result: { error: e instanceof Error ? e.message : String(e) } }; }
+  const r = out.result;
+  await updateRun(supabase, runId, "ok" in r
+    ? { status: "done", detail: `${r.cars} car${r.cars === 1 ? "" : "s"}, ${r.assigned} seated${r.unassigned ? `, ${r.unassigned} unplaced` : ""}`, provider: out.provider ?? null, carpoolId: out.carpoolId ?? null }
+    : "skipped" in r ? { status: "skipped", detail: r.skipped } : { status: "error", detail: r.error });
+  return r;
+}
+
+type Built = { result: GenerateResult; provider?: string | null; carpoolId?: string };
+
+async function build(supabase: AdminClient, orgId: string, eventId: string): Promise<Built> {
   const [{ data: event }, { data: existing }] = await Promise.all([
     supabase.from("events").select("*").eq("id", eventId).maybeSingle(),
     supabase.from("carpools").select("id").eq("event_id", eventId).limit(1).maybeSingle(),
   ]);
-  if (!event) return { error: "event not found" };
-  if (existing) return { skipped: "carpool already started by an admin" };
+  if (!event) return { result: { error: "event not found" } };
+  if (existing) return { result: { skipped: "carpool already started by an admin" } };
   if (event.location_lat == null || event.location_lon == null)
-    return { skipped: "event has no location coordinates" };
+    return { result: { skipped: "event has no location coordinates" } };
   const destination = { lat: event.location_lat, lon: event.location_lon, label: event.location_name ?? event.title };
 
   const [{ data: rs }, { data: pickups }] = await Promise.all([
@@ -70,7 +89,7 @@ export async function generateCarpoolForEvent(
     if (out.capacity != null)
       cars.push({ id: out.rider.id, driverId: out.rider.id, capacity: out.capacity, passengerIds: [] });
   }
-  if (cars.length === 0) return { skipped: "no drivers RSVP'd" };
+  if (cars.length === 0) return { result: { skipped: "no drivers RSVP'd" } };
 
   const seen = new Set<string>();
   const points: LatLon[] = [];
@@ -81,8 +100,8 @@ export async function generateCarpoolForEvent(
   }
   points.push({ lat: destination.lat, lon: destination.lon });
 
-  const matrix = (await driveMatrix(points)) ?? EMPTY_MATRIX; // empty: optimizeCarpool falls back to haversine
-  const res = optimizeCarpool(cars, riders, destination, matrix);
+  const routed = await driveMatrixWithSource(points); // null: optimizeCarpool falls back to haversine
+  const res = optimizeCarpool(cars, riders, destination, routed?.matrix ?? EMPTY_MATRIX);
 
   // v2 sheet: optimized cars into Going split by campus keyword; Back starts as a
   // mirror (the form asks per-day attendance, not per-direction) — admins diverge it.
@@ -91,13 +110,18 @@ export async function generateCarpoolForEvent(
     v: 2, header: DEFAULT_CARPOOL_HEADER, funFactQuestionId: null,
     collegeKeywords: [...DEFAULT_COLLEGE_KEYWORDS], guests: [], going, back: mirrorDirSet(going),
   };
+  data.seatedAt = seatSnapshot(data, riders); // so later address changes can be spotted
   // The day's first (and default) layout.
-  const { error } = await supabase.from("carpools").insert({ org_id: orgId, event_id: eventId, name: "Carpool", data: data as unknown as Json, published: false });
-  if (error) return { error: error.message };
+  const { data: row, error } = await supabase.from("carpools").insert({ org_id: orgId, event_id: eventId, name: "Carpool", data: data as unknown as Json, published: false }).select("id").single();
+  if (error || !row) return { result: { error: error?.message ?? "insert failed" } };
   return {
-    ok: true,
-    cars: res.cars.length,
-    assigned: res.cars.reduce((n, c) => n + c.passengerIds.length, 0),
-    unassigned: res.unassigned.length,
+    result: {
+      ok: true,
+      cars: res.cars.length,
+      assigned: res.cars.reduce((n, c) => n + c.passengerIds.length, 0),
+      unassigned: res.unassigned.length,
+    },
+    provider: routed?.provider ?? null,
+    carpoolId: row.id,
   };
 }

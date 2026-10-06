@@ -12,6 +12,8 @@ import Icon from "@/components/icon";
 import DayCardGrid from "@/components/day-cards";
 import ConfirmForm from "@/components/confirm-form";
 import { createCarpoolLayout, deleteCarpoolLayout } from "./actions";
+import AutoRefresh from "@/components/auto-refresh";
+import { latestRuns, queuedDays, runLabel } from "@/lib/carpool-runs";
 
 export default async function AdminCarpoolPage({ searchParams }: { searchParams: Promise<{ event?: string; carpool?: string }> }) {
   const { event: eventId, carpool: carpoolParam } = await searchParams;
@@ -29,6 +31,9 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
           supabase.from("rsvps").select("event_id").in("event_id", eventIds).eq("status", "yes"),
         ])
       : [{ data: [] }, { data: [] }];
+    const [runBy, queued] = await Promise.all([latestRuns(supabase, eventIds), queuedDays(supabase, eventIds)]);
+    const status = new Map(eventIds.map((id) => [id, runLabel(runBy.get(id), queued.has(id))]));
+    const anyActive = [...status.values()].some((s) => s?.active);
     const cpBy = new Map<string, NonNullable<typeof cps>>();
     for (const c of cps ?? []) cpBy.set(c.event_id, [...(cpBy.get(c.event_id) ?? []), c]);
     // One section per event (its days together, newest event first); loose days last.
@@ -51,6 +56,7 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
             <p className="mt-1 text-sm" style={{ color: "var(--g-grey-600)" }}>Pick a day to coordinate rides — drivers and riders come from that day’s RSVPs. A day can have several layouts (e.g. a morning and an afternoon wave), each with its own people.</p>
           </div>
         </div>
+        <AutoRefresh active={anyActive} />
         <div className="px-4 py-5 md:px-8"><div className="mx-auto max-w-[1100px] space-y-8">
           {!ordered.length && <p className="text-sm" style={{ color: "var(--g-grey-600)" }}>No event days yet — create days under Events.</p>}
           {ordered.map((sec) => (
@@ -65,6 +71,8 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
                   return `${cp.name}: ${cars.length} car${cars.length === 1 ? "" : "s"} · ${seated} seated${cp.published ? "" : " (draft)"}`;
                 });
                 const published = layouts.filter((c) => c.published).length;
+                const st = status.get(e.id);
+                if (st) lines.unshift(st.text);
                 return { id: e.id, title: e.title, starts_at: e.starts_at, lines: lines.length ? lines : undefined,
                   meta: `${layouts.length ? `${layouts.length} layout${layouts.length === 1 ? "" : "s"} · ${published} published` : "No rides yet"} · ${going} going`,
                   metaColor: published ? "var(--g-green)" : undefined };
@@ -77,13 +85,16 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
 
   const riders: Record<string, Rider> = {}, drivers: { id: string; seats: number }[] = [], needsRide: string[] = [];
   const pickupNames: Record<string, string> = {};
-  const [{ data: rs }, { data: layouts }, { data: pickups }, { data: formLinks }] = await Promise.all([
+  const [{ data: rs }, { data: layouts }, { data: pickups }, { data: formLinks }, runBy, queued] = await Promise.all([
     // Yes only — a Maybe isn't attending until they change it (see lib/attendees.ts).
     supabase.from("rsvps").select("*, profile:profiles(*)").eq("event_id", event.id).eq("status", "yes"),
     supabase.from("carpools").select("*").eq("event_id", event.id).order("sort_order").order("created_at"),
     supabase.from("pickup_locations").select("*").eq("org_id", org.id),
     supabase.from("form_events").select("form:forms(id, questions)").eq("event_id", event.id),
+    latestRuns(supabase, [event.id]),
+    queuedDays(supabase, [event.id]),
   ]);
+  const runStatus = runLabel(runBy.get(event.id), queued.has(event.id));
   // The layout being edited (?carpool=, else the first). No layouts yet → a new,
   // unsaved one that the first Save creates.
   const current = (layouts ?? []).find((l) => l.id === carpoolParam) ?? layouts?.[0] ?? null;
@@ -131,6 +142,8 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
         <Link href="/admin/carpool" className="btn-text -ml-3" style={{ color: "var(--g-red)" }}>← Carpool</Link>
         <h1 className="text-2xl font-normal">{event.title}</h1>
         <span className="text-sm" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={event.starts_at} /></span>
+        {runStatus && <span className="chip !py-0 text-xs" style={{ color: runStatus.color }}>{runStatus.active && "⏳ "}{runStatus.text}</span>}
+        <AutoRefresh active={!!runStatus?.active} />
       </div>
       <div className="flex flex-wrap items-center gap-1 border-b text-sm" style={{ borderColor: "var(--g-grey-300)" }}>
         {(layouts ?? []).map((l) => (

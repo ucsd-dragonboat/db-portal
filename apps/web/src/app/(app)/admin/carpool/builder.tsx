@@ -4,12 +4,12 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
-  addDriverToDirSet, assignCarpool, carRoutePoints, discrepancies, groupNeedsRide,
-  locationKey, mirrorDirSet, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
-  removeFromDirSet, splitByCampus, upgradeCarpoolData,
+  addDriverToDirSet, carRoutePoints, discrepancies, groupNeedsRide,
+  locationKey, mirrorDirSet, movedRiders, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
+  removeFromDirSet, upgradeCarpoolData,
   type CarpoolDataV2, type CarpoolGuest, type Destination, type MatchText, type OsrmRoute, type Rider,
 } from "@db/carpool";
-import { routeCar, saveCarpool } from "./actions";
+import { optimizeLayout, routeCar, saveCarpool } from "./actions";
 import { CarGrid, DiyRow, SHEET, type DirKey, type GridHandlers } from "./car-grid";
 import { DiscrepancyTracker, FunFactPanel, TotalPanel } from "./side-panels";
 
@@ -119,16 +119,24 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     back: removeFromDirSet(s.back, id),
   }));
 
-  const optimize = () => {
+  // Real drive times via the server's routing fallback chain — the same optimizer the
+  // auto-carpool cron uses. The result replaces GOING in the (unsaved) sheet.
+  const [optimizing, setOptimizing] = useState(false);
+  const optimize = async (mode: "unplaced" | "moved") => {
     if (!destination) return;
-    const cars = [...data.going.onCampus, ...data.going.offCampus];
-    const eligible: Record<string, Rider> = {};
-    for (const id of needsRide) if (!placedGoing.has(id)) eligible[id] = effRiders[id];
-    for (const c of cars) for (const p of c.passengerIds) eligible[p] = effRiders[p]; // keep manual placements
-    const res = assignCarpool(cars, eligible, destination, { mode: "pickup" });
-    setDir("going", (d) => ({ ...splitByCampus(res.cars, matchText, data.collegeKeywords), diy: d.diy }));
-    setMsg(res.unassigned.length ? `${res.unassigned.length} rider(s) unassigned (no address or cars full)` : "Assigned");
+    setOptimizing(true);
+    setMsg(mode === "moved" ? "Re-seating moved riders…" : "Optimizing with real drive times…");
+    try {
+      const r = await optimizeLayout(carpoolId, eventId, data, mode);
+      if ("error" in r) { setMsg(r.error); return; }
+      setData((s) => ({ ...s, going: r.going, seatedAt: r.seatedAt }));
+      setMsg(`${r.message} — review, then Save`);
+    } catch { setMsg("Optimize failed — try again"); }
+    finally { setOptimizing(false); }
   };
+  // Riders in this layout whose pickup spot changed since it was built (never re-seated
+  // automatically — the admin decides).
+  const moved = useMemo(() => movedRiders(data, riders), [data, riders]);
 
   const copyGoingToBack = () => {
     if (placedSet(data.back).size && !confirm("Overwrite the BACK section with a copy of GOING?")) return;
@@ -195,7 +203,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     <div className="space-y-3">
       <div className="card flex flex-wrap items-center gap-2 text-sm">
         <input value={name} onChange={(e) => setName(e.target.value)} className="input w-40 py-1 text-sm font-medium" title="Layout name — members see it above this sheet" aria-label="Layout name" />
-        <button type="button" onClick={optimize} disabled={!destination} title={destination ? "Auto-assign the Going section" : "Needs the day's location coordinates"} className="btn-primary py-1 disabled:cursor-not-allowed">Optimize</button>
+        <button type="button" onClick={() => optimize("unplaced")} disabled={!destination || optimizing} title={destination ? "Seat everyone still needing a ride in GOING, using real drive times (existing seats are kept)" : "Needs the day's location coordinates"} className="btn-primary py-1 disabled:cursor-not-allowed">{optimizing ? "Optimizing…" : "Optimize"}</button>
         <button type="button" onClick={copyGoingToBack} className="btn-secondary py-1">Copy Going → Back</button>
         <button type="button" onClick={() => save(false)} disabled={pending} className="btn-secondary py-1">Save</button>
         <button type="button" onClick={() => save(true)} disabled={pending} className="btn-secondary py-1">Publish</button>
@@ -206,6 +214,13 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
         </label>
         {msg && <span className="w-full text-xs" style={{ color: "var(--g-grey-600)" }}>{msg}</span>}
       </div>
+      {moved.length > 0 && (
+        <div className="card flex flex-wrap items-center gap-2 !p-3 text-sm" style={{ background: "var(--g-yellow-soft)" }}>
+          <span><b>{moved.length}</b> rider{moved.length === 1 ? "'s" : "s'"} pickup spot changed since this layout was built: {moved.map((id) => riders[id]?.name ?? "?").join(", ")}</span>
+          <button type="button" onClick={() => optimize("moved")} disabled={!destination || optimizing} className="btn-secondary py-0.5 text-xs">Re-seat {moved.length === 1 ? "them" : "just them"}</button>
+          <span className="text-xs" style={{ color: "var(--g-grey-600)" }}>Everyone else stays put; locked cars aren&apos;t touched.</span>
+        </div>
+      )}
       {!destination && <p className="card !p-3 text-xs text-amber-700">This day has no location coordinates, so Optimize and the route map are off — you can still build the sheet by hand.</p>}
 
       {/* The sheet — laid out like the Google Sheets template, horizontally scrollable. */}

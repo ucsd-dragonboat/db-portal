@@ -39,7 +39,7 @@ const coolingUntil = new Map<string, number>();
 
 type Provider<T> = { id: string; needsKey?: keyof ProviderKeys; maxPoints?: number; request(points: LatLon[], key?: string): HttpRequest; parse(json: unknown): T | null };
 
-async function firstAnswer<T>(kind: "route" | "matrix", chain: Provider<T>[], points: LatLon[], timeoutMs: number): Promise<T | null> {
+async function firstAnswer<T>(kind: "route" | "matrix", chain: Provider<T>[], points: LatLon[], timeoutMs: number): Promise<{ value: T; provider: string } | null> {
   const k = keys();
   for (const p of chain) {
     const key = p.needsKey ? k[p.needsKey] : undefined;
@@ -59,7 +59,7 @@ async function firstAnswer<T>(kind: "route" | "matrix", chain: Provider<T>[], po
       if (res.status === 429 || res.status >= 500) coolingUntil.set(coolKey, Date.now() + COOLDOWN_MS);
       if (!res.ok) { console.warn("[routing]", kind, p.id, res.status); continue; }
       const out = p.parse(await res.json());
-      if (out) return out;
+      if (out) return { value: out, provider: p.id };
       console.warn("[routing]", kind, p.id, "unreadable response");
     } catch (err) {
       coolingUntil.set(coolKey, Date.now() + COOLDOWN_MS); // timeout or network failure
@@ -73,13 +73,19 @@ async function firstAnswer<T>(kind: "route" | "matrix", chain: Provider<T>[], po
 /** One car's drive through `points` in order: km, minutes and the line for the map. */
 export function routeDrive(points: LatLon[]): Promise<OsrmRoute | null> {
   if (points.length < 2) return Promise.resolve(null);
-  return firstAnswer("route", ROUTE_PROVIDERS, points, 15000);
+  return firstAnswer("route", ROUTE_PROVIDERS, points, 15000).then((r) => r?.value ?? null);
 }
 
 /** Drive time and distance between every pair of `points`. */
-export function driveMatrix(points: LatLon[]): Promise<CostMatrix | null> {
-  if (points.length < 2) return Promise.resolve(null);
+export async function driveMatrix(points: LatLon[]): Promise<CostMatrix | null> {
+  return (await driveMatrixWithSource(points))?.matrix ?? null;
+}
+
+/** driveMatrix plus which provider answered — for the carpool run status. */
+export async function driveMatrixWithSource(points: LatLon[]): Promise<{ matrix: CostMatrix; provider: string } | null> {
+  if (points.length < 2) return null;
   // The matrix parsers need the points too, to index rows by location.
   const chain = MATRIX_PROVIDERS.map((p) => ({ ...p, parse: (json: unknown) => p.parse(points, json) }));
-  return firstAnswer("matrix", chain, points, 20000);
+  const r = await firstAnswer("matrix", chain, points, 20000);
+  return r ? { matrix: r.value, provider: r.provider } : null;
 }
