@@ -13,6 +13,8 @@ import Icon from "@/components/icon";
 import { createFormForGroup } from "@/app/(app)/admin/forms/actions";
 import { upgradeCarpoolData } from "@db/carpool";
 import CarpoolSheetView from "@/components/carpool-sheet-view";
+import AutoRefresh from "@/components/auto-refresh";
+import { latestRuns, queuedDays, runLabel } from "@/lib/carpool-runs";
 import type { Rsvp } from "@/lib/database.types";
 
 /** One screen for a whole event group (e.g. a practice week): every day's attendance, lineups and rides. */
@@ -37,6 +39,9 @@ export default async function GroupOverviewPage({ params }: { params: Promise<{ 
         supabase.from("form_events").select("event_id, form:forms(id, title, status, due_at)").in("event_id", eventIds),
       ])
     : [{ data: [] as Rsvp[] }, { data: [] }, { data: [] }, { data: [] }];
+  // Carpool algorithm status per day — admins only, never shown to members.
+  const [runBy, queued] = isAdmin && eventIds.length ? await Promise.all([latestRuns(supabase, eventIds), queuedDays(supabase, eventIds)]) : [new Map(), new Set<string>()];
+  const runStatus = new Map(eventIds.map((id) => [id, isAdmin ? runLabel(runBy.get(id), queued.has(id)) : null]));
   // Forms covering any day of this group (members only see non-draft ones — RLS handles that).
   const formsById = new Map<string, { id: string; title: string; status: string; due_at: string | null; days: number }>();
   for (const l of formLinks ?? []) {
@@ -89,6 +94,7 @@ export default async function GroupOverviewPage({ params }: { params: Promise<{ 
         </div>
       )}
 
+      <AutoRefresh active={[...runStatus.values()].some((s) => s?.active)} />
       <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${(events?.length ?? 1) > 1 ? 340 : 480}px, 1fr))` }}>
         {events?.map((ev) => {
           const rs = (rsvps ?? []).filter((r) => r.event_id === ev.id);
@@ -140,6 +146,7 @@ export default async function GroupOverviewPage({ params }: { params: Promise<{ 
 
               <div>
                 <div className="flex items-center justify-between text-sm font-medium"><span><Icon name="car" /> Rides</span>{isAdmin && <Link href={`/admin/carpool?event=${ev.id}`} className="btn-text -mr-3">Edit</Link>}</div>
+                {runStatus.get(ev.id) && <p className="text-xs" style={{ color: runStatus.get(ev.id)!.color }}>{runStatus.get(ev.id)!.active && "⏳ "}{runStatus.get(ev.id)!.text}</p>}
                 {!cps.length && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>{isAdmin ? "Not set up yet." : "Not published yet."}</p>}
                 {cps.map((cp) => (
                   <div key={cp.id} className="mt-1">

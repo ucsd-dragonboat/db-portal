@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   layoutMembers,
+  movedRiders,
+  seatSnapshot,
   addDriverToDirSet,
   discrepancies,
   groupNeedsRide,
@@ -171,5 +173,23 @@ describe('layoutMembers', () => {
     d.going = dir({ onCampus: [car('d1', 5, ['p1', 'x:g1'])], diy: ['p2'] })
     d.back = dir({ offCampus: [car('d2', 4, ['p3'], 'b')] })
     expect([...layoutMembers(d)].sort()).toEqual(['d1', 'd2', 'p1', 'p2', 'p3'])
+  })
+})
+
+describe('seatSnapshot / movedRiders', () => {
+  const at = (lat: number) => ({ location: { lat, lon: -117 } })
+  it('flags only placed riders whose location changed since the snapshot', () => {
+    const d = upgradeCarpoolData({ v: 2 }, {})
+    d.going = dir({ onCampus: [car('d1', 5, ['p1', 'p2'])] })
+    const before = { d1: at(32.1), p1: at(32.2), p2: at(32.3) }
+    d.seatedAt = seatSnapshot(d, before)
+    expect(movedRiders(d, before)).toEqual([])
+    expect(movedRiders(d, { ...before, p2: at(32.9), d1: { location: null } }).sort()).toEqual(['d1', 'p2'])
+  })
+  it('survives upgradeCarpoolData and ignores riders with no snapshot', () => {
+    const d = upgradeCarpoolData({ v: 2, seatedAt: { p1: '32.200,-117.000', bad: 3 } }, {})
+    expect(d.seatedAt).toEqual({ p1: '32.200,-117.000' })
+    d.going = dir({ onCampus: [car('d1', 5, ['p1'])] })
+    expect(movedRiders(d, { d1: at(40), p1: at(32.2) })).toEqual([])
   })
 })
