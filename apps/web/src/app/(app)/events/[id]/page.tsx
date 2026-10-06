@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import LocalTime from "@/components/local-time";
 import RsvpForm from "./rsvp-form";
 import type { Rsvp } from "@/lib/database.types";
-import { upgradeCarpoolData } from "@db/carpool";
+import { layoutMembers, upgradeCarpoolData } from "@db/carpool";
 import CarpoolSheetView from "@/components/carpool-sheet-view";
 import RaceDayView from "@/components/race-day-view";
 import RichText from "@/components/rich-text";
@@ -17,21 +17,23 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const { org, userId, profile, isAdmin } = await requireOrg();
   const supabase = await createClient();
-  const [{ data: event }, { data: rsvps }, { data: lineups }, { data: carpool }, { data: pickups }] = await Promise.all([
+  const [{ data: event }, { data: rsvps }, { data: lineups }, { data: carpools }, { data: pickups }] = await Promise.all([
     supabase.from("events").select("*, group:event_groups(id, name)").eq("id", id).maybeSingle(),
     supabase.from("rsvps").select("*, profile:profiles(full_name)").eq("event_id", id).order("updated_at"),
     supabase.from("lineups").select("*").eq("event_id", id).eq("published", true).order("created_at"),
-    supabase.from("carpools").select("*").eq("event_id", id).eq("published", true).maybeSingle(),
+    supabase.from("carpools").select("*").eq("event_id", id).eq("published", true).order("sort_order").order("created_at"),
     supabase.from("pickup_locations").select("*").eq("org_id", org.id).eq("active", true).order("sort_order"),
   ]);
   if (!event) notFound();
   // The roster is only needed to name people in published lineups/carpools — skip it otherwise.
-  const { data: teammates } = (lineups?.length || carpool)
+  const { data: teammates } = (lineups?.length || carpools?.length)
     ? await supabase.from("profiles").select("id, full_name, email")
     : { data: [] };
   const names: Record<string, string> = {};
   for (const t of teammates ?? []) names[t.id] = t.full_name || t.email;
-  const sheet = carpool ? upgradeCarpoolData(carpool.data, names) : null;
+  // Every published layout for the day, the one this member is in first.
+  const sheets = (carpools ?? []).map((c) => ({ name: c.name, data: upgradeCarpoolData(c.data, names) }))
+    .sort((a, b) => Number(layoutMembers(b.data).has(userId)) - Number(layoutMembers(a.data).has(userId)));
   const list = (rsvps ?? []) as (Rsvp & { profile: { full_name: string } | null })[];
   const mine = list.find((r) => r.user_id === userId) ?? null;
   const by = (s: Rsvp["status"]) => list.filter((r) => r.status === s);
@@ -59,12 +61,12 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
             <RaceDayView lineups={lineups} names={names} />
           </div>
         )}
-        {sheet && (
-          <div className="mt-6">
-            <h2 className="font-semibold mb-2">Carpool</h2>
-            <CarpoolSheetView data={sheet} names={names} />
+        {sheets.map((sh, i) => (
+          <div key={i} className="mt-6">
+            <h2 className="font-semibold mb-2">{sheets.length > 1 ? `Carpool — ${sh.name}` : "Carpool"}{sheets.length > 1 && i === 0 && layoutMembers(sh.data).has(userId) && <span className="ml-2 text-xs font-normal" style={{ color: "var(--g-green)" }}>you’re in this one</span>}</h2>
+            <CarpoolSheetView data={sh.data} names={names} />
           </div>
-        )}
+        ))}
         <div className="mt-6">
           {closed && !isAdmin ? <p className="card text-sm text-slate-600">RSVPs are closed. {mine ? `Your response: ${mine.status}` : ""}</p>
             : <RsvpForm eventId={id} existing={mine} defaultSeats={profile.car_passengers} pickups={pickups ?? []} />}

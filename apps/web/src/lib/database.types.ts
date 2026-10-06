@@ -31,6 +31,8 @@ export type CarpoolTrip = {
   id: string;
   org_id: string;
   event_id: string;
+  /** The layout this trip was published from (migration 0030). */
+  carpool_id: string | null;
   direction: "going" | "back";
   driver_id: string;
   passenger_ids: string[];
@@ -272,6 +274,10 @@ export type CarpoolRow = {
   id: string;
   org_id: string;
   event_id: string;
+  /** A day can hold several layouts, each covering different people (migration 0030). */
+  name: string;
+  sort_order: number;
+  created_at: string;
   data: Json;
   published: boolean;
   updated_at: string;
@@ -434,7 +440,7 @@ export type Database = {
       };
       carpools: {
         Row: Row<CarpoolRow>;
-        Insert: Insert<CarpoolRow, "id" | "data" | "published" | "updated_at">;
+        Insert: Insert<CarpoolRow, "id" | "name" | "sort_order" | "created_at" | "data" | "published" | "updated_at">;
         Update: Partial<CarpoolRow>;
         Relationships: [
           { foreignKeyName: "carpools_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
@@ -443,7 +449,7 @@ export type Database = {
       };
       carpool_trips: {
         Row: Row<CarpoolTrip>;
-        Insert: Insert<CarpoolTrip, "id" | "created_at">;
+        Insert: Insert<CarpoolTrip, "id" | "carpool_id" | "created_at">;
         Update: Partial<CarpoolTrip>;
         Relationships: [
           { foreignKeyName: "carpool_trips_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },

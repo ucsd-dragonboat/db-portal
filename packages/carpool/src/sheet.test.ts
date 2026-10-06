@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  layoutMembers,
   addDriverToDirSet,
   discrepancies,
   groupNeedsRide,
@@ -161,5 +162,14 @@ describe('discrepancies', () => {
     expect(out).toContainEqual({ id: 'p2', needGoing: true, needBack: true })   // needs ride, nowhere
     expect(out.find((r) => r.id === 'p1')).toBeUndefined()                      // both directions
     expect(out.find((r) => r.id === 'd1')).toBeUndefined()                      // driver
+  })
+})
+
+describe('layoutMembers', () => {
+  it('collects drivers, passengers and DIY from both directions, minus write-in guests', () => {
+    const d = upgradeCarpoolData({ v: 2 }, {})
+    d.going = dir({ onCampus: [car('d1', 5, ['p1', 'x:g1'])], diy: ['p2'] })
+    d.back = dir({ offCampus: [car('d2', 4, ['p3'], 'b')] })
+    expect([...layoutMembers(d)].sort()).toEqual(['d1', 'd2', 'p1', 'p2', 'p3'])
   })
 })
