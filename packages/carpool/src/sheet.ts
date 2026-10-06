@@ -2,7 +2,8 @@
 // upgrade, per-direction reconciliation against current RSVPs, placement, the
 // TOTAL-panel campus grouping, and the discrepancy tracker.
 
-import type { Car, CarpoolDataV2, CarpoolGuest, DirSet } from './types'
+import type { Car, CarpoolDataV2, CarpoolGuest, DirSet, LatLon } from './types'
+import { locationKey } from './geo'
 import { DEFAULT_CARPOOL_HEADER, DEFAULT_COLLEGE_KEYWORDS } from './types'
 
 const GUEST_COLS = new Set(['drivers', 'offCampus', 'onCampus', 'diy'])
@@ -73,6 +74,9 @@ export function upgradeCarpoolData(raw: unknown, matchText: MatchText): CarpoolD
       guests: Array.isArray(r.guests) ? r.guests.filter(isGuest) : [],
       going: cleanDir(r.going, 'g'),
       back: cleanDir(r.back, 'b'),
+      ...(r.seatedAt && typeof r.seatedAt === 'object'
+        ? { seatedAt: Object.fromEntries(Object.entries(r.seatedAt as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string')) }
+        : {}),
     }
   }
   const legacy = cleanCars(r.cars, 'g')
@@ -215,5 +219,27 @@ export function layoutMembers(d: CarpoolDataV2): Set<string> {
     for (const id of dir.diy) out.add(id)
   }
   for (const id of out) if (id.startsWith('x:')) out.delete(id)
+  return out
+}
+
+/** Riders placed in this layout whose current location no longer matches where they
+ * were when it was built (data.seatedAt). Riders with no snapshot are never "moved". */
+export function movedRiders(d: CarpoolDataV2, current: Record<string, { location: LatLon | null } | undefined>): string[] {
+  const at = d.seatedAt ?? {}
+  return [...layoutMembers(d)].filter((id) => {
+    if (!(id in at)) return false
+    const loc = current[id]?.location
+    return (loc ? locationKey(loc) : '') !== at[id]
+  })
+}
+
+/** Snapshot of where every placed rider is now, for data.seatedAt. */
+export function seatSnapshot(d: CarpoolDataV2, current: Record<string, { location: LatLon | null } | undefined>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const id of layoutMembers(d)) {
+    if (!current[id]) continue
+    const loc = current[id]!.location
+    out[id] = loc ? locationKey(loc) : ''
+  }
   return out
 }
