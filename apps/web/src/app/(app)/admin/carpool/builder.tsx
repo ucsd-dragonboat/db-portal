@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   addDriverToDirSet, assignCarpool, carRoutePoints, discrepancies, groupNeedsRide,
@@ -20,8 +21,8 @@ const COLORS = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#7c3aed", "#db2777"
 /** Sheets-style rides workspace: GOING/BACK sections of ON/OFF-CAMPUS car columns
  * + DIY, TOTAL roster with campus grouping, fun-fact column, discrepancy tracker.
  * destination === null → Optimize and the route map are disabled. */
-export default function CarpoolBuilder({ eventId, destination, riders, drivers, needsRide, saved, pickupNames, funFactQuestions, funFactAnswers }: {
-  eventId: string; destination: Destination | null; riders: Record<string, Rider>;
+export default function CarpoolBuilder({ eventId, carpoolId, initialName, destination, riders, drivers, needsRide, saved, pickupNames, funFactQuestions, funFactAnswers }: {
+  eventId: string; carpoolId: string | null; initialName: string; destination: Destination | null; riders: Record<string, Rider>;
   drivers: { id: string; seats: number }[]; needsRide: string[]; saved: SavedCarpool | null;
   pickupNames: Record<string, string>;
   funFactQuestions: { id: string; label: string }[];
@@ -40,6 +41,8 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
   }, [saved, drivers, riders, pickupNames]);
 
   const [data, setData] = useState<CarpoolDataV2>(initial);
+  const [name, setName] = useState(initialName);
+  const router = useRouter();
 
   // Roster members + write-ins, one lookup for every cell/panel.
   const effRiders = useMemo<Record<string, Rider>>(() => ({
@@ -134,8 +137,12 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
   };
 
   const save = (published: boolean) => start(async () => {
-    const r = await saveCarpool(eventId, data, published);
-    setMsg("error" in r && r.error ? r.error : published ? "Saved & published to members" : "Saved draft");
+    const r = await saveCarpool(carpoolId, eventId, name, data, published);
+    if ("error" in r) { setMsg(r.error); return; }
+    setMsg(published ? "Saved & published to members" : "Saved draft");
+    // First save of a brand-new layout: open it by id (and refresh the tabs).
+    if (!carpoolId) router.replace(`/admin/carpool?event=${eventId}&carpool=${r.id}`);
+    else router.refresh();
   });
 
   // Routes for the GOING cars only — debounced, and only refetched for cars whose
@@ -187,6 +194,7 @@ export default function CarpoolBuilder({ eventId, destination, riders, drivers, 
   return (
     <div className="space-y-3">
       <div className="card flex flex-wrap items-center gap-2 text-sm">
+        <input value={name} onChange={(e) => setName(e.target.value)} className="input w-40 py-1 text-sm font-medium" title="Layout name — members see it above this sheet" aria-label="Layout name" />
         <button type="button" onClick={optimize} disabled={!destination} title={destination ? "Auto-assign the Going section" : "Needs the day's location coordinates"} className="btn-primary py-1 disabled:cursor-not-allowed">Optimize</button>
         <button type="button" onClick={copyGoingToBack} className="btn-secondary py-1">Copy Going → Back</button>
         <button type="button" onClick={() => save(false)} disabled={pending} className="btn-secondary py-1">Save</button>

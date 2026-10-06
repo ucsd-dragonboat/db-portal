@@ -40,7 +40,7 @@ export async function generateCarpoolForEvent(
 ): Promise<GenerateResult> {
   const [{ data: event }, { data: existing }] = await Promise.all([
     supabase.from("events").select("*").eq("id", eventId).maybeSingle(),
-    supabase.from("carpools").select("id").eq("event_id", eventId).maybeSingle(),
+    supabase.from("carpools").select("id").eq("event_id", eventId).limit(1).maybeSingle(),
   ]);
   if (!event) return { error: "event not found" };
   if (existing) return { skipped: "carpool already started by an admin" };
@@ -91,10 +91,8 @@ export async function generateCarpoolForEvent(
     v: 2, header: DEFAULT_CARPOOL_HEADER, funFactQuestionId: null,
     collegeKeywords: [...DEFAULT_COLLEGE_KEYWORDS], guests: [], going, back: mirrorDirSet(going),
   };
-  const { error } = await supabase.from("carpools").upsert(
-    { org_id: orgId, event_id: eventId, data: data as unknown as Json, published: false },
-    { onConflict: "event_id" },
-  );
+  // The day's first (and default) layout.
+  const { error } = await supabase.from("carpools").insert({ org_id: orgId, event_id: eventId, name: "Carpool", data: data as unknown as Json, published: false });
   if (error) return { error: error.message };
   return {
     ok: true,

@@ -96,8 +96,8 @@ export default async function GroupOverviewPage({ params }: { params: Promise<{ 
           const drivers = rs.filter((r) => r.ride === "driver"), needs = rs.filter((r) => r.ride === "needs_ride");
           const seats = drivers.reduce((a, r) => a + (r.seats ?? 0), 0);
           const evLineups = (lineups ?? []).filter((l) => l.event_id === ev.id && (isAdmin || l.published));
-          const cp = (carpools ?? []).find((c) => c.event_id === ev.id && (isAdmin || c.published));
-          const sheet = cp ? upgradeCarpoolData(cp.data, names) : null;
+          const cps = (carpools ?? []).filter((c) => c.event_id === ev.id && (isAdmin || c.published))
+            .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
           return (
             <section key={ev.id} className="card space-y-3 !p-4">
               <header className="relative">
@@ -140,9 +140,15 @@ export default async function GroupOverviewPage({ params }: { params: Promise<{ 
 
               <div>
                 <div className="flex items-center justify-between text-sm font-medium"><span><Icon name="car" /> Rides</span>{isAdmin && <Link href={`/admin/carpool?event=${ev.id}`} className="btn-text -mr-3">Edit</Link>}</div>
-                {!cp && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>{isAdmin ? "Not set up yet." : "Not published yet."}</p>}
-                {cp && isAdmin && !cp.published && <span className="chip !py-0 text-[10px]">draft</span>}
-                {sheet && <CarpoolSheetView data={sheet} names={names} />}
+                {!cps.length && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>{isAdmin ? "Not set up yet." : "Not published yet."}</p>}
+                {cps.map((cp) => (
+                  <div key={cp.id} className="mt-1">
+                    {(cps.length > 1 || (isAdmin && !cp.published)) && (
+                      <div className="text-xs font-medium">{cps.length > 1 ? cp.name : ""}{isAdmin && !cp.published && <span className="chip ml-1 !py-0 text-[10px]">draft</span>}</div>
+                    )}
+                    <CarpoolSheetView data={upgradeCarpoolData(cp.data, names)} names={names} />
+                  </div>
+                ))}
               </div>
             </section>
           );

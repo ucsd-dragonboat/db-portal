@@ -25,6 +25,7 @@ export {
   mirrorDirSet,
   groupNeedsRide,
   discrepancies,
+  layoutMembers,
 } from './sheet'
 export type { MatchText, PlaceTarget } from './sheet'
 export { haversineKm, locationKey } from './geo'

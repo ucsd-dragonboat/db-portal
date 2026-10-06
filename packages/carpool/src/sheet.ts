@@ -201,3 +201,19 @@ export function discrepancies(needsRide: string[], going: DirSet, back: DirSet):
   }
   return out
 }
+
+/** Everyone a layout claims: drivers, passengers and DIY riders in either direction.
+ * Write-in guests (ids starting "x:") belong to the layout alone and are left out —
+ * they can't clash with another layout. */
+export function layoutMembers(d: CarpoolDataV2): Set<string> {
+  const out = new Set<string>()
+  for (const dir of [d.going, d.back]) {
+    for (const c of [...dir.onCampus, ...dir.offCampus]) {
+      out.add(c.driverId)
+      for (const p of c.passengerIds) out.add(p)
+    }
+    for (const id of dir.diy) out.add(id)
+  }
+  for (const id of out) if (id.startsWith('x:')) out.delete(id)
+  return out
+}

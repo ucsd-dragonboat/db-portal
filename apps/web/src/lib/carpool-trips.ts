@@ -15,11 +15,12 @@ import type { Profile, Rsvp } from "@/lib/database.types";
 import { riderFromRsvp } from "@/lib/riders";
 import { routeDrive } from "@/lib/routing";
 
-export async function recordCarpoolTrips(orgId: string, eventId: string, data: CarpoolDataV2): Promise<void> {
+/** Replaces one layout's trips — other layouts on the same day keep theirs. */
+export async function recordCarpoolTrips(orgId: string, eventId: string, carpoolId: string, data: CarpoolDataV2): Promise<void> {
   const admin = createAdminClient();
   const { data: event } = await admin.from("events").select("*").eq("id", eventId).maybeSingle();
   if (!event || event.location_lat == null || event.location_lon == null) {
-    await admin.from("carpool_trips").delete().eq("event_id", eventId);
+    await admin.from("carpool_trips").delete().eq("carpool_id", carpoolId);
     return;
   }
   const destination: Destination = { lat: event.location_lat, lon: event.location_lon, label: event.location_name ?? event.title };
@@ -35,7 +36,7 @@ export async function recordCarpoolTrips(orgId: string, eventId: string, data: C
     if (out) riders[out.rider.id] = out.rider;
   }
 
-  type Row = { org_id: string; event_id: string; direction: "going" | "back"; driver_id: string; passenger_ids: string[]; distance_km: number; duration_min: number };
+  type Row = { org_id: string; event_id: string; carpool_id: string; direction: "going" | "back"; driver_id: string; passenger_ids: string[]; distance_km: number; duration_min: number };
   const rows: Row[] = [];
   let routed = 0, failed = 0;
   for (const [direction, dirSet] of [["going", data.going], ["back", data.back]] as const) {
@@ -48,7 +49,7 @@ export async function recordCarpoolTrips(orgId: string, eventId: string, data: C
       const route = await routeDrive(points); // null: no provider answered — no trip row this publish
       if (!route) { failed++; continue; }
       routed++;
-      rows.push({ org_id: orgId, event_id: eventId, direction, driver_id: car.driverId, passenger_ids: passengerIds, distance_km: route.distanceKm, duration_min: route.durationMin });
+      rows.push({ org_id: orgId, event_id: eventId, carpool_id: carpoolId, direction, driver_id: car.driverId, passenger_ids: passengerIds, distance_km: route.distanceKm, duration_min: route.durationMin });
     }
   }
 
@@ -57,6 +58,6 @@ export async function recordCarpoolTrips(orgId: string, eventId: string, data: C
   // event's mileage for good (nothing backfills it).
   if (failed > 0 && routed === 0) return;
 
-  await admin.from("carpool_trips").delete().eq("event_id", eventId);
+  await admin.from("carpool_trips").delete().eq("carpool_id", carpoolId);
   if (rows.length) await admin.from("carpool_trips").insert(rows);
 }
