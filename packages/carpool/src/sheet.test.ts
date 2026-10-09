@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   layoutMembers,
+  carpoolToTsv,
   movedRiders,
   seatSnapshot,
   addDriverToDirSet,
@@ -191,5 +192,22 @@ describe('seatSnapshot / movedRiders', () => {
     expect(d.seatedAt).toEqual({ p1: '32.200,-117.000' })
     d.going = dir({ onCampus: [car('d1', 5, ['p1'])] })
     expect(movedRiders(d, { d1: at(40), p1: at(32.2) })).toEqual([])
+  })
+})
+
+describe('carpoolToTsv', () => {
+  it('puts each driver atop their passengers, one column per car, GOING then BACK', () => {
+    const d = upgradeCarpoolData({ v: 2 }, {})
+    d.going = dir({ onCampus: [car('d1', 5, ['p1', 'p2'])], offCampus: [car('d2', 5, ['p3'])], diy: ['p4'] })
+    const names: Record<string, string> = { d1: 'Ann', d2: 'Bo', p1: 'Cy', p2: 'Di\tx', p3: 'Ed', p4: 'Flo' }
+    expect(carpoolToTsv(d, (id) => names[id]).split('\n')).toEqual([
+      'GOING',
+      'Ann\tBo\tDIY',
+      'Cy\tEd\tFlo',
+      'Di x\t\t',
+      '',
+      'BACK',
+      '(no cars)',
+    ])
   })
 })
