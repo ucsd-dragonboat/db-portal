@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
-  addDriverToDirSet, carRoutePoints, discrepancies, groupNeedsRide,
+  addDriverToDirSet, carpoolToTsv, carRoutePoints, discrepancies, groupNeedsRide,
   locationKey, mirrorDirSet, movedRiders, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
   removeFromDirSet, upgradeCarpoolData,
   type CarpoolDataV2, type CarpoolGuest, type Destination, type MatchText, type OsrmRoute, type Rider,
@@ -144,6 +144,14 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     setMsg("Copied Going → Back — edit Back freely, they're independent now");
   };
 
+  // Tab-separated text pastes into Google Sheets as a grid (one column per car).
+  const copyForSheets = async () => {
+    try {
+      await navigator.clipboard.writeText(carpoolToTsv(data, (id) => effRiders[id]?.name ?? "?"));
+      setMsg("Copied — paste into Google Sheets (one column per car: driver on top, passengers below)");
+    } catch { setMsg("Couldn't copy — your browser blocked clipboard access"); }
+  };
+
   const save = (published: boolean) => start(async () => {
     const r = await saveCarpool(carpoolId, eventId, name, data, published);
     if ("error" in r) { setMsg(r.error); return; }
@@ -205,6 +213,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
         <input value={name} onChange={(e) => setName(e.target.value)} className="input w-40 py-1 text-sm font-medium" title="Layout name — members see it above this sheet" aria-label="Layout name" />
         <button type="button" onClick={() => optimize("unplaced")} disabled={!destination || optimizing} title={destination ? "Seat everyone still needing a ride in GOING, using real drive times (existing seats are kept)" : "Needs the day's location coordinates"} className="btn-primary py-1 disabled:cursor-not-allowed">{optimizing ? "Optimizing…" : "Optimize"}</button>
         <button type="button" onClick={copyGoingToBack} className="btn-secondary py-1">Copy Going → Back</button>
+        <button type="button" onClick={copyForSheets} className="btn-secondary py-1" title="Copies the rides as a grid — paste into Google Sheets: one column per car, driver on top, passengers underneath">Copy for Sheets</button>
         <button type="button" onClick={() => save(false)} disabled={pending} className="btn-secondary py-1">Save</button>
         <button type="button" onClick={() => save(true)} disabled={pending} className="btn-secondary py-1">Publish</button>
         <label className="flex min-w-64 flex-1 items-center gap-1 text-xs">Campus keywords

@@ -26,6 +26,7 @@ export {
   groupNeedsRide,
   discrepancies,
   layoutMembers,
+  carpoolToTsv,
   movedRiders,
   seatSnapshot,
 } from './sheet'

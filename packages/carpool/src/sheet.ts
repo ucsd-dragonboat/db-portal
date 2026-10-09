@@ -243,3 +243,21 @@ export function seatSnapshot(d: CarpoolDataV2, current: Record<string, { locatio
   }
   return out
 }
+
+/** The layout as tab-separated text for pasting into Google Sheets: per direction, a
+ * title row, then one column per car — driver on top, passengers underneath — with a
+ * DIY column last when anyone's getting there themselves. Tabs and newlines inside
+ * names are flattened so a name can't break the grid. */
+export function carpoolToTsv(d: CarpoolDataV2, nameOf: (id: string) => string): string {
+  const clean = (s: string) => s.replace(/[\t\r\n]+/g, ' ').trim()
+  const block = (title: string, dir: DirSet): string[][] => {
+    const cols: string[][] = [...dir.onCampus, ...dir.offCampus].map((c) => [nameOf(c.driverId), ...c.passengerIds.map(nameOf)])
+    if (dir.diy.length) cols.push(['DIY', ...dir.diy.map(nameOf)])
+    if (!cols.length) return [[title], ['(no cars)']]
+    const height = Math.max(...cols.map((c) => c.length))
+    const rows: string[][] = [[title]]
+    for (let i = 0; i < height; i++) rows.push(cols.map((c) => c[i] ?? ''))
+    return rows
+  }
+  return [...block('GOING', d.going), [], ...block('BACK', d.back)].map((r) => r.map(clean).join('\t')).join('\n')
+}
