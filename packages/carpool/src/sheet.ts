@@ -251,9 +251,10 @@ export function seatSnapshot(d: CarpoolDataV2, current: Record<string, { locatio
 /** The layout as tab-separated text for pasting into Google Sheets: per direction, a
  * title row, then one column per car — driver on top, passengers underneath, and the
  * car's comment on one shared row below the passengers (only when some car has one) —
- * with a DIY column last when anyone's getting there themselves. Tabs and newlines
- * inside names are flattened so a name can't break the grid. */
-export function carpoolToTsv(d: CarpoolDataV2, nameOf: (id: string) => string): string {
+ * with a DIY column last when anyone's getting there themselves. `notes` (pickup spot
+ * / driving-from, by rider id) go in a NOTES section at the end instead of the name
+ * cells. Tabs and newlines inside names are flattened so a name can't break the grid. */
+export function carpoolToTsv(d: CarpoolDataV2, nameOf: (id: string) => string, notes: Record<string, string> = {}): string {
   const clean = (s: string) => s.replace(/[\t\r\n]+/g, ' ').trim()
   const block = (title: string, dir: DirSet): string[][] => {
     const cars = [...dir.onCampus, ...dir.offCampus]
@@ -267,5 +268,9 @@ export function carpoolToTsv(d: CarpoolDataV2, nameOf: (id: string) => string): 
     if (cars.some((c) => c.comment?.trim())) rows.push(cols.map((_, i) => cars[i]?.comment ?? ''))
     return rows
   }
-  return [...block('GOING', d.going), [], ...block('BACK', d.back)].map((r) => r.map(clean).join('\t')).join('\n')
+  // Where people are picked up / driving from, kept out of the name cells: a
+  // Name | Note list for everyone in this layout who has one.
+  const noted = [...layoutMembers(d)].filter((id) => notes[id]?.trim()).sort((a, b) => nameOf(a).localeCompare(nameOf(b)))
+  const notesBlock = noted.length ? [[], ['NOTES'], ...noted.map((id) => [nameOf(id), notes[id]])] : []
+  return [...block('GOING', d.going), [], ...block('BACK', d.back), ...notesBlock].map((r) => r.map(clean).join('\t')).join('\n')
 }

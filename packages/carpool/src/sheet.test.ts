@@ -223,3 +223,14 @@ describe('car comments', () => {
     ])
   })
 })
+
+describe('carpoolToTsv notes', () => {
+  it('lists pickup notes for people in the layout in a NOTES section, not in the name cells', () => {
+    const d = upgradeCarpoolData({ v: 2 }, {})
+    d.going = dir({ onCampus: [car('d1', 5, ['p1'])] })
+    const names: Record<string, string> = { d1: 'Ann', p1: 'Cy', p9: 'Zed' }
+    const out = carpoolToTsv(d, (id) => names[id], { p1: 'Pickup: Peterson Loop', p9: 'Pickup: elsewhere', d1: '' }).split('\n')
+    expect(out.slice(0, 3)).toEqual(['GOING', 'Ann', 'Cy'])
+    expect(out.slice(-2)).toEqual(['NOTES', 'Cy\tPickup: Peterson Loop'])
+  })
+})

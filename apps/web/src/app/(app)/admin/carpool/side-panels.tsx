@@ -119,6 +119,27 @@ export function TotalPanel({ riders, drivers, grouped, selfIds, guests, placedNo
   );
 }
 
+/** Name | Note rows: where people are picked up or driving from, when it isn't their
+ * home address — kept here so the car cells show just names. */
+export function NotesPanel({ notes, riders }: { notes: Record<string, string>; riders: Record<string, Rider> }) {
+  const ids = Object.keys(notes).filter((id) => notes[id] && riders[id]).sort((a, b) => riders[a].name.localeCompare(riders[b].name));
+  return (
+    <div className="w-max text-[13px]" style={{ borderLeft: `1px solid ${GRID}`, borderTop: `1px solid ${GRID}` }}>
+      <div className="flex bg-white font-bold">
+        <div className={`${cell} w-[150px] shrink-0`} style={cellBorder}>Name</div>
+        <div className={`${cell} w-[300px] shrink-0`} style={cellBorder}>Pickup notes</div>
+      </div>
+      {ids.map((id) => (
+        <div key={id} className="flex bg-white">
+          <div className={`${cell} w-[150px] shrink-0 min-w-0`} style={cellBorder} title={riders[id].name}><span className="truncate">{riders[id].name}</span></div>
+          <div className={`${cell} w-[300px] shrink-0 min-w-0`} style={cellBorder} title={notes[id]}><span className="truncate">{notes[id]}</span></div>
+        </div>
+      ))}
+      {!ids.length && <div className={`${cell} bg-white`} style={{ ...cellBorder, color: "var(--g-grey-600)" }}>Everyone&apos;s using their home address</div>}
+    </div>
+  );
+}
+
 /** The template's yellow columns: pick a form question, rows of Name | Response. */
 export function FunFactPanel({ questions, answers, questionId, onPickQuestion, riders }: {
   questions: { id: string; label: string }[];
