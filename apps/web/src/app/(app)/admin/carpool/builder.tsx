@@ -11,7 +11,7 @@ import {
 } from "@db/carpool";
 import { optimizeLayout, routeCar, saveCarpool } from "./actions";
 import { CarGrid, DiyRow, SHEET, type DirKey, type GridHandlers } from "./car-grid";
-import { DiscrepancyTracker, FunFactPanel, TotalPanel } from "./side-panels";
+import { DiscrepancyTracker, FunFactPanel, NotesPanel, TotalPanel } from "./side-panels";
 
 const RouteMap = dynamic(() => import("@/components/route-map"), { ssr: false });
 
@@ -145,10 +145,15 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     setMsg("Copied Going → Back — edit Back freely, they're independent now");
   };
 
+  // Pickup spot / driving-from for anyone not leaving from home — shown in the notes
+  // panel and the copied NOTES section, never glued onto the name.
+  const notes = useMemo(() => Object.fromEntries(Object.entries(pickupNames).filter(([, p]) => p)
+    .map(([id, p]) => [id, driverIdSet.has(id) ? `Driving from ${p}` : `Pickup: ${p}`])), [pickupNames, driverIdSet]);
+
   // Tab-separated text pastes into Google Sheets as a grid (one column per car).
   const copyForSheets = async () => {
     try {
-      await navigator.clipboard.writeText(carpoolToTsv(data, (id) => effRiders[id]?.name ?? "?"));
+      await navigator.clipboard.writeText(carpoolToTsv(data, (id) => effRiders[id]?.name ?? "?", notes));
       setMsg("Copied — paste into Google Sheets (one column per car: driver on top, passengers below)");
     } catch { setMsg("Couldn't copy — your browser blocked clipboard access"); }
   };
@@ -267,6 +272,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
           {/* bottom row, like the sheet's footer area: discrepancy tracker + fun-fact side by side */}
           <div className="mt-[22px] flex items-start gap-8">
             <DiscrepancyTracker rows={disc} riders={effRiders} />
+            <NotesPanel notes={notes} riders={effRiders} />
             <FunFactPanel questions={funFactQuestions} answers={funFactAnswers} questionId={data.funFactQuestionId}
               onPickQuestion={(id) => setData((s) => ({ ...s, funFactQuestionId: id }))} riders={effRiders} />
           </div>
