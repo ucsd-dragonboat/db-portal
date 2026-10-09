@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessToken, listSpreadsheets, parseSheetUrl, setDefaultSpreadsheet } from "@/lib/google-sheets";
@@ -96,4 +98,27 @@ export async function saveResponseAsAdmin(_: SubmitState, fd: FormData): Promise
   ]);
   if (!form || !member) return { error: "That member or form isn't on your team." };
   return saveResponse(admin, memberId, fd, { asAdmin: true });
+}
+
+/** An admin deleting a member's response. With clear_attendance on (the default), the
+ * attendance they gave for this form's days goes too — otherwise they'd still count
+ * as coming in lineups and carpools. */
+export async function deleteResponseAsAdmin(fd: FormData) {
+  const { org } = await requireAdmin();
+  const memberId = String(fd.get("as_user") ?? "");
+  const formId = String(fd.get("form_id") ?? "");
+  const admin = createAdminClient();
+  const { data: form } = await admin.from("forms").select("id, sheet_spreadsheet_id").eq("id", formId).eq("org_id", org.id).maybeSingle();
+  if (!form) return;
+  await admin.from("form_responses").delete().eq("form_id", formId).eq("user_id", memberId);
+  if (fd.get("clear_attendance") === "on") {
+    const { data: links } = await admin.from("form_events").select("event_id").eq("form_id", formId);
+    const days = (links ?? []).map((l) => l.event_id);
+    if (days.length) await admin.from("rsvps").delete().eq("user_id", memberId).in("event_id", days);
+    for (const d of days) revalidatePath(`/events/${d}`);
+    revalidatePath("/events"); revalidatePath("/admin/carpool"); revalidatePath("/admin/lineups");
+  }
+  if (form.sheet_spreadsheet_id) after(() => syncFormToSheet(formId));
+  revalidatePath(`/admin/forms/${formId}/responses`); revalidatePath(`/forms/${formId}`); revalidatePath("/forms");
+  redirect(`/admin/forms/${formId}/responses`);
 }
