@@ -10,11 +10,19 @@ import { allowRate } from "@/lib/rate-limit";
 export const DEMO_EMAIL_DOMAIN = "demo.invalid";
 const MAX_LIVE_SANDBOXES = 150;
 
-export type DemoStart = { ok: true; email: string; orgId: string } | { error: "busy" | "full" | "failed" };
+/** The Team settings on/off switch (migration 0033). Off when unset or unreadable, so
+ * nobody can start a demo until an admin turns it on. */
+export async function demoEnabled(): Promise<boolean> {
+  const { data } = await createAdminClient().from("site_settings").select("demo_enabled").maybeSingle();
+  return !!data?.demo_enabled;
+}
+
+export type DemoStart = { ok: true; email: string; orgId: string } | { error: "off" | "busy" | "full" | "failed" };
 
 /** Creates a visitor account + their seeded sandbox. Rate-limited per IP and capped
  * globally so a QR code can't be used to fill the database. */
 export async function createDemoSandbox(ip: string): Promise<DemoStart> {
+  if (!(await demoEnabled())) return { error: "off" };
   if (!(await allowRate(`demo-create:${ip}`, 3, 3600))) return { error: "busy" };
   const admin = createAdminClient();
   const { count } = await admin.from("organizations").select("id", { count: "exact", head: true })
