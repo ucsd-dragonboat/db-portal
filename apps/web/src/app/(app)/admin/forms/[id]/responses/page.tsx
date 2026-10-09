@@ -74,22 +74,26 @@ export default async function FormResponsesPage({ params, searchParams }: { para
           <span className="font-medium">▦ Responses sheet</span><span style={{ color: "var(--g-grey-600)" }}>· one row per member, latest submission</span>
         </div>
         <table className="sheet">
-          <thead><tr><th className="w-8 text-center">#</th>{header.map((h) => <th key={h} className="whitespace-nowrap">{h}</th>)}</tr></thead>
+          <thead><tr><th className="w-8 text-center">#</th><th className="w-10" />{header.map((h) => <th key={h} className="whitespace-nowrap">{h}</th>)}</tr></thead>
           <tbody>
             {rows.map((r, i) => (
               <tr key={i} style={lateFlags[i] ? { background: "#fce8e680" } : undefined}>
                 <td className="text-center" style={{ background: "var(--g-grey-100)", color: "var(--g-grey-600)" }}>{i + 1}</td>
+                <td className="text-center"><Link href={`/admin/forms/${id}/responses/${responded[i].id}`} className="text-xs underline" style={{ color: "var(--g-purple)" }} title={`Edit ${responded[i].full_name || responded[i].email}'s response`}>Edit</Link></td>
                 {r.map((c, j) => <td key={j} className="max-w-[240px] whitespace-pre-wrap" style={j === r.length - 1 && c ? { color: c === "Late" ? "var(--g-red)" : "var(--g-green)", fontWeight: 500 } : undefined}>{String(c)}</td>)}
               </tr>
             ))}
-            {!rows.length && <tr><td colSpan={header.length + 1} className="p-3" style={{ color: "var(--g-grey-600)" }}>No responses yet.</td></tr>}
+            {!rows.length && <tr><td colSpan={header.length + 2} className="p-3" style={{ color: "var(--g-grey-600)" }}>No responses yet.</td></tr>}
           </tbody>
         </table>
       </div>
 
       <div className="gf-card text-sm">
         <h3 className="font-medium mb-1">Haven’t responded ({missing.length})</h3>
-        <p style={{ color: "var(--g-grey-600)" }}>{missing.length ? missing.map((p) => p.full_name || p.email).join(", ") : <>Everyone has responded <Icon name="party" /></>}</p>
+        <p style={{ color: "var(--g-grey-600)" }}>{missing.length
+          ? missing.map((p, i) => <span key={p.id}>{i > 0 && ", "}<Link href={`/admin/forms/${id}/responses/${p.id}`} className="hover:underline" title="Fill in a response for them">{p.full_name || p.email}</Link></span>)
+          : <>Everyone has responded <Icon name="party" /></>}</p>
+        {missing.length > 0 && <p className="mt-1 text-xs" style={{ color: "var(--g-grey-600)" }}>Click a name to fill in a response on their behalf.</p>}
       </div>
       </div>
     </div>

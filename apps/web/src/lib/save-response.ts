@@ -11,8 +11,11 @@ import { attachPickupCoords, notFoundWarning } from "@/lib/geocode";
 
 export type SubmitState = { error?: string; saved?: boolean; warning?: string };
 
-/** Validates and saves weight / attendance / answers for `userId` using their own (RLS-scoped) client. */
-export async function saveResponse(supabase: SupabaseClient<Database>, userId: string, fd: FormData): Promise<SubmitState> {
+/** Validates and saves weight / attendance / answers for `userId` using their own (RLS-scoped) client.
+ * `asAdmin`: an admin editing someone's response from the Responses tab (service-role
+ * client) — works on closed forms too, keeps the member's own submitted time, and
+ * doesn't send the "new response" notification. */
+export async function saveResponse(supabase: SupabaseClient<Database>, userId: string, fd: FormData, opts: { asAdmin?: boolean } = {}): Promise<SubmitState> {
   const user = { id: userId };
   const formId = String(fd.get("form_id"));
 
@@ -20,7 +23,7 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
     supabase.from("forms").select("*").eq("id", formId).maybeSingle(),
     supabase.from("form_events").select("event_id").eq("form_id", formId),
   ]);
-  if (!form || form.status !== "open") return { error: "This form is not accepting responses." };
+  if (!form || (opts.asAdmin ? form.status === "template" : form.status !== "open")) return { error: "This form is not accepting responses." };
 
   // 1. optional weight update
   const w = String(fd.get("weight_lb") ?? "").trim();
@@ -67,13 +70,19 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
     }
     answers[q.id] = val;
   }
-  const { error } = await supabase.from("form_responses").upsert({ form_id: formId, user_id: user.id, answers, submitted_at: new Date().toISOString() });
+  // An admin's edit keeps the member's own submitted time (and so their on-time/late
+  // status); a response an admin enters for someone who never submitted is stamped now.
+  const { data: prior } = opts.asAdmin
+    ? await supabase.from("form_responses").select("submitted_at").eq("form_id", formId).eq("user_id", user.id).maybeSingle()
+    : { data: null };
+  const { error } = await supabase.from("form_responses").upsert({ form_id: formId, user_id: user.id, answers, submitted_at: prior?.submitted_at ?? new Date().toISOString() });
   if (error) return { error: error.message };
 
   // Mirror to the linked Google Sheet after the response is sent — never blocks the submitter.
   if (form.sheet_spreadsheet_id) after(() => syncFormToSheet(formId));
-  after(() => notifyFormSubmitted(form.org_id, formId, userId, form.title));
+  if (!opts.asAdmin) after(() => notifyFormSubmitted(form.org_id, formId, userId, form.title));
 
+  revalidatePath(`/admin/forms/${formId}/responses`);
   revalidatePath(`/forms/${formId}`); revalidatePath("/forms"); revalidatePath("/events"); revalidatePath("/dashboard");
   return { saved: true, warning };
 }

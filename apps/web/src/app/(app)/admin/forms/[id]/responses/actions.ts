@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessToken, listSpreadsheets, parseSheetUrl, setDefaultSpreadsheet } from "@/lib/google-sheets";
 import { linkFormToSheet, syncFormToSheet, SheetApiError } from "@/lib/sheet-sync";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { saveResponse, type SubmitState } from "@/lib/save-response";
 
 export type LinkState = { error?: string } | null;
 export type DriveSearch =
@@ -78,4 +80,20 @@ export async function unlinkSheet(fd: FormData): Promise<void> {
     .update({ sheet_spreadsheet_id: null, sheet_tab_id: null, sheet_linked_by: null })
     .eq("id", formId).eq("org_id", org.id);
   revalidatePath(`/admin/forms/${formId}/responses`);
+}
+
+/** An admin saving (or entering) a member's response from the Responses tab. Members
+ * can only write their own response, so after checking the form and the member both
+ * belong to this admin's team it saves with the service-role client. */
+export async function saveResponseAsAdmin(_: SubmitState, fd: FormData): Promise<SubmitState> {
+  const { org } = await requireAdmin();
+  const memberId = String(fd.get("as_user") ?? "");
+  const formId = String(fd.get("form_id") ?? "");
+  const admin = createAdminClient();
+  const [{ data: form }, { data: member }] = await Promise.all([
+    admin.from("forms").select("id").eq("id", formId).eq("org_id", org.id).maybeSingle(),
+    admin.from("memberships").select("user_id").eq("org_id", org.id).eq("user_id", memberId).maybeSingle(),
+  ]);
+  if (!form || !member) return { error: "That member or form isn't on your team." };
+  return saveResponse(admin, memberId, fd, { asAdmin: true });
 }
