@@ -11,6 +11,8 @@ import { buildResponseGrid } from "@/lib/response-grid";
 import { fetchResponseGridInput } from "@/lib/response-data";
 import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
 import SheetsLink from "./sheets-link";
+import ConfirmForm from "@/components/confirm-form";
+import { deleteResponseAsAdmin } from "./actions";
 
 export default async function FormResponsesPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ google?: string }> }) {
   const [{ id }, { google: googleReturn }] = await Promise.all([params, searchParams]);
@@ -74,12 +76,20 @@ export default async function FormResponsesPage({ params, searchParams }: { para
           <span className="font-medium">▦ Responses sheet</span><span style={{ color: "var(--g-grey-600)" }}>· one row per member, latest submission</span>
         </div>
         <table className="sheet">
-          <thead><tr><th className="w-8 text-center">#</th><th className="w-10" />{header.map((h) => <th key={h} className="whitespace-nowrap">{h}</th>)}</tr></thead>
+          <thead><tr><th className="w-8 text-center">#</th><th className="w-24" />{header.map((h) => <th key={h} className="whitespace-nowrap">{h}</th>)}</tr></thead>
           <tbody>
             {rows.map((r, i) => (
               <tr key={i} style={lateFlags[i] ? { background: "#fce8e680" } : undefined}>
                 <td className="text-center" style={{ background: "var(--g-grey-100)", color: "var(--g-grey-600)" }}>{i + 1}</td>
-                <td className="text-center"><Link href={`/admin/forms/${id}/responses/${responded[i].id}`} className="text-xs underline" style={{ color: "var(--g-purple)" }} title={`Edit ${responded[i].full_name || responded[i].email}'s response`}>Edit</Link></td>
+                <td className="whitespace-nowrap text-center text-xs">
+                  <Link href={`/admin/forms/${id}/responses/${responded[i].id}`} className="underline" style={{ color: "var(--g-purple)" }} title={`Edit ${responded[i].full_name || responded[i].email}'s response`}>Edit</Link>
+                  <ConfirmForm action={deleteResponseAsAdmin} className="ml-2 inline"
+                    message={`Delete ${responded[i].full_name || responded[i].email}'s response${events.length ? " and their attendance for this form's days" : ""}? This can't be undone. (To keep their attendance, use Edit → Delete instead.)`}>
+                    <input type="hidden" name="form_id" value={id} /><input type="hidden" name="as_user" value={responded[i].id} />
+                    {events.length > 0 && <input type="hidden" name="clear_attendance" value="on" />}
+                    <button className="underline" style={{ color: "var(--g-red)" }} title="Delete this response">Delete</button>
+                  </ConfirmForm>
+                </td>
                 {r.map((c, j) => <td key={j} className="max-w-[240px] whitespace-pre-wrap" style={j === r.length - 1 && c ? { color: c === "Late" ? "var(--g-red)" : "var(--g-green)", fontWeight: 500 } : undefined}>{String(c)}</td>)}
               </tr>
             ))}

@@ -5,7 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import LocalTime from "@/components/local-time";
 import type { Event, FormQuestion, Rsvp } from "@/lib/database.types";
 import FillForm from "@/app/(app)/forms/[id]/fill-form";
-import { saveResponseAsAdmin } from "../actions";
+import { deleteResponseAsAdmin, saveResponseAsAdmin } from "../actions";
+import ConfirmForm from "@/components/confirm-form";
 
 /** An admin editing one member's response — the member's own form, filled with their
  * answers, saved on their behalf. Also used to enter a response for someone who
@@ -50,6 +51,17 @@ export default async function EditMemberResponsePage({ params }: { params: Promi
           submittedAt={response?.submitted_at ?? null} submitAction={saveResponseAsAdmin}
           header={<input type="hidden" name="as_user" value={userId} />}
           savedMessage={<>Saved {name}&apos;s response. <Link href={`/admin/forms/${id}/responses`} className="underline">Back to responses</Link></>} />
+        {response && (
+          <ConfirmForm action={deleteResponseAsAdmin} message={`Delete ${name}'s response to “${form.title}”? This can't be undone.`} className="gf-card space-y-2 text-sm">
+            <input type="hidden" name="form_id" value={id} /><input type="hidden" name="as_user" value={userId} />
+            <div className="font-medium" style={{ color: "var(--g-red)" }}>Delete this response</div>
+            {events.length > 0 && (
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" name="clear_attendance" defaultChecked className="h-4 w-4" />
+                Also clear their attendance for this form&apos;s {events.length === 1 ? "day" : `${events.length} days`} (otherwise they still count as coming in lineups and carpools)</label>
+            )}
+            <button className="btn-danger-text -ml-3">Delete response</button>
+          </ConfirmForm>
+        )}
       </div>
     </div>
   );
