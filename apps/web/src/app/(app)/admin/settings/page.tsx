@@ -7,6 +7,8 @@ import TeamCalendarForm from "./team-calendar-form";
 import PickupForm from "./pickup-form";
 import SavedLocationForm from "./saved-location-form";
 import ConfirmForm from "@/components/confirm-form";
+import { demoEnabled } from "@/lib/demo";
+import { setDemoEnabled } from "@/app/demo/actions";
 
 export default async function AdminSettingsPage() {
   const { org, userId } = await requireAdmin();
@@ -21,6 +23,7 @@ export default async function AdminSettingsPage() {
   // Google isn't connected yet, the scope is missing, or the API is off — the
   // form then just shows the original create button.
   const calendars = google && !calSync ? await listWritableCalendars(userId).catch(() => []) : [];
+  const demoOn = org.is_demo ? false : await demoEnabled();
   return (
     <div className="max-w-2xl space-y-6">
       <div>
@@ -98,6 +101,29 @@ export default async function AdminSettingsPage() {
           </div>
         )}
       </section>
+      {!org.is_demo && (
+        <section>
+          <h2 className="text-lg font-medium mb-1">Demo</h2>
+          <p className="text-sm text-slate-500 mb-3">
+            Anyone who scans this code gets their own throwaway copy of the portal with fake teammates, deleted after 24 hours.
+            It never touches your real team. This switch applies to the whole site.
+          </p>
+          <div className="card py-3 flex flex-wrap items-center gap-4 text-sm">
+            <a href="/demo/qr" target="_blank" rel="noopener" title="Open full size to print or project">
+              {/* eslint-disable-next-line @next/next/no-img-element -- our own SVG route */}
+              <img src="/demo/qr" alt="QR code for the demo" width={144} height={144} className={demoOn ? "" : "opacity-30"} />
+            </a>
+            <div className="space-y-2">
+              <div>Demo is <b>{demoOn ? "on" : "off"}</b>{demoOn ? " — new visitors can start a sandbox." : " — the QR code shows a “turned off” page."}</div>
+              <form action={setDemoEnabled}>
+                <input type="hidden" name="enabled" value={demoOn ? "0" : "1"} />
+                <button className={demoOn ? "text-xs text-red-600 underline" : "btn-purple text-sm"}>{demoOn ? "Turn demo off" : "Turn demo on"}</button>
+              </form>
+              <div className="text-xs text-slate-400"><a href="/demo/qr" target="_blank" rel="noopener" className="underline">Open QR full size</a> · <a href="/demo" target="_blank" rel="noopener" className="underline">landing page</a></div>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

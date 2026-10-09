@@ -28,6 +28,12 @@ export type Profile = {
 };
 
 /** One run of the carpool algorithm (cron or an admin's Optimize) — migration 0031. */
+export type SiteSettings = {
+  id: boolean;
+  demo_enabled: boolean;
+  updated_at: string;
+};
+
 export type CarpoolRun = {
   id: string;
   org_id: string;
@@ -466,6 +472,12 @@ export type Database = {
           { foreignKeyName: "carpools_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
           { foreignKeyName: "carpools_event_id_fkey"; columns: ["event_id"]; isOneToOne: false; referencedRelation: "events"; referencedColumns: ["id"] },
         ];
+      };
+      site_settings: {
+        Row: Row<SiteSettings>;
+        Insert: Insert<SiteSettings, "id" | "demo_enabled" | "updated_at">;
+        Update: Partial<SiteSettings>;
+        Relationships: [];
       };
       carpool_runs: {
         Row: Row<CarpoolRun>;
