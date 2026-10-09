@@ -234,3 +234,11 @@ describe('carpoolToTsv notes', () => {
     expect(out.slice(-2)).toEqual(['NOTES', 'Cy\tPickup: Peterson Loop'])
   })
 })
+
+describe('carpoolToTsv fun fact', () => {
+  it('appends the question then Name | Response rows, flattening multi-line answers', () => {
+    const d = upgradeCarpoolData({ v: 2 }, {})
+    const out = carpoolToTsv(d, (id) => id, {}, { question: 'Largest sea animal?', rows: [{ name: 'Bethany', text: 'moon jelly' }, { name: 'Anna', text: 'Albert\nthe whale' }] }).split('\n')
+    expect(out.slice(-3)).toEqual(['Largest sea animal?', 'Bethany\tmoon jelly', 'Anna\tAlbert the whale'])
+  })
+})
