@@ -42,7 +42,7 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
   }
   let warning: string | undefined;
   if (parsed.length) {
-    const { rows: rsvpRows, notFound } = await attachPickupCoords(supabase, user.id, parsed);
+    const { rows: rsvpRows, notFound } = await attachPickupCoords(supabase, user.id, parsed, form.org_id);
     warning = notFoundWarning(notFound);
     const { error } = await supabase.from("rsvps").upsert(rsvpRows);
     if (error) return { error: error.message.includes("pickup_lat") ? "Run migration 0029_rsvp_pickup_coords.sql first" : error.message };

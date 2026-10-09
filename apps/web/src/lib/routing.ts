@@ -13,6 +13,7 @@ import {
   type OsrmRoute,
   type ProviderKeys,
 } from "@db/carpool";
+import { demoGeoAllowed } from "@/lib/demo";
 
 // Optional keys, all free plans with no card needed except where noted. Any left unset
 // are simply skipped.
@@ -39,7 +40,9 @@ const coolingUntil = new Map<string, number>();
 
 type Provider<T> = { id: string; needsKey?: keyof ProviderKeys; maxPoints?: number; request(points: LatLon[], key?: string): HttpRequest; parse(json: unknown): T | null };
 
-async function firstAnswer<T>(kind: "route" | "matrix", chain: Provider<T>[], points: LatLon[], timeoutMs: number): Promise<{ value: T; provider: string } | null> {
+/** `orgId`: whose request this is — a demo sandbox only gets its small daily budget per
+ * provider (lib/demo.ts); a provider over budget is skipped like a rate-limited one. */
+async function firstAnswer<T>(kind: "route" | "matrix", chain: Provider<T>[], points: LatLon[], timeoutMs: number, orgId?: string): Promise<{ value: T; provider: string } | null> {
   const k = keys();
   for (const p of chain) {
     const key = p.needsKey ? k[p.needsKey] : undefined;
@@ -47,6 +50,7 @@ async function firstAnswer<T>(kind: "route" | "matrix", chain: Provider<T>[], po
     if (p.maxPoints && points.length > p.maxPoints) continue;
     const coolKey = p.id; // shared by route + matrix: same server, same rate limit
     if ((coolingUntil.get(coolKey) ?? 0) > Date.now()) continue;
+    if (!(await demoGeoAllowed(orgId, p.id))) continue;
 
     const req = p.request(points, key);
     try {
@@ -71,21 +75,21 @@ async function firstAnswer<T>(kind: "route" | "matrix", chain: Provider<T>[], po
 }
 
 /** One car's drive through `points` in order: km, minutes and the line for the map. */
-export function routeDrive(points: LatLon[]): Promise<OsrmRoute | null> {
+export function routeDrive(points: LatLon[], orgId?: string): Promise<OsrmRoute | null> {
   if (points.length < 2) return Promise.resolve(null);
-  return firstAnswer("route", ROUTE_PROVIDERS, points, 15000).then((r) => r?.value ?? null);
+  return firstAnswer("route", ROUTE_PROVIDERS, points, 15000, orgId).then((r) => r?.value ?? null);
 }
 
 /** Drive time and distance between every pair of `points`. */
-export async function driveMatrix(points: LatLon[]): Promise<CostMatrix | null> {
-  return (await driveMatrixWithSource(points))?.matrix ?? null;
+export async function driveMatrix(points: LatLon[], orgId?: string): Promise<CostMatrix | null> {
+  return (await driveMatrixWithSource(points, orgId))?.matrix ?? null;
 }
 
 /** driveMatrix plus which provider answered — for the carpool run status. */
-export async function driveMatrixWithSource(points: LatLon[]): Promise<{ matrix: CostMatrix; provider: string } | null> {
+export async function driveMatrixWithSource(points: LatLon[], orgId?: string): Promise<{ matrix: CostMatrix; provider: string } | null> {
   if (points.length < 2) return null;
   // The matrix parsers need the points too, to index rows by location.
   const chain = MATRIX_PROVIDERS.map((p) => ({ ...p, parse: (json: unknown) => p.parse(points, json) }));
-  const r = await firstAnswer("matrix", chain, points, 20000);
+  const r = await firstAnswer("matrix", chain, points, 20000, orgId);
   return r ? { matrix: r.value, provider: r.provider } : null;
 }

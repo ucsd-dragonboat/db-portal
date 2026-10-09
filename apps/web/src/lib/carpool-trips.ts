@@ -46,7 +46,7 @@ export async function recordCarpoolTrips(orgId: string, eventId: string, carpool
       const passengerIds = car.passengerIds.filter((id) => riders[id]); // drop write-in guests — no profile to attribute stats to
       if (passengerIds.length === 0) continue;
       const points = carRoutePoints({ ...car, passengerIds }, riders, destination, mode);
-      const route = await routeDrive(points); // null: no provider answered — no trip row this publish
+      const route = await routeDrive(points, orgId); // null: no provider answered — no trip row this publish
       if (!route) { failed++; continue; }
       routed++;
       rows.push({ org_id: orgId, event_id: eventId, carpool_id: carpoolId, direction, driver_id: car.driverId, passenger_ids: passengerIds, distance_km: route.distanceKm, duration_min: route.durationMin });

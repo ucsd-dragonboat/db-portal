@@ -13,6 +13,8 @@ export type EmailMessage = { to: string; subject: string; html: string };
 export async function sendEmailBatch(messages: EmailMessage[]): Promise<void> {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM;
+  // Demo sandboxes' fake accounts (@demo.invalid) never get mail — it would only bounce.
+  messages = messages.filter((m) => !m.to.toLowerCase().endsWith("@demo.invalid"));
   if (!key || !from || messages.length === 0) return;
 
   for (let i = 0; i < messages.length; i += CHUNK_SIZE) {

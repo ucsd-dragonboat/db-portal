@@ -102,8 +102,8 @@ export async function deleteCarpoolLayout(fd: FormData) {
 /** The builder map's route line for one car. Runs here rather than in the browser so
  * the routing fallbacks' API keys stay on the server. */
 export async function routeCar(points: LatLon[]) {
-  await requireAdmin();
-  return routeDrive(points.slice(0, 50).map((p) => ({ lat: Number(p.lat), lon: Number(p.lon) })));
+  const { org } = await requireAdmin();
+  return routeDrive(points.slice(0, 50).map((p) => ({ lat: Number(p.lat), lon: Number(p.lon) })), org.id);
 }
 
 const EMPTY_MATRIX: CostMatrix = { index: new Map(), durationMin: [], distanceKm: [] };
@@ -156,7 +156,7 @@ export async function optimizeLayout(carpoolId: string | null, eventId: string, 
   points.push({ lat: destination.lat, lon: destination.lon });
 
   const runId = await startRun(supabase, { orgId: org.id, eventId, trigger: "manual" });
-  const routed = await driveMatrixWithSource(points);
+  const routed = await driveMatrixWithSource(points, org.id);
   const res = optimizeCarpool(cars, pool, destination, routed?.matrix ?? EMPTY_MATRIX);
   const going: DirSet = { ...splitByCampus(res.cars, day.matchText, clean.collegeKeywords), diy: clean.going.diy };
   const seatedAt = { ...clean.seatedAt, ...seatSnapshot({ ...clean, going }, day.riders) };

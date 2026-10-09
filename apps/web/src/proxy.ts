@@ -3,7 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // /api/cron guards itself with CRON_SECRET; /api/calendar with per-member feed tokens.
 // /privacy is a public static page (required by Google's OAuth app publishing).
-const PUBLIC_PATHS = ["/login", "/auth", "/f/", "/api/cron", "/api/calendar", "/privacy"];
+// /demo is the QR-code landing page for demo sandboxes (lib/demo.ts).
+const PUBLIC_PATHS = ["/login", "/auth", "/f/", "/api/cron", "/api/calendar", "/privacy", "/demo"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

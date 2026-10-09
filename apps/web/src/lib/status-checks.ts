@@ -341,6 +341,20 @@ const CHECKS: Check[] = [
       return r?.status === "error" ? warn(lastText) : ok(lastText);
     },
   },
+  {
+    id: "demo.sandboxes", group: "Demo", label: "Demo sandboxes", description: "Live QR-code demo teams (scan /demo/qr to share) and whether expired ones are being cleaned up.",
+    async run() {
+      const admin = createAdminClient();
+      const now = new Date().toISOString();
+      const [{ count: live, error }, { count: stale }] = await Promise.all([
+        admin.from("organizations").select("id", { count: "exact", head: true }).eq("is_demo", true).gt("demo_expires_at", now),
+        admin.from("organizations").select("id", { count: "exact", head: true }).eq("is_demo", true).lt("demo_expires_at", new Date(Date.now() - 3600e3).toISOString()),
+      ]);
+      if (error) return fail(error.message.includes("is_demo") ? "Run migration 0032_demo_sandboxes.sql first." : error.message);
+      if (stale) return warn(`${live ?? 0} live; ${stale} expired over an hour ago but not cleaned up — is the 10-minute cron running?`);
+      return ok(`${live ?? 0} live sandbox${live === 1 ? "" : "es"} (cap 150). QR code: /demo/qr`);
+    },
+  },
   ...routingChecks,
   {
     id: "geocode.nominatim", group: "Maps", label: "Geocoding · Nominatim", description: "Looks up an address (used when a member saves a new home address).",

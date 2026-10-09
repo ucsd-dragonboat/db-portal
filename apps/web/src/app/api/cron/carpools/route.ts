@@ -84,5 +84,7 @@ export async function POST(req: Request) {
     console.error("[cron] deadline reminders failed:", e);
   }
 
-  return NextResponse.json({ processed: Object.keys(report).length, report, gcal, reminders });
+  // And clears out expired demo sandboxes (migration 0032) — orgs + their fake users.
+  const { data: demoCleaned } = await supabase.rpc("cleanup_demo_sandboxes", {});
+  return NextResponse.json({ processed: Object.keys(report).length, report, gcal, reminders, demoCleaned });
 }
