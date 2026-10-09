@@ -13,6 +13,8 @@ export type Car = {
   capacity: number
   passengerIds: string[]
   locked?: boolean
+  /** Free-text note shown in a cell under the car's passengers (e.g. "leaving 7:15 from Pepper Canyon"). */
+  comment?: string
 }
 
 export type Destination = LatLon & { label?: string }

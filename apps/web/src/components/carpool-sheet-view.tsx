@@ -9,7 +9,7 @@ const cellStyle = { borderRight: `1px solid ${GRID}`, borderBottom: `1px solid $
 const cell = "flex h-[22px] items-center px-1 text-[13px]";
 const who = (names: Names, id: string) => names[id] ?? "?";
 
-function CarColumn({ c, names, rows }: { c: Car; names: Names; rows: number }) {
+function CarColumn({ c, names, rows, comments }: { c: Car; names: Names; rows: number; comments: boolean }) {
   const seats = c.capacity - 1;
   const wide = seats > 4;
   const cols = wide ? 2 : 1;
@@ -24,12 +24,15 @@ function CarColumn({ c, names, rows }: { c: Car; names: Names; rows: number }) {
           </div>
         ))}
       </div>
+      {comments && <div className={`${cell} truncate text-[12px] italic`} style={{ background: "#fff", ...cellStyle }} title={c.comment}>{c.comment ?? ""}</div>}
     </div>
   );
 }
 
 function Band({ dir, label, directionLabel, cars, names }: { dir: "going" | "back"; label: string; directionLabel?: string; cars: Car[]; names: Names }) {
   const rows = Math.max(4, ...cars.map((c) => Math.ceil((c.capacity - 1) / (c.capacity - 1 > 4 ? 2 : 1))));
+  // A comment row only when some car in this band has a note.
+  const comments = cars.some((c) => c.comment?.trim());
   return (
     <div style={{ borderLeft: `1px solid ${GRID}`, borderTop: `1px solid ${GRID}` }}>
       <div className="flex">
@@ -40,8 +43,9 @@ function Band({ dir, label, directionLabel, cars, names }: { dir: "going" | "bac
         <div className="w-20 shrink-0">
           <div className={cell} style={{ background: "#fecccc", ...cellStyle }}>Driver</div>
           <div style={{ background: "#d9d9d9", height: rows * 22, ...cellStyle }} />
+          {comments && <div className={`${cell} text-[12px] italic`} style={{ background: "#d9d9d9", ...cellStyle }}>Comment</div>}
         </div>
-        {cars.map((c) => <CarColumn key={c.id} c={c} names={names} rows={rows} />)}
+        {cars.map((c) => <CarColumn key={c.id} c={c} names={names} rows={rows} comments={comments} />)}
         {!cars.length && <div className={`${cell} flex-1 bg-white text-xs`} style={{ color: "var(--g-grey-600)", ...cellStyle }}>no cars</div>}
       </div>
     </div>

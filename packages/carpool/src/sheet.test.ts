@@ -211,3 +211,15 @@ describe('carpoolToTsv', () => {
     ])
   })
 })
+
+describe('car comments', () => {
+  it('survive upgradeCarpoolData (blank ones dropped) and copy as a row under the passengers', () => {
+    const d = upgradeCarpoolData({ v: 2, going: { onCampus: [{ ...car('d1', 5, ['p1', 'p2']), comment: 'leave 7:15' }, { ...car('d2', 5, ['p3']), comment: '  ' }], offCampus: [], diy: [] } }, {})
+    expect(d.going.onCampus[0].comment).toBe('leave 7:15')
+    expect('comment' in d.going.onCampus[1]).toBe(false)
+    const names: Record<string, string> = { d1: 'Ann', d2: 'Bo', p1: 'Cy', p2: 'Di', p3: 'Ed' }
+    expect(carpoolToTsv(d, (id) => names[id]).split('\n').slice(0, 5)).toEqual([
+      'GOING', 'Ann\tBo', 'Cy\tEd', 'Di\t', 'leave 7:15\t',
+    ])
+  })
+})
