@@ -30,11 +30,13 @@ function ParagraphAnswer({ name, initial }: { name: string; initial: string }) {
   return (<><input type="hidden" name={name} value={v} /><RichEditor value={v} onChange={setV} minRows={3} placeholder="Your answer" /></>);
 }
 
-export default function FillForm({ formId, events, rsvpBy, questions, existingAnswers, pickups, defaultSeats, weightLb, askWeight, submittedAt, submitAction = submitForm, header }: {
+export default function FillForm({ formId, events, rsvpBy, questions, existingAnswers, pickups, defaultSeats, weightLb, askWeight, submittedAt, submitAction = submitForm, header, savedMessage }: {
   formId: string; events: { prompt: string | null; event: Event }[]; rsvpBy: Record<string, Rsvp>; questions: FormQuestion[];
   existingAnswers: Record<string, unknown> | null; pickups: PickupLocation[]; defaultSeats: number | null; weightLb: number | null; askWeight: boolean; submittedAt: string | null;
   /** Public (shared-link) forms submit through a different action and show an email/name block first. */
   submitAction?: (state: SubmitState, fd: FormData) => Promise<SubmitState>; header?: React.ReactNode;
+  /** Replaces the default "Your response has been recorded…" confirmation. */
+  savedMessage?: React.ReactNode;
 }) {
   const [state, action, pending] = useActionState<SubmitState, FormData>(submitAction, {});
   const a = (id: string) => existingAnswers?.[id];
@@ -107,7 +109,7 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
 
       {state.error && <p className="text-sm" style={{ color: "var(--g-red)" }}>{state.error}</p>}
       {state.warning && <p className="text-sm" style={{ color: "#b06000" }}>{state.warning}</p>}
-      {state.saved && <div className="gf-card text-sm"><Icon name="yes" /> Your response has been recorded. You can resubmit any time before the form closes — the latest one counts.</div>}
+      {state.saved && <div className="gf-card text-sm"><Icon name="yes" /> {savedMessage ?? "Your response has been recorded. You can resubmit any time before the form closes — the latest one counts."}</div>}
       <div className="flex items-center justify-between pt-1">
         <button disabled={pending} className="btn-purple">{pending ? "Submitting…" : submittedAt ? "Update response" : "Submit"}</button>
         {submittedAt && !state.saved && <span className="text-xs" style={{ color: "var(--g-grey-600)" }}>Last submitted <LocalTime iso={submittedAt} /></span>}
