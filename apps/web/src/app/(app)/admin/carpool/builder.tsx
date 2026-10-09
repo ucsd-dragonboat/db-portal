@@ -153,7 +153,10 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   // Tab-separated text pastes into Google Sheets as a grid (one column per car).
   const copyForSheets = async () => {
     try {
-      await navigator.clipboard.writeText(carpoolToTsv(data, (id) => effRiders[id]?.name ?? "?", notes));
+      // Same rows the fun-fact panel shows: answers from people in this layout's roster.
+      const q = funFactQuestions.find((x) => x.id === data.funFactQuestionId);
+      const funFact = q ? { question: q.label, rows: (funFactAnswers[q.id] ?? []).filter((r) => effRiders[r.userId]).map((r) => ({ name: effRiders[r.userId].name, text: r.text })) } : undefined;
+      await navigator.clipboard.writeText(carpoolToTsv(data, (id) => effRiders[id]?.name ?? "?", notes, funFact));
       setMsg("Copied — paste into Google Sheets (one column per car: driver on top, passengers below)");
     } catch { setMsg("Couldn't copy — your browser blocked clipboard access"); }
   };
