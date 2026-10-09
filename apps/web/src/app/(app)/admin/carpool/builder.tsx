@@ -100,6 +100,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     addDriver: (dir, band, riderId) => setDir(dir, (d) =>
       addDriverToDirSet(d, band, riderId, drivers.find((x) => x.id === riderId)?.seats ?? 5, dir === "going" ? "g" : "b")),
     removeCar: (dir, carId) => setDir(dir, (d) => removeCarFromDirSet(d, carId)),
+    setComment: (dir, carId, comment) => setDir(dir, (d) => mapCarsIn(d, (c) => (c.id === carId ? { ...c, comment } : c))),
   };
   const unseatDrop = (payload: string) => {
     const [kind, id, origin] = payload.split(":");

@@ -43,11 +43,15 @@ const isCar = (x: unknown): x is Car => {
 }
 
 const cleanCars = (raw: unknown, prefix: DirPrefix): Car[] =>
-  (Array.isArray(raw) ? raw.filter(isCar) : []).map((c) => ({
-    ...c,
-    id: `${prefix}:${c.driverId}`,
-    passengerIds: c.passengerIds.filter((p): p is string => typeof p === 'string'),
-  }))
+  (Array.isArray(raw) ? raw.filter(isCar) : []).map((c) => {
+    const { comment, ...rest } = c
+    return {
+      ...rest,
+      id: `${prefix}:${c.driverId}`,
+      passengerIds: c.passengerIds.filter((p): p is string => typeof p === 'string'),
+      ...(typeof comment === 'string' && comment.trim() ? { comment: comment.slice(0, 500) } : {}),
+    }
+  })
 
 const cleanDir = (raw: unknown, prefix: DirPrefix): DirSet => {
   const d = (raw ?? {}) as Partial<DirSet>
@@ -245,18 +249,22 @@ export function seatSnapshot(d: CarpoolDataV2, current: Record<string, { locatio
 }
 
 /** The layout as tab-separated text for pasting into Google Sheets: per direction, a
- * title row, then one column per car — driver on top, passengers underneath — with a
- * DIY column last when anyone's getting there themselves. Tabs and newlines inside
- * names are flattened so a name can't break the grid. */
+ * title row, then one column per car — driver on top, passengers underneath, and the
+ * car's comment on one shared row below the passengers (only when some car has one) —
+ * with a DIY column last when anyone's getting there themselves. Tabs and newlines
+ * inside names are flattened so a name can't break the grid. */
 export function carpoolToTsv(d: CarpoolDataV2, nameOf: (id: string) => string): string {
   const clean = (s: string) => s.replace(/[\t\r\n]+/g, ' ').trim()
   const block = (title: string, dir: DirSet): string[][] => {
-    const cols: string[][] = [...dir.onCampus, ...dir.offCampus].map((c) => [nameOf(c.driverId), ...c.passengerIds.map(nameOf)])
+    const cars = [...dir.onCampus, ...dir.offCampus]
+    const cols: string[][] = cars.map((c) => [nameOf(c.driverId), ...c.passengerIds.map(nameOf)])
     if (dir.diy.length) cols.push(['DIY', ...dir.diy.map(nameOf)])
     if (!cols.length) return [[title], ['(no cars)']]
     const height = Math.max(...cols.map((c) => c.length))
     const rows: string[][] = [[title]]
     for (let i = 0; i < height; i++) rows.push(cols.map((c) => c[i] ?? ''))
+    // Comments line up on one row under everyone's passengers, like the builder's cells.
+    if (cars.some((c) => c.comment?.trim())) rows.push(cols.map((_, i) => cars[i]?.comment ?? ''))
     return rows
   }
   return [...block('GOING', d.going), [], ...block('BACK', d.back)].map((r) => r.map(clean).join('\t')).join('\n')

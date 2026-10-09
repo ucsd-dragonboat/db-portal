@@ -15,6 +15,7 @@ export type GridHandlers = {
   /** Typing/dropping someone into an empty Driver cell creates their car in `band`. */
   addDriver: (dir: DirKey, band: "onCampus" | "offCampus", riderId: string) => void;
   removeCar: (dir: DirKey, carId: string) => void;
+  setComment: (dir: DirKey, carId: string, comment: string) => void;
 };
 
 // Exact colors from the team's Google Sheets template.
@@ -66,6 +67,9 @@ function CarColumn({ dir, car, riders, options, rows, h }: {
           );
         })}
       </div>
+      <input value={car.comment ?? ""} onChange={(e) => h.setComment(dir, car.id, e.target.value)} maxLength={500}
+        placeholder="comment" title={car.comment || "A note for this car — copied with the rides"}
+        className="block h-[22px] w-full bg-white px-1 text-[12px] italic outline-none placeholder:text-black/25 focus:bg-[#fffbe6]" style={cellBorder} />
     </div>
   );
 }
@@ -80,7 +84,7 @@ function EmptyColumn({ dir, band, driverOptions, rows, h }: {
       <NameCell value={null} options={driverOptions} onPick={(id) => h.addDriver(dir, band, id)}
         onDropRider={(payload) => { const [k, id] = payload.split(":"); if (k === "rider") h.addDriver(dir, band, id); }}
         className="!bg-[#fecccc]" />
-      {Array.from({ length: rows }, (_, i) => <div key={i} className="h-[22px] bg-white" style={cellBorder} />)}
+      {Array.from({ length: rows + 1 }, (_, i) => <div key={i} className="h-[22px] bg-white" style={cellBorder} />)}
     </div>
   );
 }
@@ -107,6 +111,7 @@ export function CarGrid({ dir, band, label, directionLabel, cars, riders, option
         <div className="w-20 shrink-0">
           <div className="flex h-[22px] items-center px-1" style={{ background: SHEET.driver, ...cellBorder }}>Driver</div>
           <div style={{ background: SHEET.filler, height: rows * 22, ...cellBorder }} />
+          <div className="flex h-[22px] items-center px-1 text-[12px] italic" style={{ background: SHEET.filler, ...cellBorder }}>Comment</div>
         </div>
         {cars.map((c) => <CarColumn key={c.id} dir={dir} car={c} riders={riders} options={options} rows={rows} h={h} />)}
         {Array.from({ length: emptyCols }, (_, i) => <EmptyColumn key={`e${i}`} dir={dir} band={band} driverOptions={driverOptions} rows={rows} h={h} />)}
