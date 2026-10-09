@@ -154,16 +154,19 @@ export function DiscrepancyTracker({ rows, riders }: {
 }) {
   const sorted = [...rows].sort((a, b) => (riders[a.id]?.name ?? "").localeCompare(riders[b.id]?.name ?? ""));
   const c = `${cell} w-[130px] shrink-0`;
+  // Names can carry a long typed pickup address ("Alex @ 123 Some St…"); the cells are a
+  // fixed row height, so keep each name on one line and show the rest on hover.
+  const nameCell = `${cell} w-[240px] shrink-0 min-w-0`;
   return (
     <div className="w-max text-[13px]" style={{ borderLeft: `1px solid ${GRID}`, borderTop: `1px solid ${GRID}` }}>
       <div className="flex bg-white font-bold">
-        <div className={c} style={cellBorder}>Name</div>
+        <div className={nameCell} style={cellBorder}>Name</div>
         <div className={c} style={cellBorder}>Need Ride Going</div>
         <div className={c} style={cellBorder}>Need Ride Back</div>
       </div>
       {sorted.map((r) => (
         <div key={r.id} className="flex bg-white">
-          <div className={c} style={cellBorder}>{riders[r.id]?.name ?? "?"}</div>
+          <div className={nameCell} style={cellBorder} title={riders[r.id]?.name}><span className="truncate">{riders[r.id]?.name ?? "?"}</span></div>
           <div className={`${c} justify-center font-medium`} style={{ ...cellBorder, color: "var(--g-red)" }}>{r.needGoing ? 1 : ""}</div>
           <div className={`${c} justify-center font-medium`} style={{ ...cellBorder, color: "var(--g-red)" }}>{r.needBack ? 1 : ""}</div>
         </div>
