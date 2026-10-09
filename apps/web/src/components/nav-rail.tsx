@@ -24,7 +24,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/status", label: "Status", icon: "pulse", color: "var(--g-red)" },
 ];
 
-export default function NavRail({ isAdmin }: { isAdmin: boolean }) {
+export default function NavRail({ isAdmin, isDemo = false }: { isAdmin: boolean; isDemo?: boolean }) {
   const path = usePathname();
   const item = (n: NavItem) => {
     const active = path === n.href || path.startsWith(n.href + "/");
@@ -41,7 +41,7 @@ export default function NavRail({ isAdmin }: { isAdmin: boolean }) {
         <>
           <div className="mt-4 mb-1 hidden md:block pl-6 text-[11px] font-medium uppercase tracking-wide" style={{ color: "var(--g-grey-600)" }}>Admin</div>
           <div className="mt-4 md:hidden border-t mx-3" style={{ borderColor: "var(--g-grey-300)" }} />
-          {adminNav.map(item)}
+          {adminNav.filter((n) => !(isDemo && n.href === "/admin/status")).map(item)}
         </>
       )}
     </aside>

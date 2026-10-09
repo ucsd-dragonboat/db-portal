@@ -100,7 +100,7 @@ async function build(supabase: AdminClient, orgId: string, eventId: string): Pro
   }
   points.push({ lat: destination.lat, lon: destination.lon });
 
-  const routed = await driveMatrixWithSource(points); // null: optimizeCarpool falls back to haversine
+  const routed = await driveMatrixWithSource(points, orgId); // null: optimizeCarpool falls back to haversine
   const res = optimizeCarpool(cars, riders, destination, routed?.matrix ?? EMPTY_MATRIX);
 
   // v2 sheet: optimized cars into Going split by campus keyword; Back starts as a

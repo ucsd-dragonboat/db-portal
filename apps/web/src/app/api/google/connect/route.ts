@@ -6,9 +6,11 @@ import { googleClientEnv } from "@/lib/google-sheets";
 
 /** Starts the Google OAuth flow for Sheets sync. Admin-only; NOT proxy-public, so a session is guaranteed. */
 export async function GET(request: NextRequest) {
-  await requireAdmin();
+  const { org } = await requireAdmin();
   const { searchParams, origin } = new URL(request.url);
   const next = safeNext(searchParams.get("next"));
+  // Demo sandboxes don't link real Google accounts.
+  if (org.is_demo) return NextResponse.redirect(`${origin}${next}?google=error`);
   const nonce = randomBytes(16).toString("hex");
 
   const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");

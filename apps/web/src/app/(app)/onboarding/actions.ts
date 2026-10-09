@@ -14,9 +14,11 @@ export async function createOrg(_: State, formData: FormData): Promise<State> {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Team name is required" };
   // Users only see their own orgs through RLS, so count with the service role.
-  const { count } = await createAdminClient()
-    .from("organizations")
-    .select("id", { count: "exact", head: true });
+  // Demo sandboxes don't count toward the cap. Before migration 0032 the filter column
+  // doesn't exist — then fall back to counting every org, never to "no limit".
+  const admin = createAdminClient();
+  const real = await admin.from("organizations").select("id", { count: "exact", head: true }).eq("is_demo", false);
+  const { count } = real.error ? await admin.from("organizations").select("id", { count: "exact", head: true }) : real;
   if ((count ?? 0) >= MAX_ORGS)
     return { error: "This portal isn't accepting new teams. Ask your team admin for a join code instead." };
   const supabase = await createClient();

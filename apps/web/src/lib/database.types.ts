@@ -75,6 +75,9 @@ export type Organization = {
   name: string;
   join_code: string;
   member_cap: number | null;
+  /** A throwaway demo sandbox (migration 0032) — fake members, deleted at demo_expires_at. */
+  is_demo: boolean;
+  demo_expires_at: string | null;
   created_by: string | null;
   created_at: string;
 };
@@ -319,7 +322,7 @@ export type Database = {
       };
       organizations: {
         Row: Row<Organization>;
-        Insert: Insert<Organization, "id" | "created_by" | "created_at">;
+        Insert: Insert<Organization, "id" | "member_cap" | "is_demo" | "demo_expires_at" | "created_by" | "created_at">;
         Update: Partial<Organization>;
         Relationships: [];
       };
@@ -501,6 +504,8 @@ export type Database = {
       user_has_password: { Args: { uid: string }; Returns: boolean };
       rotate_join_code: { Args: { org: string }; Returns: string };
       hit_rate_limit: { Args: { p_key: string; p_max: number; p_window: string }; Returns: boolean };
+      create_demo_sandbox: { Args: { visitor: string }; Returns: string };
+      cleanup_demo_sandboxes: { Args: { only_org?: string | null }; Returns: number };
       attendance_counts: { Args: { org: string }; Returns: { user_id: string; n: number }[] };
       admin_add_member: {
         Args: { p_org: string; p_email: string; p_full_name?: string; p_address?: string | null; p_city?: string | null; p_zipcode?: string | null; p_lat?: number | null; p_lon?: number | null; p_car_passengers?: number | null; p_gender?: string | null; p_weight_lb?: number | null };

@@ -25,7 +25,8 @@ export async function saveProfile(_: ProfileState, formData: FormData): Promise<
 
   // Geocode via Nominatim only when the address changed (free API, 1 req/s policy).
   if (address && full !== prevFull) {
-    const loc = await geocode(full);
+    const { data: m } = await supabase.from("memberships").select("org_id").eq("user_id", user.id).order("created_at").limit(1).maybeSingle();
+    const loc = await geocode(full, m?.org_id);
     lat = loc?.lat ?? null; lon = loc?.lon ?? null; geocoded = !!loc;
   } else if (!address) { lat = null; lon = null; }
 

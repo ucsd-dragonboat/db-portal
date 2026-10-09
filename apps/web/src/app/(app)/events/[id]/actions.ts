@@ -17,7 +17,8 @@ export async function submitRsvp(_: RsvpState, formData: FormData): Promise<Rsvp
   const eventId = String(formData.get("event_id"));
   const values = parseAttendance(formData, "a_");
   if (!values) return { error: "Please pick an option" };
-  const { rows: [row], notFound } = await attachPickupCoords(supabase, user.id, [{ event_id: eventId, user_id: user.id, ...values }]);
+  const { data: ev } = await supabase.from("events").select("org_id").eq("id", eventId).maybeSingle();
+  const { rows: [row], notFound } = await attachPickupCoords(supabase, user.id, [{ event_id: eventId, user_id: user.id, ...values }], ev?.org_id);
   const { error } = await supabase.from("rsvps").upsert(row);
   if (error) return { error: error.message.includes("pickup_lat") ? "Run migration 0029_rsvp_pickup_coords.sql first" : error.message };
   after(() => notifyEventSignup(eventId, user.id, values.status, values.ride));

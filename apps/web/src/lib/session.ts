@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Membership, Organization, Profile } from "@/lib/database.types";
@@ -9,7 +10,13 @@ export type Session = {
   profile: Profile;
   membership: (Membership & { organization: Organization }) | null;
   isAdmin: boolean;
+  /** Set only inside a demo sandbox: when it expires, and whether the visitor (really an
+   * admin) has switched to "view as member". */
+  demo: { hoursLeft: number | null; viewingAsMember: boolean } | null;
 };
+
+/** Cookie for the demo banner's "View as member" switch. Only honoured in demo orgs. */
+export const DEMO_VIEW_COOKIE = "demo_view";
 
 /** Loads user + profile + first org membership. Redirects to /login if signed out. */
 export const getSession = cache(async (): Promise<Session> => {
@@ -30,7 +37,13 @@ export const getSession = cache(async (): Promise<Session> => {
   if (!profile) redirect("/login");
 
   const m = membership as (Membership & { organization: Organization }) | null;
-  return { userId: user.id, profile, membership: m, isAdmin: m?.role === "admin" };
+  const demo = m?.organization.is_demo
+    ? {
+        hoursLeft: m.organization.demo_expires_at ? Math.max(0, Math.round((new Date(m.organization.demo_expires_at).getTime() - Date.now()) / 3600e3)) : null,
+        viewingAsMember: (await cookies()).get(DEMO_VIEW_COOKIE)?.value === "member",
+      }
+    : null;
+  return { userId: user.id, profile, membership: m, isAdmin: m?.role === "admin" && !demo?.viewingAsMember, demo };
 });
 
 /** Like getSession, but requires an org; sends to onboarding otherwise. */
