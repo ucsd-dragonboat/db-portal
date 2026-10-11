@@ -20,7 +20,8 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
   const [choice, setChoice] = useState<AttendanceChoice | null>(toChoice(existing));
   const savedSpot = defaultPickupId && pickups.some((p) => p.id === defaultPickupId) ? defaultPickupId : null;
   const [pickup, setPickup] = useState(existing ? existing.pickup_location_id ?? (existing.pickup_address ? "other" : "home") : savedSpot ?? "home");
-  const isSpot = pickup !== "home" && pickup !== "other";
+  // Only a spot that's still offered counts — a since-retired one must be picked again.
+  const isSpot = pickups.some((p) => p.id === pickup);
   const [campus, setCampus] = useState<"on" | "off">(isSpot ? "on" : "off");
   const [picking, setPicking] = useState(false);
   const spotName = pickups.find((p) => p.id === pickup)?.name;
@@ -57,14 +58,14 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
               </label>
             )}
             <label className="gf-radio !py-1">
-              <input type="radio" checked={campus === "off"} onChange={() => { setCampus("off"); if (isSpot || !pickup) setPickup("home"); }} /> Off campus
+              <input type="radio" checked={campus === "off"} onChange={() => { setCampus("off"); if (pickup !== "other") setPickup("home"); }} /> Off campus
             </label>
           </div>
           {campus === "on" ? (
             <div className="flex items-center gap-2">
               <input type="hidden" name={`${prefix}pickup`} value={pickup} />
               {/* Empty until a spot is picked, so the browser blocks submitting without one. */}
-              <input value={isSpot && pickup ? pickup : ""} onChange={() => {}} required={required} tabIndex={-1} aria-hidden className="sr-only" />
+              <input value={isSpot ? pickup : ""} onChange={() => {}} required={required} tabIndex={-1} aria-hidden className="sr-only" />
               <span>{spotName ? <b>{spotName}</b> : <span style={{ color: "var(--g-grey-600)" }}>No pickup spot chosen</span>}</span>
               <button type="button" onClick={() => setPicking(true)} className="btn-text text-sm" style={{ color: "var(--g-blue)" }}>{spotName ? "Change" : "Choose spot"}</button>
             </div>
@@ -84,7 +85,7 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
             </label>
           )}
           {picking && (
-            <Dialog title="Choose your pickup spot" onClose={() => { setPicking(false); if (!isSpot || !pickup) { setCampus("off"); setPickup("home"); } }}>
+            <Dialog title="Choose your pickup spot" onClose={() => { setPicking(false); if (!isSpot) { setCampus("off"); setPickup("home"); } }}>
               <div className="grid grid-cols-2 gap-2">
                 {pickups.map((p) => (
                   <button key={p.id} type="button" onClick={() => { setPickup(p.id); setCampus("on"); setPicking(false); }}
