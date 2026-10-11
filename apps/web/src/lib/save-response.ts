@@ -9,6 +9,7 @@ import { cleanHtml, htmlToText } from "@/lib/html";
 import { testPattern } from "@/lib/pattern";
 import { attachPickupCoords, notFoundWarning } from "@/lib/geocode";
 import { parseBirthday } from "@/lib/birthday";
+import { saveDefaultPickup } from "@/lib/default-pickup";
 
 export type SubmitState = { error?: string; saved?: boolean; warning?: string };
 
@@ -45,7 +46,7 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
   const parsed = [];
   for (const l of links ?? []) {
     const v = parseAttendance(fd, `ev_${l.event_id}_`);
-    if (!v) return { error: "Please answer every attendance question." };
+    if (!v) return { error: "Please answer every attendance question (and pick a pickup spot if you chose On campus)." };
     if (rideAddress && (v.ride === "driver" || v.ride === "needs_ride") && !v.pickup_address && !v.pickup_location_id) v.pickup_address = rideAddress;
     parsed.push({ event_id: l.event_id, user_id: user.id, form_id: formId, ...v });
   }
@@ -55,6 +56,8 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
     warning = notFoundWarning(notFound);
     const { error } = await supabase.from("rsvps").upsert(rsvpRows);
     if (error) return { error: error.message.includes("pickup_lat") ? "Run migration 0029_rsvp_pickup_coords.sql first" : error.message };
+    // An admin editing someone's response doesn't change that member's profile.
+    if (!opts.asAdmin) for (const r of rsvpRows) await saveDefaultPickup(supabase, user.id, fd, `ev_${r.event_id}_`, r);
   }
 
   // 3. custom answers
