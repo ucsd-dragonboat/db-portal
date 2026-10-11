@@ -3,13 +3,13 @@
 import Link from "next/link";
 import Icon from "@/components/icon";
 import { dayKey, firstOfMonth, KIND_COLORS, monthGrid } from "@/lib/calendar-dates";
-import { ATTACHMENTS, eventLabel, type AttachMap, type CalEvent } from "./calendar-shell";
+import { ATTACHMENTS, birthdaysOn, eventLabel, type AttachMap, type Birthday, type CalEvent } from "./calendar-shell";
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MAX_CHIPS = 3;
 
-export default function MonthView({ date, today, tz, events, attach, isAdmin = false }: {
-  date: string; today: string; tz: string | undefined; events: CalEvent[]; attach: AttachMap; isAdmin?: boolean;
+export default function MonthView({ date, today, tz, events, birthdays = [], attach, isAdmin = false }: {
+  date: string; today: string; tz: string | undefined; events: CalEvent[]; birthdays?: Birthday[]; attach: AttachMap; isAdmin?: boolean;
 }) {
   // Admins: clicking a day square opens the New-event dialog pre-filled with that date.
   const dayClick = (ymd: string) => {
@@ -42,6 +42,7 @@ export default function MonthView({ date, today, tz, events, attach, isAdmin = f
                 </span>
               </div>
               <div className="space-y-0.5">
+                {birthdaysOn(ymd, birthdays).map((b, i) => <div key={i} title={`${b.name}'s birthday`} className="flex items-center gap-1 truncate rounded px-1 py-0.5 text-[11px] leading-tight" style={{ background: "var(--g-yellow-soft)", color: "#b06000" }}><Icon name="party" /> <span className="truncate">{b.name}</span></div>)}
                 {dayEvents.slice(0, MAX_CHIPS).map((e) => {
                   const c = KIND_COLORS[e.kind];
                   const going = e.mine === "yes";

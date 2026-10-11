@@ -30,9 +30,11 @@ function ParagraphAnswer({ name, initial }: { name: string; initial: string }) {
   return (<><input type="hidden" name={name} value={v} /><RichEditor value={v} onChange={setV} minRows={3} placeholder="Your answer" /></>);
 }
 
-export default function FillForm({ formId, events, rsvpBy, questions, existingAnswers, pickups, defaultSeats, weightLb, askWeight, submittedAt, submitAction = submitForm, header, savedMessage }: {
+export default function FillForm({ formId, events, rsvpBy, questions, existingAnswers, pickups, defaultSeats, weightLb, askWeight, askBirthday = false, submittedAt, submitAction = submitForm, header, savedMessage }: {
   formId: string; events: { prompt: string | null; event: Event }[]; rsvpBy: Record<string, Rsvp>; questions: FormQuestion[];
   existingAnswers: Record<string, unknown> | null; pickups: PickupLocation[]; defaultSeats: number | null; weightLb: number | null; askWeight: boolean; submittedAt: string | null;
+  /** The member has no birthday on their profile yet (or is anonymous): ask for it, required. */
+  askBirthday?: boolean;
   /** Public (shared-link) forms submit through a different action and show an email/name block first. */
   submitAction?: (state: SubmitState, fd: FormData) => Promise<SubmitState>; header?: React.ReactNode;
   /** Replaces the default "Your response has been recorded…" confirmation. */
@@ -62,6 +64,12 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
         <Q title={<><Icon name="house" /> Different address just for these rides?</>}
           help="Optional. If you're driving from or need picking up somewhere other than your profile address this time, enter it once here — it applies to every day below where you chose your home address. Your profile isn't changed.">
           <input name="ride_address" placeholder="Street address and city (leave blank to use your home address)" className="input-line w-full" />
+        </Q>
+      )}
+
+      {askBirthday && (
+        <Q title={<><Icon name="party" /> When&apos;s your birthday?</>} required help="Saved to your profile so the team calendar can celebrate you — only the month and day are shown. You won't be asked again.">
+          <input name="birthday" type="date" required min="1900-01-01" className="input-line w-1/2" />
         </Q>
       )}
 

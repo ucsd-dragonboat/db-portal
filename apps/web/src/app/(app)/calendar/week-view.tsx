@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { fmtTime } from "@/lib/format";
 import { addDays, dayKey, KIND_COLORS, minutesOfDay, startOfWeek, ymdLabel } from "@/lib/calendar-dates";
-import { eventLabel, type CalEvent } from "./calendar-shell";
+import Icon from "@/components/icon";
+import { birthdaysOn, eventLabel, type Birthday, type CalEvent } from "./calendar-shell";
 
 const START_MIN = 6 * 60;   // 6 AM
 const END_MIN = 22 * 60;    // 10 PM
@@ -11,8 +12,8 @@ const SPAN = END_MIN - START_MIN;
 const HOUR_PX = 48;
 const BODY_PX = (SPAN / 60) * HOUR_PX;
 
-export default function WeekView({ date, today, tz, events }: {
-  date: string; today: string; tz: string | undefined; events: CalEvent[];
+export default function WeekView({ date, today, tz, events, birthdays = [] }: {
+  date: string; today: string; tz: string | undefined; events: CalEvent[]; birthdays?: Birthday[];
 }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(date), i));
   const byDay = new Map<string, CalEvent[]>();
@@ -38,6 +39,7 @@ export default function WeekView({ date, today, tz, events }: {
                 style={ymd === today ? { background: "var(--g-blue)" } : { color: "var(--g-grey-900)" }}>
                 {Number(ymd.slice(8))}
               </span>
+              {birthdaysOn(ymd, birthdays).map((b, i) => <div key={i} title={`${b.name}'s birthday`} className="mx-1 mt-1 flex items-center gap-1 truncate rounded px-1 py-0.5 text-[11px] leading-tight" style={{ background: "var(--g-yellow-soft)", color: "#b06000" }}><Icon name="party" /> <span className="truncate">{b.name}</span></div>)}
             </div>
           ))}
         </div>
