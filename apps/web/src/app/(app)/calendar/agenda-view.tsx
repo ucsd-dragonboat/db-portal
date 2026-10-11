@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { fmtTime } from "@/lib/format";
-import { dayHeading, dayKey, KIND_COLORS } from "@/lib/calendar-dates";
-import { eventLabel, type CalEvent } from "./calendar-shell";
+import Icon from "@/components/icon";
+import { addDays, dayHeading, dayKey, KIND_COLORS } from "@/lib/calendar-dates";
+import { birthdaysOn, eventLabel, type Birthday, type CalEvent } from "./calendar-shell";
 
-export default function AgendaView({ date, today, tz, events }: {
-  date: string; today: string; tz: string | undefined; events: CalEvent[];
+export default function AgendaView({ date, today, tz, events, birthdays = [] }: {
+  date: string; today: string; tz: string | undefined; events: CalEvent[]; birthdays?: Birthday[];
 }) {
   // Agenda lists everything from the focused date forward (within the fetched window).
   const upcoming = events.filter((e) => dayKey(e.starts_at, tz) >= date);
@@ -15,9 +16,15 @@ export default function AgendaView({ date, today, tz, events }: {
     const k = dayKey(e.starts_at, tz);
     byDay.set(k, [...(byDay.get(k) ?? []), e]);
   }
-  const days = [...byDay.keys()].sort();
+  // Birthdays over the next 90 days get their own day headings too.
+  const bdays = new Map<string, Birthday[]>();
+  for (let i = 0; i <= 90 && birthdays.length; i++) {
+    const ymd = addDays(date, i), on = birthdaysOn(ymd, birthdays);
+    if (on.length) bdays.set(ymd, on);
+  }
+  const days = [...new Set([...byDay.keys(), ...bdays.keys()])].sort();
 
-  if (!days.length) return <p className="text-sm" style={{ color: "var(--g-grey-600)" }}>No upcoming events in this window.</p>;
+  if (!days.length) return <p className="text-sm" style={{ color: "var(--g-grey-600)" }}>No upcoming events or birthdays in this window.</p>;
   return (
     <div className="space-y-4">
       {days.map((ymd) => (
@@ -26,7 +33,12 @@ export default function AgendaView({ date, today, tz, events }: {
             {dayHeading(ymd)}{ymd === today && " · Today"}
           </h2>
           <div className="space-y-1.5">
-            {byDay.get(ymd)!.map((e) => {
+            {bdays.get(ymd)?.map((b, i) => (
+              <div key={i} className="card flex items-center gap-3 !p-3 text-sm" style={{ color: "#b06000" }}>
+                <Icon name="party" /> <span className="font-medium">{b.name}&apos;s birthday</span>
+              </div>
+            ))}
+            {(byDay.get(ymd) ?? []).map((e) => {
               const c = KIND_COLORS[e.kind];
               const mine = e.mine;
               const yes = e.yes;

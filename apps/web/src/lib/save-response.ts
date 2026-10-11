@@ -8,6 +8,7 @@ import type { Database, FormQuestion, Json } from "@/lib/database.types";
 import { cleanHtml, htmlToText } from "@/lib/html";
 import { testPattern } from "@/lib/pattern";
 import { attachPickupCoords, notFoundWarning } from "@/lib/geocode";
+import { parseBirthday } from "@/lib/birthday";
 
 export type SubmitState = { error?: string; saved?: boolean; warning?: string };
 
@@ -25,9 +26,17 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
   ]);
   if (!form || (opts.asAdmin ? form.status === "template" : form.status !== "open")) return { error: "This form is not accepting responses." };
 
-  // 1. optional weight update
+  // 1. optional weight update; birthday is required until the profile has one
+  // (an admin editing someone's response isn't asked for it).
+  const birthdayRaw = String(fd.get("birthday") ?? "").trim();
+  const birthday = parseBirthday(birthdayRaw);
+  if (birthdayRaw && !birthday) return { error: "Please enter a valid birthday." };
+  if (!birthday && !opts.asAdmin) {
+    const { data: p } = await supabase.from("profiles").select("birthday").eq("id", user.id).maybeSingle();
+    if (!p?.birthday) return { error: "Please enter your birthday." };
+  }
   const w = String(fd.get("weight_lb") ?? "").trim();
-  if (w) await supabase.from("profiles").update({ weight_lb: Number(w) }).eq("id", user.id);
+  if (w || birthday) await supabase.from("profiles").update({ ...(w ? { weight_lb: Number(w) } : {}), ...(birthday ? { birthday } : {}) }).eq("id", user.id);
 
   // 2. per-event attendance → rsvps (validate all, then one batched upsert)
   // A ride-only address typed once at the top applies to every day where the member

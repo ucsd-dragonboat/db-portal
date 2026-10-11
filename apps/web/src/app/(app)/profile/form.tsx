@@ -13,6 +13,7 @@ export default function ProfileForm({ profile: p }: { profile: Profile }) {
         <h2 className="font-semibold">About you</h2>
         <div><label className="label">Full name</label><input name="full_name" defaultValue={p.full_name} required className="input" /></div>
         <div><label className="label">Phone</label><input name="phone" defaultValue={p.phone ?? ""} className="input" /></div>
+        <div><label className="label">Birthday (the team calendar shows the month and day)</label><input name="birthday" type="date" required min="1900-01-01" defaultValue={p.birthday ?? ""} className="input w-48" /></div>
       </section>
       <section className="card space-y-3">
         <h2 className="font-semibold">Paddling</h2>

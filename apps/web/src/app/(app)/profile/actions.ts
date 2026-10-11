@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { regenerateCalendarToken } from "@/lib/calendar-token";
 import { syncSheetsForMember } from "@/lib/sheet-sync";
 import { geocode } from "@/lib/geocode";
+import { parseBirthday } from "@/lib/birthday";
 
 export type ProfileState = { error?: string; saved?: boolean; geocoded?: boolean };
 
@@ -16,6 +17,9 @@ export async function saveProfile(_: ProfileState, formData: FormData): Promise<
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not signed in" };
+
+  const birthday = parseBirthday(formData.get("birthday"));
+  if (!birthday) return { error: "Please enter your birthday." };
 
   const { data: current } = await supabase.from("profiles").select("address, city, zipcode, lat, lon").eq("id", user.id).single();
   const address = str(formData.get("address")), city = str(formData.get("city")), zipcode = str(formData.get("zipcode"));
@@ -33,6 +37,7 @@ export async function saveProfile(_: ProfileState, formData: FormData): Promise<
   const { error } = await supabase.from("profiles").update({
     full_name: String(formData.get("full_name") ?? "").trim(),
     phone: str(formData.get("phone")),
+    birthday,
     weight_lb: num(formData.get("weight_lb")),
     gender: (str(formData.get("gender")) as "male" | "female" | "other" | null),
     side_preference: (str(formData.get("side_preference")) as "left" | "right" | "either" | null),
