@@ -45,11 +45,22 @@ export async function createDemoSandbox(ip: string): Promise<DemoStart> {
   return { ok: true, email, orgId };
 }
 
+/** Deletes a sandbox's uploaded images (its <org_id>/ folder). Storage files must go
+ * through the Storage API, not SQL, so this runs before the org row is deleted. */
+export async function removeDemoImages(orgIds: string[]) {
+  const bucket = createAdminClient().storage.from("images");
+  for (const orgId of orgIds) {
+    const { data: files } = await bucket.list(orgId, { limit: 1000 });
+    if (files?.length) await bucket.remove(files.map((f) => `${orgId}/${f.name}`));
+  }
+}
+
 /** "Start over": a fresh sandbox for the same visitor, then the old one is deleted. */
 export async function resetDemoSandbox(visitorId: string, oldOrgId: string): Promise<boolean> {
   const admin = createAdminClient();
   const { data: orgId, error } = await admin.rpc("create_demo_sandbox", { visitor: visitorId });
   if (error || !orgId) { console.error("[demo] reset", error?.message); return false; }
+  await removeDemoImages([oldOrgId]);
   await admin.rpc("cleanup_demo_sandboxes", { only_org: oldOrgId });
   return true;
 }
