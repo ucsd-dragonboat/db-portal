@@ -30,11 +30,13 @@ function ParagraphAnswer({ name, initial }: { name: string; initial: string }) {
   return (<><input type="hidden" name={name} value={v} /><RichEditor value={v} onChange={setV} minRows={3} placeholder="Your answer" /></>);
 }
 
-export default function FillForm({ formId, events, rsvpBy, questions, existingAnswers, pickups, defaultSeats, weightLb, askWeight, askBirthday = false, submittedAt, submitAction = submitForm, header, savedMessage }: {
+export default function FillForm({ formId, events, rsvpBy, questions, existingAnswers, pickups, defaultSeats, weightLb, askWeight, askBirthday = false, defaultPickupId = null, submittedAt, submitAction = submitForm, header, savedMessage }: {
   formId: string; events: { prompt: string | null; event: Event }[]; rsvpBy: Record<string, Rsvp>; questions: FormQuestion[];
   existingAnswers: Record<string, unknown> | null; pickups: PickupLocation[]; defaultSeats: number | null; weightLb: number | null; askWeight: boolean; submittedAt: string | null;
   /** The member has no birthday on their profile yet (or is anonymous): ask for it, required. */
   askBirthday?: boolean;
+  /** The member's saved default pickup spot, preselected for "I need a ride". */
+  defaultPickupId?: string | null;
   /** Public (shared-link) forms submit through a different action and show an email/name block first. */
   submitAction?: (state: SubmitState, fd: FormData) => Promise<SubmitState>; header?: React.ReactNode;
   /** Replaces the default "Your response has been recorded…" confirmation. */
@@ -86,7 +88,7 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
           return (
             <Q key={event.id} required title={prompt || <><Icon name={dayIdx % 2 ? "moon" : "sun"} /> {attendancePrompt(null, event)}</>}
               meta={<><LocalTime iso={event.starts_at} />{event.location_name && <> · <Icon name="pin" /> {event.location_name}</>}</>} help={event.notes ?? undefined}>
-              <AttendanceFields prefix={`ev_${event.id}_`} existing={rsvpBy[event.id] ?? null} pickups={pickups} defaultSeats={defaultSeats} />
+              <AttendanceFields prefix={`ev_${event.id}_`} existing={rsvpBy[event.id] ?? null} pickups={pickups} defaultSeats={defaultSeats} defaultPickupId={defaultPickupId} />
             </Q>
           );
         }

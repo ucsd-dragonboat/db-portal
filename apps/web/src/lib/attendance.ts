@@ -50,6 +50,8 @@ export function parseAttendance(fd: FormData, prefix: string): AttendanceValues 
   const seatsRaw = fd.get(`${prefix}seats`);
   const pickup = String(fd.get(`${prefix}pickup`) ?? "");
   const custom = String(fd.get(`${prefix}pickup_address`) ?? "").trim();
+  // "On campus" means a pickup spot must be chosen — never fall back to home silently.
+  if (choice === "yes_needs_ride" && fd.get(`${prefix}campus`) === "on" && (!pickup || pickup === "home" || pickup === "other")) return null;
   return {
     status, ride,
     seats: ride === "driver" && seatsRaw ? Number(seatsRaw) : null,

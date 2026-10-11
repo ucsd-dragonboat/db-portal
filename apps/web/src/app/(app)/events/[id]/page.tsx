@@ -69,7 +69,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         ))}
         <div className="mt-6">
           {closed && !isAdmin ? <p className="card text-sm text-slate-600">RSVPs are closed. {mine ? `Your response: ${mine.status}` : ""}</p>
-            : <RsvpForm eventId={id} existing={mine} defaultSeats={profile.car_passengers} pickups={pickups ?? []} />}
+            : <RsvpForm eventId={id} existing={mine} defaultSeats={profile.car_passengers} defaultPickupId={profile.default_pickup_location_id ?? null} pickups={pickups ?? []} />}
         </div>
       </section>
       <aside className="space-y-4">
