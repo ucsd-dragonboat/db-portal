@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { fmtBirthday } from "@/lib/birthday";
 import { loadCampusSpots, profileDefaultSpot } from "@/lib/campus-spots";
 import Link from "next/link";
 import { getSession, requireOrg } from "@/lib/session";
@@ -54,7 +55,9 @@ export default async function FormFillPage({ params, searchParams }: { params: P
           <div className="grid grid-cols-2 gap-x-4 gap-y-1">
             <span><Icon name="user" /> {profile.full_name || "(no name)"}</span><span><Icon name="phone" /> {profile.phone || "(no phone)"}</span>
             <span><Icon name="weight" /> {profile.weight_lb ? `${profile.weight_lb} lb` : "(no weight)"}</span><span><Icon name="house" /> {profile.address || "(no address)"}</span>
+            <span style={profile.birthday ? undefined : { color: "var(--g-red)" }}><Icon name="party" /> {profile.birthday ? fmtBirthday(profile.birthday) : "(no birthday)"}</span>
           </div>
+          {!profile.birthday && <p className="mt-2 text-xs" style={{ color: "var(--g-red)" }}>Your birthday is missing — it&apos;s required, so answer the birthday question below (or add it to your profile).</p>}
           {(!profile.weight_lb || !profile.address) && <p className="mt-2 text-xs" style={{ color: "var(--g-red)" }}>Coaches need your weight for lineups and your address for rides — please add them.</p>}
         </div>
 
