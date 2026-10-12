@@ -20,6 +20,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/carpool", label: "Carpool", icon: "car", color: "var(--g-red)" },
   { href: "/admin/events", label: "Events", icon: "calendarCheck", color: "var(--g-green)" },
   { href: "/admin/members", label: "Members", icon: "users", color: "#009688" },
+  { href: "/admin/images", label: "Images", icon: "image", color: "#009688" },
   { href: "/admin/settings", label: "Settings", icon: "gear", color: "var(--g-grey-600)" },
   { href: "/admin/status", label: "Status", icon: "pulse", color: "var(--g-red)" },
   { href: "/admin/demos", label: "Demos", icon: "eye", color: "var(--g-purple)" },
