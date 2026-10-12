@@ -14,6 +14,7 @@ export type Profile = {
   weight_lb: number | null;
   birthday: string | null; // YYYY-MM-DD (migration 0034)
   default_pickup_location_id: string | null; // migration 0035
+  default_saved_location_id: string | null; // migration 0037
   gender: "male" | "female" | "other" | null;
   side_preference: "left" | "right" | "either" | null;
   can_steer: boolean;
@@ -257,6 +258,7 @@ export type Form = {
   status: "draft" | "open" | "closed" | "template";
   questions: Json;   // FormQuestion[]
   ask_weight: boolean;
+  campus_pickup: string | null; // migration 0037: fixed on-campus spot, null = riders choose
   carpools_generated_at: string | null; // set once the auto-carpool cron has processed this form
   sheet_spreadsheet_id: string | null;  // linked Google Sheet; responses mirror into it
   sheet_tab_id: number | null;          // tab gid; null until the first sync creates the tab
@@ -316,7 +318,7 @@ export type Database = {
     Tables: {
       profiles: {
         Row: Row<Profile>;
-        Insert: Insert<Profile, "phone" | "weight_lb" | "birthday" | "default_pickup_location_id" | "gender" | "side_preference" | "can_steer" | "can_drum" | "address" | "city" | "zipcode" | "lat" | "lon" | "car_passengers" | "attendance_adjustment" | "created_at" | "updated_at" | "full_name">;
+        Insert: Insert<Profile, "phone" | "weight_lb" | "birthday" | "default_pickup_location_id" | "default_saved_location_id" | "gender" | "side_preference" | "can_steer" | "can_drum" | "address" | "city" | "zipcode" | "lat" | "lon" | "car_passengers" | "attendance_adjustment" | "created_at" | "updated_at" | "full_name">;
         Update: Partial<Profile>;
         Relationships: [];
       };
@@ -421,7 +423,7 @@ export type Database = {
       };
       forms: {
         Row: Row<Form>;
-        Insert: Insert<Form, "id" | "description" | "due_at" | "status" | "questions" | "ask_weight" | "carpools_generated_at" | "sheet_spreadsheet_id" | "sheet_tab_id" | "sheet_linked_by" | "deadline_reminder_sent_at" | "created_by" | "created_at" | "updated_at">;
+        Insert: Insert<Form, "id" | "description" | "due_at" | "status" | "questions" | "ask_weight" | "campus_pickup" | "carpools_generated_at" | "sheet_spreadsheet_id" | "sheet_tab_id" | "sheet_linked_by" | "deadline_reminder_sent_at" | "created_by" | "created_at" | "updated_at">;
         Update: Partial<Form>;
         Relationships: [
           { foreignKeyName: "forms_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },

@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { loadCampusSpots } from "@/lib/campus-spots";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -35,7 +36,7 @@ export default async function PublicFormPage({ params, searchParams }: { params:
 
   const [{ data: links }, { data: pickups }] = await Promise.all([
     admin.from("form_events").select("*, event:events(*)").eq("form_id", id).order("sort_order"),
-    admin.from("pickup_locations").select("*").eq("org_id", form.org_id).eq("active", true).order("sort_order"),
+    loadCampusSpots(admin, form.org_id).then((data) => ({ data })),
   ]);
   const events = (links ?? []).map((l) => ({ prompt: l.prompt, event: l.event as unknown as Event })).filter((x) => x.event);
   const overdue = form.due_at ? new Date(form.due_at) < new Date() : false;
@@ -69,7 +70,7 @@ export default async function PublicFormPage({ params, searchParams }: { params:
 
         {form.status === "open"
           ? <FillForm formId={id} events={events} rsvpBy={{}} questions={(form.questions as unknown as FormQuestion[]) ?? []}
-              existingAnswers={null} pickups={pickups ?? []} defaultSeats={null} weightLb={null} askWeight={form.ask_weight} askBirthday submittedAt={null}
+              existingAnswers={null} pickups={pickups ?? []} defaultSeats={null} weightLb={null} askWeight={form.ask_weight} askBirthday campusPickup={form.campus_pickup ?? null} submittedAt={null}
               submitAction={submitPublicForm} header={identity} />
           : <div className="gf-card text-sm" style={grey}>This form is no longer accepting responses.</div>}
         <p className="text-center text-xs pt-4" style={grey}>{org.name} · Team Portal</p>

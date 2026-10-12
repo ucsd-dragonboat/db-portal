@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { loadCampusSpots, profileDefaultSpot } from "@/lib/campus-spots";
 import Icon from "@/components/icon";
 import Link from "next/link";
 import { requireOrg } from "@/lib/session";
@@ -22,7 +23,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
     supabase.from("rsvps").select("*, profile:profiles(full_name)").eq("event_id", id).order("updated_at"),
     supabase.from("lineups").select("*").eq("event_id", id).eq("published", true).order("created_at"),
     supabase.from("carpools").select("*").eq("event_id", id).eq("published", true).order("sort_order").order("created_at"),
-    supabase.from("pickup_locations").select("*").eq("org_id", org.id).eq("active", true).order("sort_order"),
+    loadCampusSpots(supabase, org.id).then((data) => ({ data })),
   ]);
   if (!event) notFound();
   // The roster is only needed to name people in published lineups/carpools — skip it otherwise.
@@ -69,7 +70,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         ))}
         <div className="mt-6">
           {closed && !isAdmin ? <p className="card text-sm text-slate-600">RSVPs are closed. {mine ? `Your response: ${mine.status}` : ""}</p>
-            : <RsvpForm eventId={id} existing={mine} defaultSeats={profile.car_passengers} defaultPickupId={profile.default_pickup_location_id ?? null} pickups={pickups ?? []} />}
+            : <RsvpForm eventId={id} existing={mine} defaultSeats={profile.car_passengers} defaultPickupId={profileDefaultSpot(profile)} pickups={pickups ?? []} />}
         </div>
       </section>
       <aside className="space-y-4">

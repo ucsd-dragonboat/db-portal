@@ -7,6 +7,7 @@ import { regenerateCalendarToken } from "@/lib/calendar-token";
 import { syncSheetsForMember } from "@/lib/sheet-sync";
 import { geocode } from "@/lib/geocode";
 import { parseBirthday } from "@/lib/birthday";
+import { defaultSpotColumns } from "@/lib/campus-spots";
 
 export type ProfileState = { error?: string; saved?: boolean; geocoded?: boolean };
 
@@ -45,7 +46,7 @@ export async function saveProfile(_: ProfileState, formData: FormData): Promise<
     can_drum: formData.get("can_drum") === "on",
     address, city, zipcode, lat, lon,
     car_passengers: num(formData.get("car_passengers")) ?? 0,
-    ...(formData.has("default_pickup_location_id") ? { default_pickup_location_id: str(formData.get("default_pickup_location_id")) } : {}),
+    ...(formData.has("default_spot") ? defaultSpotColumns(str(formData.get("default_spot"))) : {}),
   }).eq("id", user.id);
   if (error) return { error: error.message };
   after(() => syncSheetsForMember(user.id)); // name / phone / weight are sheet columns

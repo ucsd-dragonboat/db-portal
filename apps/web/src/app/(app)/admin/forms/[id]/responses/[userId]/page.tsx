@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { loadCampusSpots } from "@/lib/campus-spots";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -22,7 +23,7 @@ export default async function EditMemberResponsePage({ params }: { params: Promi
     admin.from("memberships").select("profile:profiles(*)").eq("org_id", org.id).eq("user_id", userId).maybeSingle(),
     admin.from("form_events").select("*, event:events(*)").eq("form_id", id).order("sort_order"),
     admin.from("form_responses").select("*").eq("form_id", id).eq("user_id", userId).maybeSingle(),
-    admin.from("pickup_locations").select("*").eq("org_id", org.id).eq("active", true).order("sort_order"),
+    loadCampusSpots(admin, org.id).then((data) => ({ data })),
   ]);
   const profile = member?.profile as unknown as { id: string; full_name: string; email: string; car_passengers: number | null; weight_lb: number | null } | null;
   if (!form || form.status === "template" || !profile) notFound();
@@ -47,7 +48,7 @@ export default async function EditMemberResponsePage({ params }: { params: Promi
         <FillForm formId={id} events={events} rsvpBy={Object.fromEntries((rsvps ?? []).map((r) => [r.event_id, r]))}
           questions={(form.questions as unknown as FormQuestion[]) ?? []}
           existingAnswers={(response?.answers as Record<string, unknown> | null) ?? null} pickups={pickups ?? []}
-          defaultSeats={profile.car_passengers} weightLb={profile.weight_lb} askWeight={form.ask_weight}
+          defaultSeats={profile.car_passengers} weightLb={profile.weight_lb} askWeight={form.ask_weight} campusPickup={form.campus_pickup ?? null}
           submittedAt={response?.submitted_at ?? null} submitAction={saveResponseAsAdmin}
           header={<input type="hidden" name="as_user" value={userId} />}
           savedMessage={<>Saved {name}&apos;s response. <Link href={`/admin/forms/${id}/responses`} className="underline">Back to responses</Link></>} />

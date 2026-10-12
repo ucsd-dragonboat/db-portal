@@ -4,9 +4,10 @@ import { useActionState } from "react";
 import Icon from "@/components/icon";
 import { submitRsvp, type RsvpState } from "./actions";
 import AttendanceFields from "@/components/attendance-fields";
-import type { PickupLocation, Rsvp } from "@/lib/database.types";
+import type { Rsvp } from "@/lib/database.types";
+import type { CampusSpot } from "@/lib/campus-spots";
 
-export default function RsvpForm({ eventId, existing, defaultSeats, defaultPickupId, pickups }: { eventId: string; existing: Rsvp | null; defaultSeats: number | null; defaultPickupId: string | null; pickups: PickupLocation[] }) {
+export default function RsvpForm({ eventId, existing, defaultSeats, defaultPickupId, pickups }: { eventId: string; existing: Rsvp | null; defaultSeats: number | null; defaultPickupId: string | null; pickups: CampusSpot[] }) {
   const [state, action, pending] = useActionState<RsvpState, FormData>(submitRsvp, {});
   return (
     <form action={action} className="gf-card space-y-4" style={{ borderTop: "6px solid var(--g-purple)" }}>

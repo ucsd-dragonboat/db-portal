@@ -52,12 +52,15 @@ export function parseAttendance(fd: FormData, prefix: string): AttendanceValues 
   const custom = String(fd.get(`${prefix}pickup_address`) ?? "").trim();
   // "On campus" means a pickup spot must be chosen — never fall back to home silently.
   if (choice === "yes_needs_ride" && fd.get(`${prefix}campus`) === "on" && (!pickup || pickup === "home" || pickup === "other")) return null;
+  // A saved-location spot ("saved:<id>") travels in pickup_address; attachPickupCoords
+  // swaps it for the location's name and coordinates.
+  const saved = pickup.startsWith("saved:");
   return {
     status, ride,
     seats: ride === "driver" && seatsRaw ? Number(seatsRaw) : null,
-    pickup_location_id: ride === "needs_ride" && pickup && pickup !== "home" && pickup !== "other" ? pickup : null,
+    pickup_location_id: ride === "needs_ride" && pickup && pickup !== "home" && pickup !== "other" && !saved ? pickup : null,
     // Riders: where to be picked up. Drivers: where they're starting from this time.
-    pickup_address: (ride === "needs_ride" || ride === "driver") && pickup === "other" && custom ? custom : null,
+    pickup_address: ride === "needs_ride" && saved ? pickup : (ride === "needs_ride" || ride === "driver") && pickup === "other" && custom ? custom : null,
     note: String(fd.get(`${prefix}note`) ?? "").trim() || null,
   };
 }

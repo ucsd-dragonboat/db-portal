@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { loadCampusSpots, profileDefaultSpot } from "@/lib/campus-spots";
 import Link from "next/link";
 import { getSession, requireOrg } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
@@ -22,7 +23,7 @@ export default async function FormFillPage({ params, searchParams }: { params: P
     supabase.from("forms").select("*").eq("id", id).eq("org_id", org.id).maybeSingle(),
     supabase.from("form_events").select("*, event:events(*)").eq("form_id", id).order("sort_order"),
     supabase.from("form_responses").select("*").eq("form_id", id).eq("user_id", userId).maybeSingle(),
-    supabase.from("pickup_locations").select("*").eq("org_id", org.id).eq("active", true).order("sort_order"),
+    loadCampusSpots(supabase, org.id).then((data) => ({ data })),
   ]);
   if (!form) notFound();
   const events = (links ?? []).map((l) => ({ prompt: l.prompt, event: l.event as unknown as Event })).filter((x) => x.event);
@@ -59,7 +60,7 @@ export default async function FormFillPage({ params, searchParams }: { params: P
 
         {form.status === "open"
           ? <FillForm formId={id} events={events} rsvpBy={Object.fromEntries(rsvpBy)} questions={(form.questions as unknown as FormQuestion[]) ?? []}
-              existingAnswers={(response?.answers as Record<string, unknown> | null) ?? null} pickups={pickups ?? []} defaultSeats={profile.car_passengers} weightLb={profile.weight_lb} askWeight={form.ask_weight} askBirthday={!profile.birthday} defaultPickupId={profile.default_pickup_location_id ?? null}
+              existingAnswers={(response?.answers as Record<string, unknown> | null) ?? null} pickups={pickups ?? []} defaultSeats={profile.car_passengers} weightLb={profile.weight_lb} askWeight={form.ask_weight} askBirthday={!profile.birthday} defaultPickupId={profileDefaultSpot(profile)} campusPickup={form.campus_pickup ?? null}
               submittedAt={response?.submitted_at ?? null} />
           : <div className="gf-card text-sm" style={{ color: "var(--g-grey-600)" }}>
               {form.status === "closed" ? "This form is no longer accepting responses." : "This form isn’t open yet."}
