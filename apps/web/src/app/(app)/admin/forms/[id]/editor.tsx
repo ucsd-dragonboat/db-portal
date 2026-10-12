@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { FormQuestion, PickupLocation, QuestionType } from "@/lib/database.types";
+import type { FormQuestion, QuestionType } from "@/lib/database.types";
+import type { CampusSpot } from "@/lib/campus-spots";
 import LocalTime from "@/components/local-time";
 import { deleteForm, saveForm, type FormPayload } from "../actions";
 import EventBatchForm from "@/components/event-batch-form";
@@ -43,7 +44,7 @@ const withDayMarkers = (p: FormPayload): FormPayload => {
   return { ...p, questions: [...missing, ...qs] };
 };
 
-export default function FormEditor({ id, initial, events, groups, pickups }: { id: string; initial: FormPayload; events: EventOpt[]; groups: GroupOpt[]; pickups: PickupLocation[] }) {
+export default function FormEditor({ id, initial, events, groups, pickups }: { id: string; initial: FormPayload; events: EventOpt[]; groups: GroupOpt[]; pickups: CampusSpot[] }) {
   const router = useRouter();
   const [f, setF] = useState<FormPayload>(() => withDayMarkers(initial));
   const [focus, setFocus] = useState<string | null>(null);
@@ -180,6 +181,19 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         </div>
       )}
 
+      {f.events.length > 0 && pickups.length > 0 && (
+        <div className="gf-card space-y-2 text-sm">
+          <div className="text-base font-normal"><Icon name="pin" /> On-campus pickup</div>
+          <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>
+            Riders who need a ride pick On campus or Off campus. Let them choose their own spot (pickup and saved locations), or pick them all up at one place.
+          </p>
+          <select value={f.campus_pickup ?? ""} onChange={(e) => set("campus_pickup", e.target.value || null)} className="input">
+            <option value="">Riders choose their spot</option>
+            {pickups.map((p) => <option key={p.id} value={p.id}>Everyone at {p.name}</option>)}
+          </select>
+        </div>
+      )}
+
       {/* question cards — attendance days and custom questions share one order (↑↓ moves across both) */}
       {f.questions.map((q, i) => {
         if (q.type === "day") {
@@ -205,7 +219,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
               </div>
               {ev && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={ev.starts_at} /> · answers feed attendance, lineups and carpool</p>}
               <fieldset disabled className="pointer-events-none">
-                <AttendanceFields prefix={`preview_${fe.event_id}_`} existing={null} pickups={pickups} defaultSeats={3} required={false} />
+                <AttendanceFields prefix={`preview_${fe.event_id}_`} existing={null} pickups={pickups} defaultSeats={3} fixedSpot={f.campus_pickup ?? null} required={false} />
               </fieldset>
             </div>
           );

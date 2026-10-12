@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Icon from "@/components/icon";
 import { saveProfile, type ProfileState } from "./actions";
 import type { Profile } from "@/lib/database.types";
+import { profileDefaultSpot } from "@/lib/campus-spots";
 
 export default function ProfileForm({ profile: p, pickups }: { profile: Profile; pickups: { id: string; name: string }[] }) {
   const [state, action, pending] = useActionState<ProfileState, FormData>(saveProfile, {});
@@ -40,7 +41,7 @@ export default function ProfileForm({ profile: p, pickups }: { profile: Profile;
           <p className="text-xs text-slate-500 mt-1">{p.lat ? <><Icon name="pin" /> Located ({p.lat.toFixed(3)}, {p.lon?.toFixed(3)})</> : "Not located yet"}</p></div>
         {pickups.length > 0 && (
           <div><label className="label">Default on-campus pickup spot (preselected when you need a ride)</label>
-            <select name="default_pickup_location_id" defaultValue={p.default_pickup_location_id ?? ""} className="input">
+            <select name="default_spot" defaultValue={profileDefaultSpot(p) ?? ""} className="input">
               <option value="">None — I&apos;m off campus</option>
               {pickups.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select></div>

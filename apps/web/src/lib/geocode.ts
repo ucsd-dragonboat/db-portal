@@ -36,11 +36,20 @@ type PickupRow = { event_id: string; pickup_address: string | null };
 /** Fills pickup_lat/pickup_lon on RSVP rows about to be saved for `userId`. Text that
  * matches what's already stored keeps its stored coordinates; new text is geocoded
  * once per distinct address (biased to the member's home city when the text doesn't
- * name one). Returns the addresses that couldn't be found, so the member can be told. */
+ * name one). A saved-location spot ("saved:<id>", see lib/campus-spots.ts) becomes that
+ * location's name and coordinates — no lookup. Returns the addresses that couldn't be
+ * found, so the member can be told. */
 export async function attachPickupCoords<R extends PickupRow>(
   supabase: SupabaseClient<Database>, userId: string, rows: R[], orgId?: string,
 ): Promise<{ rows: (R & { pickup_lat: number | null; pickup_lon: number | null })[]; notFound: string[] }> {
-  const typed = rows.filter((r) => r.pickup_address);
+  const savedIds = rows.map((r) => r.pickup_address).filter((a): a is string => !!a?.startsWith("saved:")).map((a) => a.slice(6));
+  const savedBy = new Map<string, { name: string; lat: number | null; lon: number | null }>();
+  if (savedIds.length) {
+    let q = supabase.from("saved_locations").select("id, name, lat, lon").in("id", savedIds);
+    if (orgId) q = q.eq("org_id", orgId);
+    for (const s of (await q).data ?? []) savedBy.set(s.id, s);
+  }
+  const typed = rows.filter((r) => r.pickup_address && !r.pickup_address.startsWith("saved:"));
   const [{ data: existing }, { data: profile }] = typed.length
     ? await Promise.all([
         supabase.from("rsvps").select("event_id, pickup_address, pickup_lat, pickup_lon").eq("user_id", userId).in("event_id", typed.map((r) => r.event_id)),
@@ -56,6 +65,11 @@ export async function attachPickupCoords<R extends PickupRow>(
   for (const r of rows) {
     const text = r.pickup_address?.trim();
     if (!text) { out.push({ ...r, pickup_lat: null, pickup_lon: null }); continue; }
+    if (text.startsWith("saved:")) {
+      const s = savedBy.get(text.slice(6)); // unknown/removed → falls back to the home address
+      out.push({ ...r, pickup_address: s?.name ?? null, pickup_lat: s?.lat ?? null, pickup_lon: s?.lon ?? null });
+      continue;
+    }
     const prev = stored.get(r.event_id);
     if (prev?.pickup_address === text && prev.pickup_lat != null && prev.pickup_lon != null) {
       out.push({ ...r, pickup_lat: prev.pickup_lat, pickup_lon: prev.pickup_lon });

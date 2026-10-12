@@ -71,6 +71,8 @@ export async function createFormForGroup(fd: FormData) {
 export type FormPayload = {
   title: string; description: string; due_at: string | null; status: "draft" | "open" | "closed" | "template";
   ask_weight: boolean;
+  /** Fixed on-campus pickup spot (migration 0037); left out unless set, so saving works before the migration runs. */
+  campus_pickup?: string | null;
   questions: FormQuestion[];
   events: { event_id: string; prompt: string | null }[];
 };
@@ -79,7 +81,7 @@ export async function saveForm(id: string, p: FormPayload) {
   const { org } = await requireAdmin();
   const supabase = await createClient();
   const { error } = await supabase.from("forms")
-    .update({ title: p.title.trim() || "Untitled form", description: cleanHtml(p.description), due_at: p.due_at, status: p.status, ask_weight: p.ask_weight, questions: p.questions.map((q) => ({ ...q, label: isHtml(q.label) ? cleanHtml(q.label) : q.label, help: q.help ? cleanHtml(q.help) : undefined })) as unknown as Json })
+    .update({ title: p.title.trim() || "Untitled form", description: cleanHtml(p.description), due_at: p.due_at, status: p.status, ask_weight: p.ask_weight, ...(p.campus_pickup !== undefined ? { campus_pickup: p.campus_pickup } : {}), questions: p.questions.map((q) => ({ ...q, label: isHtml(q.label) ? cleanHtml(q.label) : q.label, help: q.help ? cleanHtml(q.help) : undefined })) as unknown as Json })
     .eq("id", id).eq("org_id", org.id);
   if (error) return { error: error.message };
   // Replace event links.

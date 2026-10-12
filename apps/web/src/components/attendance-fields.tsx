@@ -6,20 +6,30 @@ import Icon, { type IconName } from "@/components/icon";
 import Dialog from "@/components/dialog";
 
 const OPTION_ICONS: Partial<Record<AttendanceChoice, IconName>> = { yes_driver: "crown", yes_needs_ride: "hand", maybe: "maybe" };
-import type { PickupLocation, Rsvp } from "@/lib/database.types";
+import type { Rsvp } from "@/lib/database.types";
+import type { CampusSpot } from "@/lib/campus-spots";
 
 /**
  * Attendance + ride question, styled like a Google Forms multiple-choice question.
  * Writes fields `${prefix}choice|seats|campus|pickup|pickup_address|save_default|note` for parseAttendance().
  * Riders pick On campus (a pickup spot, from a dialog) or Off campus (home or a typed
  * address); `defaultPickupId` (the member's saved default spot) preselects On campus.
+ * `pickups` are the on-campus spots (pickup + saved locations, lib/campus-spots.ts);
+ * `fixedSpot` is the form creator's chosen spot, which replaces the rider's choice.
  */
-export default function AttendanceFields({ prefix, existing, pickups, defaultSeats, defaultPickupId = null, required = true, showNote = true }: {
-  prefix: string; existing: Rsvp | null; pickups: PickupLocation[]; defaultSeats: number | null; defaultPickupId?: string | null; required?: boolean; showNote?: boolean;
+export default function AttendanceFields({ prefix, existing, pickups, defaultSeats, defaultPickupId = null, fixedSpot = null, required = true, showNote = true }: {
+  prefix: string; existing: Rsvp | null; pickups: CampusSpot[]; defaultSeats: number | null; defaultPickupId?: string | null;
+  fixedSpot?: string | null; required?: boolean; showNote?: boolean;
 }) {
   const [choice, setChoice] = useState<AttendanceChoice | null>(toChoice(existing));
-  const savedSpot = defaultPickupId && pickups.some((p) => p.id === defaultPickupId) ? defaultPickupId : null;
-  const [pickup, setPickup] = useState(existing ? existing.pickup_location_id ?? (existing.pickup_address ? "other" : "home") : savedSpot ?? "home");
+  const fixed = fixedSpot && pickups.some((p) => p.id === fixedSpot) ? fixedSpot : null;
+  const savedSpot = defaultPickupId && pickups.some((p) => p.id === defaultPickupId) ? (fixed ?? defaultPickupId) : null;
+  // A saved-location spot is stored on the RSVP as its name, so match it back by name.
+  const existingSpot = existing && (existing.pickup_location_id
+    ?? (existing.pickup_address ? pickups.find((p) => p.id.startsWith("saved:") && p.name === existing.pickup_address)?.id : undefined));
+  const [pickup, setPickup] = useState(existing
+    ? (existingSpot ? fixed ?? existingSpot : existing.pickup_address ? "other" : "home")
+    : savedSpot ?? "home");
   // Only a spot that's still offered counts — a since-retired one must be picked again.
   const isSpot = pickups.some((p) => p.id === pickup);
   const [campus, setCampus] = useState<"on" | "off">(isSpot ? "on" : "off");
@@ -54,7 +64,7 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
           <div className="flex gap-4">
             {pickups.length > 0 && (
               <label className="gf-radio !py-1">
-                <input type="radio" checked={campus === "on"} onChange={() => { setCampus("on"); if (!isSpot) { setPickup(""); setPicking(true); } }} /> On campus
+                <input type="radio" checked={campus === "on"} onChange={() => { setCampus("on"); if (fixed) setPickup(fixed); else if (!isSpot) { setPickup(""); setPicking(true); } }} /> On campus
               </label>
             )}
             <label className="gf-radio !py-1">
@@ -66,8 +76,8 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
               <input type="hidden" name={`${prefix}pickup`} value={pickup} />
               {/* Empty until a spot is picked, so the browser blocks submitting without one. */}
               <input value={isSpot ? pickup : ""} onChange={() => {}} required={required} tabIndex={-1} aria-hidden className="sr-only" />
-              <span>{spotName ? <b>{spotName}</b> : <span style={{ color: "var(--g-grey-600)" }}>No pickup spot chosen</span>}</span>
-              <button type="button" onClick={() => setPicking(true)} className="btn-text text-sm" style={{ color: "var(--g-blue)" }}>{spotName ? "Change" : "Choose spot"}</button>
+              <span>{fixed && <>Pickup at </>}{spotName ? <b>{spotName}</b> : <span style={{ color: "var(--g-grey-600)" }}>No pickup spot chosen</span>}</span>
+              {!fixed && <button type="button" onClick={() => setPicking(true)} className="btn-text text-sm" style={{ color: "var(--g-blue)" }}>{spotName ? "Change" : "Choose spot"}</button>}
             </div>
           ) : (
             <>
@@ -78,7 +88,7 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
               {pickup === "other" && <input name={`${prefix}pickup_address`} defaultValue={existing?.pickup_address ?? ""} placeholder="Street address and city" className="input-line" required />}
             </>
           )}
-          {(campus === "on" || pickup === "other") && (
+          {((campus === "on" && !fixed) || (campus === "off" && pickup === "other")) && (
             <label className="flex items-center gap-2 text-xs" style={{ color: "var(--g-grey-600)" }}>
               <input type="checkbox" name={`${prefix}save_default`} />
               {campus === "on" ? "Save as my default pickup spot (preselected on future forms)" : "Save this as my home address on my profile"}
