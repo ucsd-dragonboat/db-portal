@@ -34,7 +34,23 @@ export type Profile = {
 export type SiteSettings = {
   id: boolean;
   demo_enabled: boolean;
+  /** How long new demo sandboxes last, 1–168 (migration 0038). */
+  demo_hours: number;
   updated_at: string;
+};
+
+/** One row per demo sandbox ever started (migration 0038); kept after the org is deleted. */
+export type DemoLog = {
+  org_id: string;
+  started_at: string;
+  ended_at: string | null;
+};
+
+/** Fixed-window counters behind allowRate (migration 0016). */
+export type RateLimit = {
+  key: string;
+  count: number;
+  window_start: string;
 };
 
 export type CarpoolRun = {
@@ -479,8 +495,20 @@ export type Database = {
       };
       site_settings: {
         Row: Row<SiteSettings>;
-        Insert: Insert<SiteSettings, "id" | "demo_enabled" | "updated_at">;
+        Insert: Insert<SiteSettings, "id" | "demo_enabled" | "demo_hours" | "updated_at">;
         Update: Partial<SiteSettings>;
+        Relationships: [];
+      };
+      demo_log: {
+        Row: Row<DemoLog>;
+        Insert: Insert<DemoLog, "started_at" | "ended_at">;
+        Update: Partial<DemoLog>;
+        Relationships: [];
+      };
+      rate_limits: {
+        Row: Row<RateLimit>;
+        Insert: Insert<RateLimit, "count" | "window_start">;
+        Update: Partial<RateLimit>;
         Relationships: [];
       };
       carpool_runs: {

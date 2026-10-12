@@ -119,7 +119,7 @@ export default async function AdminSettingsPage() {
                 <input type="hidden" name="enabled" value={demoOn ? "0" : "1"} />
                 <button className={demoOn ? "text-xs text-red-600 underline" : "btn-purple text-sm"}>{demoOn ? "Turn demo off" : "Turn demo on"}</button>
               </form>
-              <div className="text-xs text-slate-400"><a href="/demo/qr" target="_blank" rel="noopener" className="underline">Open QR full size</a> · <a href="/demo" target="_blank" rel="noopener" className="underline">landing page</a></div>
+              <div className="text-xs text-slate-400"><a href="/demo/qr" target="_blank" rel="noopener" className="underline">Open QR full size</a> · <a href="/demo" target="_blank" rel="noopener" className="underline">landing page</a> · <a href="/admin/demos" className="underline">monitor demos</a></div>
             </div>
           </div>
         </section>

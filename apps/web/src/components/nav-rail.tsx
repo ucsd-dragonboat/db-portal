@@ -22,7 +22,10 @@ const adminNav: NavItem[] = [
   { href: "/admin/members", label: "Members", icon: "users", color: "#009688" },
   { href: "/admin/settings", label: "Settings", icon: "gear", color: "var(--g-grey-600)" },
   { href: "/admin/status", label: "Status", icon: "pulse", color: "var(--g-red)" },
+  { href: "/admin/demos", label: "Demos", icon: "eye", color: "var(--g-purple)" },
 ];
+/** Site-wide tools that demo sandboxes don't get. */
+const realTeamsOnly = ["/admin/status", "/admin/demos"];
 
 export default function NavRail({ isAdmin, isDemo = false }: { isAdmin: boolean; isDemo?: boolean }) {
   const path = usePathname();
@@ -41,7 +44,7 @@ export default function NavRail({ isAdmin, isDemo = false }: { isAdmin: boolean;
         <>
           <div className="mt-4 mb-1 hidden md:block pl-6 text-[11px] font-medium uppercase tracking-wide" style={{ color: "var(--g-grey-600)" }}>Admin</div>
           <div className="mt-4 md:hidden border-t mx-3" style={{ borderColor: "var(--g-grey-300)" }} />
-          {adminNav.filter((n) => !(isDemo && n.href === "/admin/status")).map(item)}
+          {adminNav.filter((n) => !(isDemo && realTeamsOnly.includes(n.href))).map(item)}
         </>
       )}
     </aside>

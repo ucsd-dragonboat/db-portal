@@ -34,4 +34,5 @@ export async function setDemoEnabled(fd: FormData) {
   await createAdminClient().from("site_settings")
     .update({ demo_enabled: fd.get("enabled") === "1", updated_at: new Date().toISOString() }).eq("id", true);
   revalidatePath("/admin/settings");
+  revalidatePath("/admin/demos");
 }
