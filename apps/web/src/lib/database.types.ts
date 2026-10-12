@@ -46,6 +46,21 @@ export type DemoLog = {
   ended_at: string | null;
 };
 
+/** Where an image is shown (migration 0039 image_refs). */
+export type ImageRef = { kind: "announcement" | "event" | "form" | "response"; id: string; title: string; form_id: string | null };
+
+/** A file in the admin Images panel (migration 0039 team_images). */
+export type TeamImage = {
+  name: string;
+  size: number;
+  mime: string | null;
+  created_at: string;
+  uploader: string | null;
+  /** At the bucket root, from before team folders (migration 0036). */
+  legacy: boolean;
+  refs: ImageRef[];
+};
+
 /** Fixed-window counters behind allowRate (migration 0016). */
 export type RateLimit = {
   key: string;
@@ -551,6 +566,10 @@ export type Database = {
       create_demo_sandbox: { Args: { visitor: string }; Returns: string };
       cleanup_demo_sandboxes: { Args: { only_org?: string | null }; Returns: number };
       attendance_counts: { Args: { org: string }; Returns: { user_id: string; n: number }[] };
+      team_images: { Args: { p_org: string }; Returns: TeamImage[] };
+      orphan_images: { Args: { min_age: string }; Returns: string[] };
+      legacy_images_for: { Args: { p_org: string }; Returns: string[] };
+      rewrite_image_path: { Args: { p_org: string; old_name: string; new_name: string }; Returns: number };
       admin_add_member: {
         Args: { p_org: string; p_email: string; p_full_name?: string; p_address?: string | null; p_city?: string | null; p_zipcode?: string | null; p_lat?: number | null; p_lon?: number | null; p_car_passengers?: number | null; p_gender?: string | null; p_weight_lb?: number | null };
         Returns: string;
