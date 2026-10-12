@@ -167,6 +167,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         <div className="grid grid-cols-2 gap-x-4 gap-y-1" style={{ color: "var(--g-grey-600)" }}>
           <span><Icon name="user" /> Member’s name</span><span><Icon name="phone" /> phone</span>
           <span><Icon name="weight" /> weight</span><span><Icon name="house" /> address</span>
+          <span><Icon name="party" /> birthday</span>
         </div>
       </div>
 

@@ -12,3 +12,7 @@ export function birthdayInYear(md: string, year: number): string {
   const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
   return md === "02-29" && !leap ? "02-28" : md;
 }
+
+/** "May 17, 2003" — read as a calendar date, so no timezone can shift the day. */
+export const fmtBirthday = (ymd: string) =>
+  new Date(`${ymd}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
