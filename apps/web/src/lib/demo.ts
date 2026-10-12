@@ -8,7 +8,7 @@ import { allowRate } from "@/lib/rate-limit";
 /** Fake accounts (visitors and their teammates) all use this unroutable domain, which
  * is also how emails to them are dropped and how cleanup finds them. */
 export const DEMO_EMAIL_DOMAIN = "demo.invalid";
-const MAX_LIVE_SANDBOXES = 150;
+export const MAX_LIVE_SANDBOXES = 150;
 
 /** The Team settings on/off switch (migration 0033). Off when unset or unreadable, so
  * nobody can start a demo until an admin turns it on. */
@@ -42,7 +42,25 @@ export async function createDemoSandbox(ip: string): Promise<DemoStart> {
     await admin.auth.admin.deleteUser(created.user.id);
     return { error: "failed" };
   }
+  await applyDemoLifetime(orgId);
   return { ok: true, email, orgId };
+}
+
+/** The SQL builder always sets 24 h; this applies the lifetime chosen on the Demos page
+ * (site_settings.demo_hours, migration 0038). */
+async function applyDemoLifetime(orgId: string) {
+  const admin = createAdminClient();
+  const { data } = await admin.from("site_settings").select("demo_hours").maybeSingle();
+  if (!data?.demo_hours || data.demo_hours === 24) return;
+  await admin.from("organizations").update({ demo_expires_at: new Date(Date.now() + data.demo_hours * 3600e3).toISOString() })
+    .eq("id", orgId).eq("is_demo", true);
+}
+
+/** Deletes one sandbox now: its images, the org (cascading to everything in it) and its
+ * fake users. The SQL function only ever deletes is_demo orgs. */
+export async function deleteDemoSandbox(orgId: string) {
+  await removeDemoImages([orgId]);
+  await createAdminClient().rpc("cleanup_demo_sandboxes", { only_org: orgId });
 }
 
 /** Deletes a sandbox's uploaded images (its <org_id>/ folder). Storage files must go
@@ -60,8 +78,8 @@ export async function resetDemoSandbox(visitorId: string, oldOrgId: string): Pro
   const admin = createAdminClient();
   const { data: orgId, error } = await admin.rpc("create_demo_sandbox", { visitor: visitorId });
   if (error || !orgId) { console.error("[demo] reset", error?.message); return false; }
-  await removeDemoImages([oldOrgId]);
-  await admin.rpc("cleanup_demo_sandboxes", { only_org: oldOrgId });
+  await applyDemoLifetime(orgId);
+  await deleteDemoSandbox(oldOrgId);
   return true;
 }
 
@@ -75,7 +93,7 @@ export const DEMO_GEO_BUDGET: Record<string, number> = {
   nominatim: 200,
 };
 /** And per sandbox per day, so one visitor can't spend everyone's share. */
-const PER_SANDBOX_DAILY = 40;
+export const PER_SANDBOX_DAILY = 40;
 
 const demoCache = new Map<string, { demo: boolean; at: number }>();
 /** Is this org a demo sandbox? Cached briefly per server instance. */
