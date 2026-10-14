@@ -10,6 +10,7 @@ import { testPattern } from "@/lib/pattern";
 import { attachPickupCoords, notFoundWarning } from "@/lib/geocode";
 import { parseBirthday } from "@/lib/birthday";
 import { saveDefaultPickup } from "@/lib/default-pickup";
+import { answeredParts } from "@/lib/form-sections";
 
 export type SubmitState = { error?: string; saved?: boolean; warning?: string };
 
@@ -39,12 +40,20 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
   const w = String(fd.get("weight_lb") ?? "").trim();
   if (w || birthday) await supabase.from("profiles").update({ ...(w ? { weight_lb: Number(w) } : {}), ...(birthday ? { birthday } : {}) }).eq("id", user.id);
 
+  // Sections (Google Forms-style): only what's on this respondent's path through the
+  // form counts. Skipped sections' questions aren't required and aren't stored.
+  const questions = (form.questions as unknown as FormQuestion[]) ?? [];
+  const parts = answeredParts(questions, (qid) => fd.get(`q_${qid}`));
+  if (parts.loop) return { error: "This form's sections loop back on themselves — ask an admin to fix it." };
+
   // 2. per-event attendance → rsvps (validate all, then one batched upsert)
   // A ride-only address typed once at the top applies to every day where the member
   // is driving or riding from "home" — a per-day address or pickup spot still wins.
   const rideAddress = String(fd.get("ride_address") ?? "").trim();
   const parsed = [];
+  const skippedDays = (links ?? []).filter((l) => !parts.dayAnswered(l.event_id)).map((l) => l.event_id);
   for (const l of links ?? []) {
+    if (!parts.dayAnswered(l.event_id)) continue;
     const v = parseAttendance(fd, `ev_${l.event_id}_`);
     if (!v) return { error: "Please answer every attendance question (and pick a pickup spot if you chose On campus)." };
     if (rideAddress && (v.ride === "driver" || v.ride === "needs_ride") && !v.pickup_address && !v.pickup_location_id) v.pickup_address = rideAddress;
@@ -59,12 +68,16 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
     // An admin editing someone's response doesn't change that member's profile.
     if (!opts.asAdmin) for (const r of rsvpRows) await saveDefaultPickup(supabase, user.id, fd, `ev_${r.event_id}_`, r);
   }
+  // A day in a section this response skipped: drop the answer this form gave earlier, so
+  // carpools and lineups don't count a stale "yes".
+  if (skippedDays.length)
+    await supabase.from("rsvps").delete().eq("user_id", user.id).eq("form_id", formId).in("event_id", skippedDays);
 
   // 3. custom answers
-  const questions = (form.questions as unknown as FormQuestion[]) ?? [];
   const answers: Record<string, Json> = {};
   for (const q of questions) {
-    if (q.type === "info" || q.type === "day") continue; // info card / day position marker — nothing to answer here
+    if (q.type === "info" || q.type === "day" || q.type === "section") continue; // nothing to answer here
+    if (!parts.isAnswered(q)) continue; // in a section this response skipped
     const key = `q_${q.id}`;
     let val: Json = null;
     if (q.type === "multi_choice") val = fd.getAll(key).map(String);

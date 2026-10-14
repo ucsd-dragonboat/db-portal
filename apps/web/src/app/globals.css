@@ -39,6 +39,15 @@ body { background: var(--g-grey-50); color: var(--g-grey-900); }
   .gf-header { @apply rounded-lg border bg-white p-6 overflow-hidden relative; border-color: var(--g-grey-300); border-top: 10px solid var(--g-purple); }
   .gf-card { @apply rounded-lg border bg-white p-6; border-color: var(--g-grey-300); }
   .gf-card-active { border-left: 6px solid var(--g-blue); }
+  /* Sections (Google Forms-style): "Section k of N" tab sitting on the card, the
+     respondent's section header with its purple title band, and the Back/Next buttons. */
+  .gf-section-tab { @apply inline-block rounded-t-lg px-4 py-1.5 text-xs font-medium text-white; background: var(--g-purple); }
+  .gf-section-tab + .gf-header, .gf-section-tab + .gf-section-card { border-top-left-radius: 0; }
+  .gf-section-card { @apply rounded-lg border bg-white p-6; border-color: var(--g-grey-300); border-top: 10px solid var(--g-purple); }
+  .gf-section-head { @apply overflow-hidden rounded-lg border bg-white; border-color: var(--g-grey-300); }
+  .gf-section-title { @apply px-6 py-3 text-lg text-white; background: var(--g-purple); }
+  .gf-nav-btn { @apply rounded border bg-white px-6 py-2 text-sm font-medium transition; border-color: var(--g-grey-300); color: var(--g-purple); }
+  .gf-nav-btn:hover { background: var(--g-purple-soft); }
   .gf-required { color: var(--g-red); }
   .gf-radio { @apply flex cursor-pointer items-center gap-3 rounded px-2 py-2 text-sm; }
   .gf-radio:hover { background: var(--g-grey-50); }

@@ -261,7 +261,7 @@ export type Rsvp = {
   updated_at: string;
 };
 
-export type QuestionType = "short_text" | "long_text" | "single_choice" | "multi_choice" | "yes_no" | "number" | "info" | "day";
+export type QuestionType = "short_text" | "long_text" | "single_choice" | "multi_choice" | "yes_no" | "number" | "info" | "day" | "section";
 export type FormQuestion = {
   id: string;
   type: QuestionType;
@@ -278,6 +278,13 @@ export type FormQuestion = {
    * into every form made from it, so a question whose text is read downstream — a
    * Google Sheets column header, say — can't be reworded into something unrecognisable. */
   prompt_pattern?: string;
+  /** type "section" only: where to go after this section — undefined = next section,
+   * "submit", or another section marker's id (lib/form-sections.ts). A section marker's
+   * label/help are the section's title/description. */
+  after?: string;
+  /** single_choice / yes_no only, "Go to section based on answer": option → target
+   * ("next", "submit" or a section marker id). Present = turned on. */
+  branch?: Record<string, string>;
 };
 
 export type Form = {
