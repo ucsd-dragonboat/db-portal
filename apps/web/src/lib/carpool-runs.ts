@@ -1,5 +1,6 @@
 // Bookkeeping for runs of the carpool algorithm (table carpool_runs, migration
-// 0031): the auto-carpool cron and admins' Optimize clicks. Admin-only status —
+// 0031): the auto-carpool cron and admins' Optimize clicks. Since 0040 the queued
+// cron rows are also the cron's job queue (one job per day). Admin-only status —
 // members never see it. Every write is best-effort: a missing table (migration not
 // run yet) must never break generating or saving a carpool.
 
@@ -10,9 +11,12 @@ type Db = SupabaseClient<Database>;
 export type RunStatus = CarpoolRun["status"];
 const runs = (db: Db) => db.from("carpool_runs");
 
-export async function startRun(db: Db, r: { orgId: string; eventId: string; trigger: "cron" | "manual"; status?: RunStatus }): Promise<string | null> {
+/** A cron job gets this many tries (a timeout or a hard error uses one up). */
+export const RUN_MAX_ATTEMPTS = 3;
+
+export async function startRun(db: Db, r: { orgId: string; eventId: string; trigger: "cron" | "manual"; status?: RunStatus; formId?: string }): Promise<string | null> {
   try {
-    const { data } = await runs(db).insert({ org_id: r.orgId, event_id: r.eventId, trigger: r.trigger, status: r.status ?? "running" }).select("id").single();
+    const { data } = await runs(db).insert({ org_id: r.orgId, event_id: r.eventId, trigger: r.trigger, status: r.status ?? "running", ...(r.formId ? { form_id: r.formId } : {}) }).select("id").single();
     return data?.id ?? null;
   } catch { return null; }
 }
@@ -24,7 +28,7 @@ export async function updateRun(db: Db, id: string | null, patch: { status: RunS
     await runs(db).update({
       status: patch.status, detail: patch.detail ?? null, provider: patch.provider ?? null,
       ...(patch.carpoolId !== undefined ? { carpool_id: patch.carpoolId } : {}),
-      ...(done ? { finished_at: new Date().toISOString() } : { started_at: new Date().toISOString() }),
+      ...(done ? { finished_at: new Date().toISOString() } : { started_at: new Date().toISOString(), finished_at: null }),
     }).eq("id", id);
   } catch {}
 }
@@ -58,6 +62,8 @@ const ago = (iso: string) => {
 /** What to show an admin about a day's carpool algorithm, or null for nothing. */
 export function runLabel(run: CarpoolRun | undefined, queued: boolean): { text: string; color: string; active: boolean } | null {
   if (run?.status === "running") return { text: run.trigger === "cron" ? "Generating carpool…" : "Optimizing…", color: "var(--g-purple)", active: true };
+  if (run?.status === "queued" && run.attempts > 0)
+    return { text: `Retrying (attempt ${run.attempts + 1} of ${RUN_MAX_ATTEMPTS}) within 10 min${run.detail ? ` · ${run.detail}` : ""}`, color: "var(--g-purple)", active: true };
   if (run?.status === "queued" || (queued && !run)) return { text: "Queued — the auto-carpool runs within 10 min", color: "var(--g-purple)", active: true };
   if (!run) return null;
   const when = ago(run.finished_at ?? run.started_at);

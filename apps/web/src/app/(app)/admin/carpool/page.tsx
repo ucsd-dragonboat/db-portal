@@ -13,6 +13,7 @@ import DayCardGrid from "@/components/day-cards";
 import ConfirmForm from "@/components/confirm-form";
 import { createCarpoolLayout, deleteCarpoolLayout } from "./actions";
 import AutoRefresh from "@/components/auto-refresh";
+import CarpoolStatusBadge from "@/components/carpool-status";
 import { latestRuns, queuedDays, runLabel } from "@/lib/carpool-runs";
 
 export default async function AdminCarpoolPage({ searchParams }: { searchParams: Promise<{ event?: string; carpool?: string }> }) {
@@ -52,7 +53,10 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
       <div className="-m-4 md:-m-6 min-h-full">
         <div className="border-b px-4 py-5 md:px-8" style={{ background: "var(--g-red-soft)", borderColor: "var(--g-grey-300)" }}>
           <div className="mx-auto max-w-[1100px]">
-            <h1 className="text-2xl font-normal" style={{ color: "var(--g-red)" }}><Icon name="car" /> Carpool</h1>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h1 className="text-2xl font-normal" style={{ color: "var(--g-red)" }}><Icon name="car" /> Carpool</h1>
+              <Link href="/admin/carpool/jobs" className="btn-text text-sm" style={{ color: "var(--g-red)" }}>Job queue →</Link>
+            </div>
             <p className="mt-1 text-sm" style={{ color: "var(--g-grey-600)" }}>Pick a day to coordinate rides — drivers and riders come from that day’s RSVPs. A day can have several layouts (e.g. a morning and an afternoon wave), each with its own people.</p>
           </div>
         </div>
@@ -72,8 +76,8 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
                 });
                 const published = layouts.filter((c) => c.published).length;
                 const st = status.get(e.id);
-                if (st) lines.unshift(st.text);
                 return { id: e.id, title: e.title, starts_at: e.starts_at, lines: lines.length ? lines : undefined,
+                  badge: st ? <CarpoolStatusBadge status={st} /> : undefined,
                   meta: `${layouts.length ? `${layouts.length} layout${layouts.length === 1 ? "" : "s"} · ${published} published` : "No rides yet"} · ${going} going`,
                   metaColor: published ? "var(--g-green)" : undefined };
               })} />
@@ -142,7 +146,7 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
         <Link href="/admin/carpool" className="btn-text -ml-3" style={{ color: "var(--g-red)" }}>← Carpool</Link>
         <h1 className="text-2xl font-normal">{event.title}</h1>
         <span className="text-sm" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={event.starts_at} /></span>
-        {runStatus && <span className="chip !py-0 text-xs" style={{ color: runStatus.color }}>{runStatus.active && "⏳ "}{runStatus.text}</span>}
+        <CarpoolStatusBadge status={runStatus} />
         <AutoRefresh active={!!runStatus?.active} />
       </div>
       <div className="flex flex-wrap items-center gap-1 border-b text-sm" style={{ borderColor: "var(--g-grey-300)" }}>

@@ -18,6 +18,8 @@ export type BrowseItem = {
   meta?: string;
   /** Colors the status dot (not the text) — green for published, and so on. */
   metaColor?: string;
+  /** Extra status chip under the title (e.g. the auto-carpool's progress). */
+  badge?: React.ReactNode;
   /** ⋮ menu, if the page has one. */
   menu?: React.ReactNode;
   /** ISO dates the sort options key off. */
@@ -158,6 +160,7 @@ export default function BrowseGrid({ items, sorts, storageKey, color, soft, empt
                     </div>
                   )}
                   {it.subtitle && <div className="mt-0.5 text-xs" style={grey}>{it.subtitle}</div>}
+                  {it.badge && <div className="mt-1.5 flex">{it.badge}</div>}
                 </div>
                 {it.menu}
               </div>
@@ -171,6 +174,7 @@ export default function BrowseGrid({ items, sorts, storageKey, color, soft, empt
               style={i ? { borderTop: "1px solid var(--g-grey-300)" } : undefined}>
               <span className="shrink-0" style={{ color }}><Icon name="file" /></span>
               <Link href={it.href} className="min-w-0 flex-1 truncate font-medium hover:underline">{it.title}</Link>
+              {it.badge && <span className="hidden min-w-0 max-w-[40%] shrink lg:flex">{it.badge}</span>}
               {it.meta && (
                 <span className="hidden min-w-0 shrink-0 items-center gap-2 text-xs sm:flex" style={grey}>
                   <Dot color={it.metaColor} /><span className="truncate">{it.meta}</span>

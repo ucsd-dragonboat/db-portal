@@ -73,6 +73,8 @@ export type CarpoolRun = {
   org_id: string;
   event_id: string;
   carpool_id: string | null;
+  form_id: string | null;
+  attempts: number;
   trigger: "cron" | "manual";
   status: "queued" | "running" | "done" | "skipped" | "error";
   detail: string | null;
@@ -535,7 +537,7 @@ export type Database = {
       };
       carpool_runs: {
         Row: Row<CarpoolRun>;
-        Insert: Insert<CarpoolRun, "id" | "carpool_id" | "detail" | "provider" | "started_at" | "finished_at">;
+        Insert: Insert<CarpoolRun, "id" | "carpool_id" | "form_id" | "attempts" | "detail" | "provider" | "started_at" | "finished_at">;
         Update: Partial<CarpoolRun>;
         Relationships: [];
       };
@@ -577,6 +579,8 @@ export type Database = {
       orphan_images: { Args: { min_age: string }; Returns: string[] };
       legacy_images_for: { Args: { p_org: string }; Returns: string[] };
       rewrite_image_path: { Args: { p_org: string; old_name: string; new_name: string }; Returns: number };
+      claim_carpool_run: { Args: { p_skip: string[] }; Returns: CarpoolRun[] };
+      recover_stale_carpool_runs: { Args: Record<string, never>; Returns: number };
       admin_add_member: {
         Args: { p_org: string; p_email: string; p_full_name?: string; p_address?: string | null; p_city?: string | null; p_zipcode?: string | null; p_lat?: number | null; p_lon?: number | null; p_car_passengers?: number | null; p_gender?: string | null; p_weight_lb?: number | null };
         Returns: string;
