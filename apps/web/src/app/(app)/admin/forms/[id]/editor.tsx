@@ -16,6 +16,7 @@ import ConfirmForm from "@/components/confirm-form";
 import { attendancePrompt } from "@/lib/attendance";
 import { htmlToText } from "@/lib/html";
 import { patternError, testPattern } from "@/lib/pattern";
+import { NEXT, SUBMIT } from "@/lib/form-sections";
 
 type EventOpt = { id: string; title: string; kind: string; starts_at: string; group_id: string | null };
 type GroupOpt = { id: string; name: string };
@@ -41,8 +42,27 @@ const withDayMarkers = (p: FormPayload): FormPayload => {
   const qs = p.questions.filter((q) => q.type !== "day" || p.events.some((e) => e.event_id === q.event_id));
   const marked = new Set(qs.filter((q) => q.type === "day").map((q) => q.event_id));
   const missing = p.events.filter((e) => !marked.has(e.event_id)).map((e) => dayMarker(e.event_id));
-  return { ...p, questions: [...missing, ...qs] };
+  const lead = qs[0]?.type === "section" ? 1 : 0; // unmarked days belong to section 1
+  return { ...p, questions: [...qs.slice(0, lead), ...missing, ...qs.slice(lead)] };
 };
+
+// ---- Sections (Google Forms-style; see lib/form-sections.ts) ----
+const sectionMarker = (): FormQuestion => ({ id: uid(), type: "section", label: "" });
+/** With any section break, questions[0] is the leading marker standing for section 1;
+ * with none, there's no leading marker and no leftover navigation settings. */
+const normalizeSections = (qs: FormQuestion[]): FormQuestion[] => {
+  const breaks = qs.some((q, i) => q.type === "section" && i > 0);
+  if (breaks) return qs[0]?.type === "section" ? qs : [sectionMarker(), ...qs];
+  return (qs[0]?.type === "section" ? qs.slice(1) : qs).map((q) => (q.branch ? { ...q, branch: undefined } : q));
+};
+/** After a section is deleted or merged, anything that went to it continues to the next section instead. */
+const dropTargets = (qs: FormQuestion[], gone: string) => qs.map((q) => ({
+  ...q,
+  ...(q.after === gone ? { after: undefined } : {}),
+  ...(q.branch ? { branch: Object.fromEntries(Object.entries(q.branch).map(([o, t]) => [o, t === gone ? NEXT : t])) } : {}),
+}));
+/** Index just past the section that starts at marker index i. */
+const sectionEnd = (qs: FormQuestion[], i: number) => { const j = qs.findIndex((q, k) => k > i && q.type === "section"); return j < 0 ? qs.length : j; };
 
 export default function FormEditor({ id, initial, events, groups, pickups }: { id: string; initial: FormPayload; events: EventOpt[]; groups: GroupOpt[]; pickups: CampusSpot[] }) {
   const router = useRouter();
@@ -72,12 +92,72 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
   const updQ = (qid: string, patch: Partial<FormQuestion>) => set("questions", f.questions.map((q) => (q.id === qid ? { ...q, ...patch } : q)));
   const delQ = (qid: string) => set("questions", f.questions.filter((q) => q.id !== qid));
   const dupQ = (qid: string) => { const i = f.questions.findIndex((q) => q.id === qid); const c = { ...f.questions[i], id: uid() }; const a = [...f.questions]; a.splice(i + 1, 0, c); set("questions", a); setFocus(c.id); };
-  const moveQ = (i: number, d: -1 | 1) => { const a = [...f.questions]; const j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; set("questions", a); };
+  const moveQ = (i: number, d: -1 | 1) => { const a = [...f.questions]; const j = i + d; if (j < 0 || j >= a.length || (j === 0 && a[0].type === "section")) return; [a[i], a[j]] = [a[j], a[i]]; set("questions", a); };
+
+  // Sections: markers[0] is section 1 (the form header) when the form has sections.
+  const markers = f.questions.filter((q) => q.type === "section");
+  const nSections = Math.max(1, markers.length);
+  const sectionTitle = (m: FormQuestion, k: number) => (k === 0 ? f.title || "Untitled form" : m.label || "Untitled section");
+  const targetOptions = [
+    <option key={NEXT} value={NEXT}>Continue to next section</option>,
+    ...markers.map((m, k) => <option key={m.id} value={m.id}>Go to section {k + 1} ({sectionTitle(m, k)})</option>),
+    <option key={SUBMIT} value={SUBMIT}>Submit form</option>,
+  ];
+  /** Google's "Add section": the break goes after the focused card (or at the end), so the questions below it move into the new section. */
+  const addSection = () => {
+    const m = sectionMarker();
+    const at = focus ? f.questions.findIndex((q) => q.id === focus) : -1;
+    const a = [...f.questions];
+    a.splice(at < 0 ? a.length : at + 1, 0, m);
+    set("questions", normalizeSections(a));
+    setFocus(m.id);
+  };
+  const dupSection = (i: number) => {
+    const end = sectionEnd(f.questions, i);
+    // A day can only be on the form once, so its attendance question isn't copied.
+    const copy = f.questions.slice(i, end).filter((q) => q.type !== "day").map((q) => ({ ...q, id: uid() }));
+    const a = [...f.questions]; a.splice(end, 0, ...copy); set("questions", a); setFocus(copy[0].id);
+  };
+  const deleteSection = (i: number) => {
+    if (!window.confirm("Delete questions and section?")) return;
+    const end = sectionEnd(f.questions, i);
+    const gone = f.questions.slice(i, end);
+    const days = new Set(gone.filter((q) => q.type === "day").map((q) => q.event_id));
+    setF((s) => ({
+      ...s,
+      events: s.events.filter((e) => !days.has(e.event_id)),
+      questions: normalizeSections(dropTargets([...s.questions.slice(0, i), ...s.questions.slice(end)], f.questions[i].id)),
+    }));
+  };
+  const mergeSection = (i: number) => set("questions", normalizeSections(dropTargets(f.questions.filter((_, k) => k !== i), f.questions[i].id)));
+  const moveSection = (i: number, d: -1 | 1) => {
+    const qs = f.questions; const end = sectionEnd(qs, i);
+    if (d === -1) {
+      const p = qs.slice(0, i).map((q) => q.type).lastIndexOf("section");
+      if (p <= 0) return; // section 1 (the form header) stays first
+      set("questions", [...qs.slice(0, p), ...qs.slice(i, end), ...qs.slice(p, i), ...qs.slice(end)]);
+    } else {
+      if (end >= qs.length) return;
+      const nEnd = sectionEnd(qs, end);
+      set("questions", [...qs.slice(0, i), ...qs.slice(end, nEnd), ...qs.slice(i, end), ...qs.slice(nEnd)]);
+    }
+  };
+  /** Rename an option and keep its "go to section" target with it. */
+  const renameOption = (q: FormQuestion, oi: number, v: string) => {
+    const old = q.options![oi];
+    const branch = q.branch && old in q.branch ? Object.fromEntries(Object.entries(q.branch).map(([o, t]) => [o === old ? v : o, t])) : q.branch;
+    updQ(q.id, { options: q.options!.map((x, k) => (k === oi ? v : x)), branch });
+  };
+  const branchSelect = (q: FormQuestion, option: string) => q.branch && nSections > 1 && (
+    <select value={q.branch[option] ?? NEXT} onClick={(e) => e.stopPropagation()} onChange={(e) => updQ(q.id, { branch: { ...q.branch, [option]: e.target.value } })} className="input w-auto max-w-[45%] py-1 text-xs" aria-label={`After “${option}”`}>
+      {targetOptions}
+    </select>
+  );
 
   const save = (status = f.status) => start(async () => {
     // Untitled questions are dropped — info blocks only need body text; day markers carry position only.
     const hasLabel = (q: FormQuestion) => !!htmlToText(q.label).trim(); // labels can be rich HTML now
-    const questions = f.questions.filter((q) => (q.type === "day" ? true : q.type === "info" ? hasLabel(q) || q.help : hasLabel(q)));
+    const questions = f.questions.filter((q) => (q.type === "day" || q.type === "section" ? true : q.type === "info" ? hasLabel(q) || q.help : hasLabel(q)));
     // Keep form_events.sort_order in step with the markers (the grid/CSV/sheet columns follow it).
     const pos = new Map(questions.flatMap((q, i) => (q.type === "day" ? [[q.event_id, i] as const] : [])));
     const eventsSorted = [...f.events].sort((a, b) => (pos.get(a.event_id) ?? -1) - (pos.get(b.event_id) ?? -1));
@@ -109,7 +189,9 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
       {msg && <p className="text-xs text-center" style={{ color: "var(--g-green)" }}>{msg}</p>}
       {mismatches > 0 && <p className="rounded p-2 text-center text-xs" style={{ background: "var(--g-yellow-soft)", color: "#b06000" }}>⚠ {mismatches} question{mismatches > 1 ? "s don’t" : " doesn’t"} match the wording rule {mismatches > 1 ? "they carry" : "it carries"} — anything reading the Google Sheet’s column headers may miss {mismatches > 1 ? "them" : "it"}. You can still save.</p>}
 
-      {/* header card */}
+      {/* header card — section 1 once the form has sections */}
+      <div>
+      {nSections > 1 && <span className="gf-section-tab">Section 1 of {nSections}</span>}
       <div className="gf-header space-y-2">
         <input value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="Untitled form" className="input-line text-[32px] leading-tight" />
         <RichEditor value={f.description} onChange={(html) => set("description", html)} minRows={8} placeholder={"Form description — meetup times, reminders, who to DM…"} />
@@ -118,6 +200,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
           <div><label className="label">Status</label>
             <select value={f.status} onChange={(e) => set("status", e.target.value as FormPayload["status"])} className="input"><option value="draft">Draft (hidden)</option><option value="open">Open (accepting responses)</option><option value="closed">Closed</option></select></div>
         </div>}
+      </div>
       </div>
 
       {/* events card */}
@@ -197,6 +280,39 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
 
       {/* question cards — attendance days and custom questions share one order (↑↓ moves across both) */}
       {f.questions.map((q, i) => {
+        if (q.type === "section") {
+          if (i === 0) return null; // section 1 is the header card above
+          const k = markers.indexOf(q); // 0-based; this card is section k+1
+          const prev = markers[k - 1];
+          const active = focus === q.id;
+          return (
+            <div key={q.id} className="space-y-6 pt-2">
+              {/* Google's "After section N" — where the section above goes when it's done */}
+              <div className="flex flex-wrap items-center gap-2 text-sm" style={{ color: "var(--g-grey-600)" }}>
+                <span>After section {k}</span>
+                <select value={prev.after ?? NEXT} onChange={(e) => updQ(prev.id, { after: e.target.value === NEXT ? undefined : e.target.value })} className="input w-auto py-1 text-sm">{targetOptions}</select>
+              </div>
+              <div>
+                <span className="gf-section-tab">Section {k + 1} of {nSections}</span>
+                <div onClick={() => setFocus(q.id)} className={`gf-section-card space-y-2 ${active ? "gf-card-active" : ""}`}>
+                  <div className="flex items-start gap-2">
+                    <input value={q.label} onChange={(e) => updQ(q.id, { label: e.target.value })} placeholder="Untitled section" className="input-line flex-1 text-2xl" aria-label="Section title" />
+                    <Menu label="Section options" items={[
+                      { label: "Duplicate section", run: () => dupSection(i) },
+                      { label: "Move section up", run: () => moveSection(i, -1), disabled: k <= 1 },
+                      { label: "Move section down", run: () => moveSection(i, 1), disabled: k >= markers.length - 1 },
+                      { label: "Delete section", run: () => deleteSection(i) },
+                      { label: "Merge with above", run: () => mergeSection(i) },
+                    ]} />
+                  </div>
+                  {active
+                    ? <RichEditor value={q.help ?? ""} onChange={(html) => updQ(q.id, { help: html || undefined })} minRows={2} placeholder="Description (optional)" className="text-sm" />
+                    : q.help ? <RichText text={q.help} className="!text-sm" /> : <span className="text-sm" style={{ color: "var(--g-grey-600)" }}>Description (optional)</span>}
+                </div>
+              </div>
+            </div>
+          );
+        }
         if (q.type === "day") {
           const fe = f.events.find((e) => e.event_id === q.event_id);
           if (!fe) return null;
@@ -213,7 +329,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
                 </div>
                 <span className="flex items-center gap-1">
                   <span className="chip !py-0 text-[10px] whitespace-nowrap">Automatic</span>
-                  <button type="button" onClick={() => moveQ(i, -1)} disabled={i === 0} className="btn-text py-0.5 disabled:opacity-30" title="Move up"><Icon name="up" /></button>
+                  <button type="button" onClick={() => moveQ(i, -1)} disabled={i === 0 || (i === 1 && f.questions[0].type === "section")} className="btn-text py-0.5 disabled:opacity-30" title="Move up"><Icon name="up" /></button>
                   <button type="button" onClick={() => moveQ(i, 1)} disabled={i === f.questions.length - 1} className="btn-text py-0.5 disabled:opacity-30" title="Move down"><Icon name="down" /></button>
                   <button type="button" onClick={() => toggleEvent(fe.event_id)} className="btn-text py-0.5" title="Remove this day from the form"><Icon name="trash" /></button>
                 </span>
@@ -253,24 +369,32 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
                 {(q.options ?? []).map((o, oi) => (
                   <div key={oi} className="flex items-center gap-3">
                     <span className="w-[18px] h-[18px] rounded-full border-2 inline-block" style={{ borderColor: "var(--g-grey-300)", borderRadius: q.type === "multi_choice" ? 3 : 999 }} />
-                    {active ? <input value={o} onChange={(e) => updQ(q.id, { options: q.options!.map((x, k) => (k === oi ? e.target.value : x)) })} className="input-line flex-1 !py-1" /> : <span className="text-sm py-1">{o}</span>}
-                    {active && (q.options ?? []).length > 1 && <button type="button" onClick={() => updQ(q.id, { options: q.options!.filter((_, k) => k !== oi) })} className="px-2" style={{ color: "var(--g-grey-600)" }}>✕</button>}
+                    {active ? <input value={o} onChange={(e) => renameOption(q, oi, e.target.value)} className="input-line flex-1 !py-1" /> : <span className="flex-1 text-sm py-1">{o}</span>}
+                    {q.type === "single_choice" && branchSelect(q, o)}
+                    {active && (q.options ?? []).length > 1 && <button type="button" onClick={() => updQ(q.id, { options: q.options!.filter((_, k) => k !== oi), ...(q.branch ? { branch: Object.fromEntries(Object.entries(q.branch).filter(([k]) => k !== o)) } : {}) })} className="px-2" style={{ color: "var(--g-grey-600)" }}>✕</button>}
                   </div>
                 ))}
                 {active && <button type="button" onClick={() => updQ(q.id, { options: [...(q.options ?? []), `Option ${(q.options?.length ?? 0) + 1}`] })} className="ml-8 text-sm" style={{ color: "var(--g-grey-600)" }}>Add option</button>}
               </div>
             )}
-            {q.type === "yes_no" && <div className="text-sm space-y-1" style={{ color: "var(--g-grey-600)" }}><div>◯ Yes</div><div>◯ No</div></div>}
+            {q.type === "yes_no" && <div className="text-sm space-y-1" style={{ color: "var(--g-grey-600)" }}>
+              {(["yes", "no"] as const).map((v) => <div key={v} className="flex items-center gap-3"><span className="flex-1 capitalize">◯ {v}</span>{branchSelect(q, v)}</div>)}
+            </div>}
             {(q.type === "short_text" || q.type === "long_text" || q.type === "number") && <div className="text-sm border-b border-dotted w-1/2 pb-1" style={{ color: "var(--g-grey-600)", borderColor: "var(--g-grey-300)" }}>{t.label} text</div>}
 
             {active && (
               <div className="flex items-center gap-1 border-t pt-2 text-sm" style={{ borderColor: "var(--g-grey-300)" }}>
-                <button type="button" onClick={() => moveQ(i, -1)} disabled={i === 0} className="btn-text disabled:opacity-30"><Icon name="up" /></button>
+                <button type="button" onClick={() => moveQ(i, -1)} disabled={i === 0 || (i === 1 && f.questions[0].type === "section")} className="btn-text disabled:opacity-30"><Icon name="up" /></button>
                 <button type="button" onClick={() => moveQ(i, 1)} disabled={i === f.questions.length - 1} className="btn-text disabled:opacity-30"><Icon name="down" /></button>
                 <button type="button" onClick={() => dupQ(q.id)} className="btn-text" title="Duplicate"><Icon name="clone" /></button>
                 <button type="button" onClick={() => delQ(q.id)} className="btn-text" title="Delete"><Icon name="trash" /></button>
                 <span className="flex-1" />
                 {q.type !== "info" && <label className="flex items-center gap-2 text-xs"><span>Required</span><input type="checkbox" checked={!!q.required} onChange={(e) => updQ(q.id, { required: e.target.checked })} className="accent-[var(--g-purple)] w-4 h-4" /></label>}
+                {nSections > 1 && (q.type === "single_choice" || q.type === "yes_no") && (
+                  <Menu label="More options" items={[
+                    { label: "Go to section based on answer", checked: !!q.branch, run: () => updQ(q.id, { branch: q.branch ? undefined : {} }) },
+                  ]} />
+                )}
               </div>
             )}
             {active && q.type !== "info" && <Validation q={q} onChange={(patch) => updQ(q.id, patch)} />}
@@ -280,6 +404,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
 
       <div className="flex justify-center">
         <button type="button" onClick={addQ} className="rounded-full border bg-white px-5 py-2 text-sm font-medium shadow-sm" style={{ borderColor: "var(--g-grey-300)", color: "var(--g-grey-600)" }}>⊕ Add question</button>
+        <button type="button" onClick={addSection} title="Starts a new page after the selected question" className="rounded-full border bg-white px-5 py-2 text-sm font-medium shadow-sm" style={{ borderColor: "var(--g-grey-300)", color: "var(--g-grey-600)" }}>▭ Add section</button>
         {!f.ask_weight && <button type="button" onClick={() => set("ask_weight", true)} className="rounded-full border bg-white px-5 py-2 text-sm font-medium shadow-sm" style={{ borderColor: "var(--g-grey-300)", color: "var(--g-grey-600)" }}><Icon name="weight" /> Add weight question</button>}
       </div>
 
@@ -333,5 +458,22 @@ function PatternField({ label, hint, value, onChange, sample: seed = "" }: { lab
         </div>
       )}
     </div>
+  );
+}
+
+/** Google-style ⋮ menu: a few actions, optionally with a checkmark (like "Go to section based on answer"). */
+function Menu({ label, items }: { label: string; items: { label: string; run: () => void; disabled?: boolean; checked?: boolean }[] }) {
+  return (
+    <details className="relative" onClick={(e) => e.stopPropagation()}>
+      <summary className="btn-text list-none cursor-pointer py-0.5" aria-label={label} title={label}><Icon name="dots" /></summary>
+      <div className="absolute right-0 z-20 mt-1 w-64 rounded-md border bg-white py-1 text-sm shadow-lg" style={{ borderColor: "var(--g-grey-300)" }}>
+        {items.map((it) => (
+          <button key={it.label} type="button" disabled={it.disabled} className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-slate-50 disabled:opacity-40"
+            onClick={(e) => { it.run(); e.currentTarget.closest("details")?.removeAttribute("open"); }}>
+            {it.checked !== undefined && <span className="w-4">{it.checked ? <Icon name="check" /> : null}</span>}{it.label}
+          </button>
+        ))}
+      </div>
+    </details>
   );
 }
