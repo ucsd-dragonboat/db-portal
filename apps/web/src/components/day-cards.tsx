@@ -1,7 +1,7 @@
 import LocalTime from "@/components/local-time";
 import BrowseGrid, { type BrowseItem } from "@/components/browse-grid";
 
-export type DayCard = { id: string; title: string; starts_at: string; meta: string; metaColor?: string; lines?: string[] };
+export type DayCard = { id: string; title: string; starts_at: string; meta: string; metaColor?: string; lines?: string[]; badge?: React.ReactNode };
 
 /** Event-day picker for the Carpool and Lineups workspaces — a thin adapter over
  * <BrowseGrid>, so those pages get the same cards/rows, sort menu and view toggle
@@ -19,6 +19,7 @@ export default function DayCardGrid({ days, color, soft, hrefBase, empty, storag
     subtitle: <LocalTime iso={d.starts_at} />,
     meta: d.meta,
     metaColor: d.metaColor,
+    badge: d.badge,
     date: d.starts_at,
   }));
   return (
