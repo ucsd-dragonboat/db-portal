@@ -7,11 +7,12 @@ import {
   addDriverToDirSet, carpoolToTsv, carRoutePoints, discrepancies, groupNeedsRide,
   locationKey, mirrorDirSet, movedRiders, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
   removeFromDirSet, upgradeCarpoolData,
-  type CarpoolDataV2, type CarpoolGuest, type Destination, type MatchText, type OsrmRoute, type Rider,
+  DIRS, driversIn, formChanges, formRole, revertAll, revertChange, ridersIn, roleIn, setRole,
+  type CarpoolDataV2, type CarpoolGuest, type Destination, type FormChange, type FormRides, type MatchText, type OsrmRoute, type RideRole, type Rider,
 } from "@db/carpool";
 import { optimizeLayout, routeCar, saveCarpool } from "./actions";
 import { CarGrid, DiyRow, SHEET, type DirKey, type GridHandlers } from "./car-grid";
-import { DiscrepancyTracker, FunFactPanel, NotesPanel, TotalPanel } from "./side-panels";
+import { DiscrepancyTracker, FunFactPanel, NotesPanel, TotalPanel, type DiffChip } from "./side-panels";
 
 const RouteMap = dynamic(() => import("@/components/route-map"), { ssr: false });
 
@@ -28,6 +29,8 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   funFactQuestions: { id: string; label: string }[];
   funFactAnswers: Record<string, { userId: string; text: string }[]>;
 }) {
+  // What the form responses say. Changes to it live on this layout only (data.roles).
+  const form = useMemo<FormRides>(() => ({ drivers, needsRide }), [drivers, needsRide]);
   const initial = useMemo<CarpoolDataV2>(() => {
     const mt: MatchText = Object.fromEntries(Object.values(riders).map((r) => [r.id, `${r.name} ${pickupNames[r.id] ?? ""}`]));
     const up = upgradeCarpoolData(saved?.data, mt);
@@ -35,10 +38,11 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     const ids = new Set([...Object.keys(riders), ...up.guests.map((g) => g.id)]);
     return {
       ...up,
-      going: reconcileDirSet(up.going, drivers, ids, mt, up.collegeKeywords, "g"),
-      back: reconcileDirSet(up.back, drivers, ids, mt, up.collegeKeywords, "b"),
+      // A driver switched to a passenger in this layout doesn't get their car back.
+      going: reconcileDirSet(up.going, driversIn(up, "going", form), ids, mt, up.collegeKeywords, "g"),
+      back: reconcileDirSet(up.back, driversIn(up, "back", form), ids, mt, up.collegeKeywords, "b"),
     };
-  }, [saved, drivers, riders, pickupNames]);
+  }, [saved, form, riders, pickupNames]);
 
   const [data, setData] = useState<CarpoolDataV2>(initial);
   const [name, setName] = useState(initialName);
@@ -60,13 +64,14 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   const placedGoing = useMemo(() => placedSet(data.going), [data.going]);
   const placedBack = useMemo(() => placedSet(data.back), [data.back]);
   const driverIdSet = useMemo(() => new Set(drivers.map((d) => d.id)), [drivers]);
-  // TOTAL "DIY" column: people who RSVP'd but neither drive nor need a ride.
-  const selfIds = useMemo(
-    () => Object.keys(riders).filter((id) => !driverIdSet.has(id) && !needsRide.includes(id)),
-    [riders, driverIdSet, needsRide],
-  );
-  const grouped = useMemo(() => groupNeedsRide(needsRide, matchText, data.collegeKeywords), [needsRide, matchText, data.collegeKeywords]);
-  const disc = useMemo(() => discrepancies(needsRide, data.going, data.back), [needsRide, data.going, data.back]);
+  // Who needs a ride is per direction once a layout changes someone's role.
+  const disc = useMemo(() => {
+    const ids = Object.keys(riders);
+    const need = [...new Set([...ridersIn(data, "going", form, ids), ...ridersIn(data, "back", form, ids)])];
+    return discrepancies(need, data.going, data.back)
+      .map((r) => ({ ...r, needGoing: r.needGoing && roleIn(data, "going", r.id, form) !== "driver", needBack: r.needBack && roleIn(data, "back", r.id, form) !== "driver" }))
+      .filter((r) => r.needGoing || r.needBack);
+  }, [riders, data, form]);
   const options = useMemo(() => {
     const all = Object.values(effRiders).map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name));
     const drivingIn = (d: CarpoolDataV2["going"]) => new Set([...d.onCampus, ...d.offCampus].map((c) => c.driverId));
@@ -84,12 +89,21 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     setData((s) => ({ ...s, [dir]: f(s[dir]) }));
 
   const h: GridHandlers = {
-    place: (dir, target, riderId) => setDir(dir, (d) => {
-      const r = placeInDirSet(d, target, riderId);
-      if (r.error === "full") setMsg("Car is full");
-      return r.dir;
+    // Seating someone is also a role: a driver dropped into another car stops driving
+    // there (their car goes, its passengers become unplaced) — recorded on this layout.
+    place: (dir, target, riderId) => setData((s) => {
+      const own = [...s[dir].onCampus, ...s[dir].offCampus].find((c) => c.driverId === riderId);
+      const from = own && !(target.kind === "car" && target.carId === own.id) ? removeCarFromDirSet(s[dir], own.id) : s[dir];
+      const r = placeInDirSet(from, target, riderId);
+      if (r.error === "full") { setMsg("Car is full"); return s; }
+      return setRole({ ...s, [dir]: r.dir }, dir, riderId, target.kind === "diy" ? "diy" : "rider", form);
     }),
-    unseat: (dir, riderId) => setDir(dir, (d) => removeFromDirSet(d, riderId)),
+    // Taking someone out of DIY undoes a DIY change (a switched driver still needs a ride).
+    unseat: (dir, riderId) => setData((s) => {
+      const next = { ...s, [dir]: removeFromDirSet(s[dir], riderId) };
+      const fr = formRole(form, riderId);
+      return roleIn(s, dir, riderId, form) === "diy" && fr !== "diy" ? setRole(next, dir, riderId, fr === "driver" ? "rider" : fr, form) : next;
+    }),
     drop: (dir, target, payload) => {
       const [kind, id] = payload.split(":");
       if (kind !== "rider" || !effRiders[id]) return;
@@ -97,9 +111,18 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     },
     setCap: (dir, carId, cap) => setDir(dir, (d) => mapCarsIn(d, (c) => (c.id === carId ? { ...c, capacity: Math.max(1, cap) } : c))),
     toggleLock: (dir, carId) => setDir(dir, (d) => mapCarsIn(d, (c) => (c.id === carId ? { ...c, locked: !c.locked } : c))),
-    addDriver: (dir, band, riderId) => setDir(dir, (d) =>
-      addDriverToDirSet(d, band, riderId, drivers.find((x) => x.id === riderId)?.seats ?? 5, dir === "going" ? "g" : "b")),
-    removeCar: (dir, carId) => setDir(dir, (d) => removeCarFromDirSet(d, carId)),
+    addDriver: (dir, band, riderId) => setData((s) => setRole({
+      ...s, [dir]: addDriverToDirSet(s[dir], band, riderId, drivers.find((x) => x.id === riderId)?.seats ?? 5, dir === "going" ? "g" : "b"),
+    }, dir, riderId, "driver", form)),
+    // Removing a form driver's car switches them to needing a ride in this direction;
+    // removing a car someone only drives in this layout undoes that change.
+    removeCar: (dir, carId) => setData((s) => {
+      const driver = [...s[dir].onCampus, ...s[dir].offCampus].find((c) => c.id === carId)?.driverId;
+      const next = { ...s, [dir]: removeCarFromDirSet(s[dir], carId) };
+      if (!driver) return next;
+      const fr = formRole(form, driver);
+      return setRole(next, dir, driver, fr === "driver" ? "rider" : fr, form);
+    }),
     setComment: (dir, carId, comment) => setDir(dir, (d) => mapCarsIn(d, (c) => (c.id === carId ? { ...c, comment } : c))),
   };
   const unseatDrop = (payload: string) => {
@@ -138,6 +161,43 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   // Riders in this layout whose pickup spot changed since it was built (never re-seated
   // automatically — the admin decides).
   const moved = useMemo(() => movedRiders(data, riders), [data, riders]);
+
+  // Differences from the form responses, shown as a +/− diff in the TOTAL panel.
+  const changes = useMemo(() => formChanges(data, form, new Set(Object.keys(riders))), [data, form, riders]);
+  const revert = (cs: FormChange[]) => setData((s) => cs.reduce((acc, c) => revertChange(acc, c, form, matchText, s.collegeKeywords), s));
+  const revertEverything = () => {
+    if (!confirm(`Revert all ${changes.length} change${changes.length === 1 ? "" : "s"} to what the form responses say?`)) return;
+    setData((s) => revertAll(s, form, matchText, s.collegeKeywords));
+    setMsg("Reverted to the form responses — Save to keep it");
+  };
+  const diff = useMemo(() => {
+    const ids = Object.keys(riders);
+    const tag = (dirs: string[]) => (dirs.length === 2 ? "" : dirs[0] === "going" ? "G" : "B");
+    const seatChanges = (id: string) => changes.filter((c) => c.kind === "seats" && c.id === id);
+    const col = (role: RideRole): DiffChip[] => {
+      const out: DiffChip[] = [];
+      for (const id of ids) {
+        const fr = formRole(form, id);
+        const inDirs = DIRS.filter((d) => roleIn(data, d, id, form) === role);
+        if (fr === role) {
+          const gone = DIRS.filter((d) => !inDirs.includes(d));
+          out.push({ id, state: gone.length ? "removed" : "same", dirs: tag(gone), partial: gone.length === 1, changes: [], seats: role === "driver" ? seatChanges(id) : [] });
+        } else if (inDirs.length) {
+          out.push({ id, state: "added", dirs: tag(inDirs), partial: inDirs.length === 1,
+            changes: changes.filter((c) => c.kind === "role" && c.id === id && c.to === role), seats: [] });
+        }
+      }
+      return out;
+    };
+    const riderChips = col("rider");
+    const byId = new Map(riderChips.map((c) => [c.id, c]));
+    const g = groupNeedsRide(riderChips.map((c) => c.id), matchText, data.collegeKeywords);
+    return {
+      drivers: col("driver"),
+      grouped: { onCampus: g.onCampus.map((k) => ({ keyword: k.keyword, chips: k.ids.map((id) => byId.get(id)!) })), offCampus: g.offCampus.map((id) => byId.get(id)!) },
+      diy: col("diy"),
+    };
+  }, [riders, form, data, changes, matchText]);
 
   const copyGoingToBack = () => {
     if (placedSet(data.back).size && !confirm("Overwrite the BACK section with a copy of GOING?")) return;
@@ -223,6 +283,12 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
         <button type="button" onClick={() => optimize("unplaced")} disabled={!destination || optimizing} title={destination ? "Seat everyone still needing a ride in GOING, using real drive times (existing seats are kept)" : "Needs the day's location coordinates"} className="btn-primary py-1 disabled:cursor-not-allowed">{optimizing ? "Optimizing…" : "Optimize"}</button>
         <button type="button" onClick={copyGoingToBack} className="btn-secondary py-1">Copy Going → Back</button>
         <button type="button" onClick={copyForSheets} className="btn-secondary py-1" title="Copies the rides as a grid — paste into Google Sheets: one column per car, driver on top, passengers underneath">Copy for Sheets</button>
+        {changes.length > 0 && (
+          <button type="button" onClick={revertEverything} className="btn-secondary py-1" style={{ color: "#1a7f37" }}
+            title="This layout differs from the form responses (green + / red − in the TOTAL panel). Revert all of it.">
+            ↺ Revert {changes.length} change{changes.length === 1 ? "" : "s"} to form
+          </button>
+        )}
         <button type="button" onClick={() => save(false)} disabled={pending} className="btn-secondary py-1">Save</button>
         <button type="button" onClick={() => save(true)} disabled={pending} className="btn-secondary py-1">Publish</button>
         <label className="flex min-w-64 flex-1 items-center gap-1 text-xs">Campus keywords
@@ -259,8 +325,8 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
                   </div>
                 </div>
                 <div className="w-[14px] shrink-0 self-stretch" style={{ background: SHEET.sep }} />
-                <TotalPanel riders={effRiders} drivers={drivers} grouped={grouped} selfIds={selfIds} guests={data.guests}
-                  placedNote={placedNote} onUnseatDrop={unseatDrop} onAddGuest={addGuest} onRemoveGuest={removeGuest} />
+                <TotalPanel riders={effRiders} drivers={diff.drivers} driverSeats={new Map(drivers.map((d) => [d.id, d.seats]))} grouped={diff.grouped} diy={diff.diy} guests={data.guests}
+                  placedNote={placedNote} onUnseatDrop={unseatDrop} onAddGuest={addGuest} onRemoveGuest={removeGuest} onRevert={revert} />
               </div>
             </div>
             {destination && (

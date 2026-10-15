@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import {
-  layoutMembers, locationKey, movedRiders, optimizeCarpool, seatSnapshot, splitByCampus, upgradeCarpoolData,
+  layoutMembers, locationKey, movedRiders, optimizeCarpool, ridersIn, seatSnapshot, splitByCampus, upgradeCarpoolData,
   type CarpoolDataV2, type CostMatrix, type DirSet, type LatLon, type Rider,
 } from "@db/carpool";
 import { requireAdmin } from "@/lib/session";
@@ -143,7 +143,8 @@ export async function optimizeLayout(carpoolId: string | null, eventId: string, 
   for (const id of seated) if (day.riders[id]) pool[id] = day.riders[id];
   const toSeat = mode === "moved"
     ? moved.filter((id) => !cars.some((c) => c.driverId === id))
-    : day.needsRide.filter((id) => !seated.has(id) && !clean.going.diy.includes(id) && !taken.has(id));
+    // Who needs a ride Going in this layout — the form's answer unless the layout changed it.
+    : ridersIn(clean, "going", day, Object.keys(day.riders)).filter((id) => !seated.has(id) && !clean.going.diy.includes(id) && !taken.has(id));
   for (const id of toSeat) if (day.riders[id]) pool[id] = day.riders[id];
 
   const seen = new Set<string>();

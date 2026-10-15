@@ -69,7 +69,13 @@ export type CarpoolDataV2 = {
    * saved. A rider whose current spot differs has moved since — the builder offers
    * to re-seat just them. Missing on older rows. */
   seatedAt?: Record<string, string>
+  /** Per-direction ride roles that differ from the person's form response (this layout
+   * only — the RSVP is never edited). Missing = same as the form. */
+  roles?: { going?: Record<string, RideRole>; back?: Record<string, RideRole> }
 }
+
+/** How someone gets there: drives, needs a ride, or gets there themselves. */
+export type RideRole = 'driver' | 'rider' | 'diy'
 
 /** The pre-sheet shape ({ cars, mode }) still stored on old rows. */
 export type LegacyCarpoolData = { cars: Car[]; mode: Mode }

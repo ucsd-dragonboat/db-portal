@@ -2,7 +2,7 @@
 // upgrade, per-direction reconciliation against current RSVPs, placement, the
 // TOTAL-panel campus grouping, and the discrepancy tracker.
 
-import type { Car, CarpoolDataV2, CarpoolGuest, DirSet, LatLon } from './types'
+import type { Car, CarpoolDataV2, CarpoolGuest, DirSet, LatLon, RideRole } from './types'
 import { locationKey } from './geo'
 import { DEFAULT_CARPOOL_HEADER, DEFAULT_COLLEGE_KEYWORDS } from './types'
 
@@ -62,6 +62,18 @@ const cleanDir = (raw: unknown, prefix: DirPrefix): DirSet => {
   }
 }
 
+const ROLES = new Set(['driver', 'rider', 'diy'])
+const cleanRoleMap = (raw: unknown): Record<string, RideRole> | null => {
+  if (!raw || typeof raw !== 'object') return null
+  const out = Object.fromEntries(Object.entries(raw as Record<string, unknown>).filter((e): e is [string, RideRole] => ROLES.has(e[1] as string)))
+  return Object.keys(out).length ? out : null
+}
+const cleanRoles = (raw: unknown): { roles?: CarpoolDataV2['roles'] } => {
+  const r = (raw ?? {}) as Record<string, unknown>
+  const going = cleanRoleMap(r.going), back = cleanRoleMap(r.back)
+  return going || back ? { roles: { ...(going ? { going } : {}), ...(back ? { back } : {}) } } : {}
+}
+
 /** Total upgrade-on-read: v2 rows are normalized, legacy `{cars,mode}` rows are
  * migrated (cars → going, split by campus; back empty), anything else becomes an
  * empty sheet. Never throws. */
@@ -78,6 +90,7 @@ export function upgradeCarpoolData(raw: unknown, matchText: MatchText): CarpoolD
       guests: Array.isArray(r.guests) ? r.guests.filter(isGuest) : [],
       going: cleanDir(r.going, 'g'),
       back: cleanDir(r.back, 'b'),
+      ...cleanRoles(r.roles),
       ...(r.seatedAt && typeof r.seatedAt === 'object'
         ? { seatedAt: Object.fromEntries(Object.entries(r.seatedAt as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string')) }
         : {}),
