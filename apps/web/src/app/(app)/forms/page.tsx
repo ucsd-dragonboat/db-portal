@@ -4,6 +4,8 @@ import { requireOrg } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import LocalTime from "@/components/local-time";
 
+export const metadata = { title: "Forms" };
+
 export default async function FormsPage() {
   const { org, userId } = await requireOrg();
   const supabase = await createClient();

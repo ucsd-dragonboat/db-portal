@@ -4,6 +4,8 @@ import type { FormQuestion } from "@/lib/database.types";
 import { htmlToText } from "@/lib/html";
 import FormsHome, { type FormRow, type TemplateRow } from "./forms-home";
 
+export const metadata = { title: "Forms" };
+
 export default async function AdminFormsPage() {
   const { org } = await requireAdmin();
   const supabase = await createClient();
