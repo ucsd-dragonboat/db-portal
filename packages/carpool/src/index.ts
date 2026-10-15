@@ -11,6 +11,7 @@ export type {
   LegacyCarpoolData,
   GuestCol,
   CarpoolGuest,
+  RideRole,
 } from './types'
 export { DEFAULT_CARPOOL_HEADER, DEFAULT_COLLEGE_KEYWORDS } from './types'
 export {
@@ -49,3 +50,6 @@ export { ROUTE_PROVIDERS, MATRIX_PROVIDERS, decodePolyline } from './providers'
 export type { HttpRequest, ProviderKeys, RouteProvider, MatrixProvider } from './providers'
 export { computeDriverStats, computePairStats } from './stats'
 export type { Trip, DriverStats, PairStat } from './stats'
+
+export { DIRS, formRole, roleIn, setRole, driversIn, ridersIn, formChanges, revertChange, revertAll } from './roles'
+export type { Dir, FormRides, FormChange } from './roles'

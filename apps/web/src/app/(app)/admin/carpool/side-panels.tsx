@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { CarpoolGuest, GuestCol, Rider } from "@db/carpool";
+import type { CarpoolGuest, FormChange, GuestCol, Rider } from "@db/carpool";
 
 const GRID = "#e0e0e0";
 const cellBorder = { borderRight: `1px solid ${GRID}`, borderBottom: `1px solid ${GRID}` };
@@ -13,14 +13,36 @@ const fillerStyle = {
   borderRight: `1px solid ${GRID}`,
 };
 
-const Chip = ({ id, name, note, onRemove }: { id: string; name: string; note?: string; onRemove?: () => void }) => (
-  <div draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", `rider:${id}:roster`)}
-    className={`${cell} group cursor-grab justify-between gap-1 bg-white`} style={cellBorder}>
-    <span className="min-w-0 flex-1 truncate">{name}</span>
-    {note && <span className="shrink-0 text-[10px]" style={{ color: "var(--g-grey-600)" }}>{note}</span>}
-    {onRemove && <button type="button" onClick={onRemove} tabIndex={-1} className="hidden shrink-0 text-slate-300 hover:text-red-600 group-hover:inline" title="Remove this write-in">✕</button>}
-  </div>
-);
+/** A person in a TOTAL column, compared with their form response like a GitHub diff:
+ * "same" as the form, "removed" (red −, the form put them here) or "added" (green +,
+ * this layout put them here). dirs = "G"/"B" when it's only one direction. */
+export type DiffChip = { id: string; state: "same" | "removed" | "added"; dirs: string; partial: boolean; changes: FormChange[]; seats: FormChange[] };
+
+const DIFF = {
+  removed: { bg: "#ffebe9", fg: "#cf222e", sign: "−" },
+  added: { bg: "#dafbe1", fg: "#1a7f37", sign: "+" },
+};
+
+const Chip = ({ id, name, note, onRemove, diff, title, onRevert }: {
+  id: string; name: string; note?: React.ReactNode; onRemove?: () => void;
+  diff?: { state: "removed" | "added"; dirs: string; strike: boolean }; title?: string; onRevert?: () => void;
+}) => {
+  const d = diff ? DIFF[diff.state] : null;
+  return (
+    <div draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", `rider:${id}:roster`)}
+      className={`${cell} group cursor-grab justify-between gap-1`} style={{ ...cellBorder, background: d?.bg ?? "#fff" }} title={title}>
+      {d && <span className="shrink-0 font-medium" style={{ color: d.fg }}>{d.sign}</span>}
+      <span className={`min-w-0 flex-1 truncate ${diff?.strike ? "line-through" : ""}`} style={d ? { color: d.fg } : undefined}>{name}</span>
+      {diff?.dirs && <span className="shrink-0 rounded-sm px-0.5 text-[10px] font-medium" style={{ color: d!.fg, border: `1px solid ${d!.fg}` }}>{diff.dirs}</span>}
+      {note && <span className="shrink-0 text-[10px]" style={{ color: "var(--g-grey-600)" }}>{note}</span>}
+      {onRevert && <button type="button" onClick={onRevert} tabIndex={-1} className="shrink-0 text-[11px]" style={{ color: DIFF.added.fg }} title="Revert to the form response">↺</button>}
+      {onRemove && <button type="button" onClick={onRemove} tabIndex={-1} className="hidden shrink-0 text-slate-300 hover:text-red-600 group-hover:inline" title="Remove this write-in">✕</button>}
+    </div>
+  );
+};
+
+const ROLE_NAME = { driver: "driving", rider: "needs a ride", diy: "DIY" } as const;
+const dirName = (c: FormChange) => (c.dir === "going" ? "Going" : "Back");
 
 /** One free-text cell per column: type a name, Enter/blur writes them in. */
 function GuestInput({ onAdd }: { onAdd: (name: string) => void }) {
@@ -38,27 +60,49 @@ function GuestInput({ onAdd }: { onAdd: (name: string) => void }) {
 
 /** Right-of-grid TOTAL block, styled like the template. Columns accept hand-typed
  * write-ins (guests) and stretch to the sheet's full height with gridlines. */
-export function TotalPanel({ riders, drivers, grouped, selfIds, guests, placedNote, onUnseatDrop, onAddGuest, onRemoveGuest }: {
+export function TotalPanel({ riders, drivers, driverSeats, grouped, diy, guests, placedNote, onUnseatDrop, onAddGuest, onRemoveGuest, onRevert }: {
   riders: Record<string, Rider>;
-  drivers: { id: string; seats: number }[];
-  grouped: { onCampus: { keyword: string; ids: string[] }[]; offCampus: string[] };
-  selfIds: string[];
+  drivers: DiffChip[];
+  /** Seats (incl. driver) each form driver put on the form. */
+  driverSeats: Map<string, number>;
+  grouped: { onCampus: { keyword: string; chips: DiffChip[] }[]; offCampus: DiffChip[] };
+  diy: DiffChip[];
   guests: CarpoolGuest[];
   /** riderId → " · G B" note showing where they're already placed. */
   placedNote: (id: string) => string;
   onUnseatDrop: (payload: string) => void;
   onAddGuest: (col: GuestCol, name: string) => void;
   onRemoveGuest: (id: string) => void;
+  onRevert: (changes: FormChange[]) => void;
 }) {
   const name = (id: string) => riders[id]?.name ?? "?";
   const guestsIn = (col: GuestCol) => guests.filter((g) => g.col === col);
-  const onCampusCount = grouped.onCampus.reduce((n, g) => n + g.ids.length, 0);
+  // Counts are this layout's: someone moved out of a column in both directions isn't counted there.
+  const live = (cs: DiffChip[]) => cs.filter((c) => !(c.state === "removed" && !c.partial)).length;
+  const onCampusCount = grouped.onCampus.reduce((n, g) => n + live(g.chips), 0);
   const counts = [
-    drivers.length + guestsIn("drivers").length,
-    grouped.offCampus.length + guestsIn("offCampus").length,
+    live(drivers) + guestsIn("drivers").length,
+    live(grouped.offCampus) + guestsIn("offCampus").length,
     onCampusCount + guestsIn("onCampus").length,
-    selfIds.length + guestsIn("diy").length,
+    live(diy) + guestsIn("diy").length,
   ];
+  const chip = (c: DiffChip, seatsNote?: boolean) => {
+    const seatsBase = seatsNote ? driverSeats.get(c.id) : undefined;
+    const seatTo = c.seats[0]?.kind === "seats" ? c.seats[0].to : undefined;
+    const seats = seatsBase == null ? null
+      : seatTo != null ? <span style={{ color: "#9a6700" }} title={`Form: ${seatsBase - 1} seats · this layout: ${seatTo - 1} (${c.seats.map(dirName).join(", ")})`}>{seatsBase - 1}→{seatTo - 1}</span>
+      : `${seatsBase - 1}`;
+    const title = c.state === "added"
+      ? `Changed in this layout: ${c.changes.map((x) => x.kind === "role" ? `${dirName(x)} — form says ${ROLE_NAME[x.from]}, now ${ROLE_NAME[x.to]}` : "").join("; ")}`
+      : c.state === "removed" ? `The form puts them here; this layout moved them${c.partial ? ` (${c.dirs === "G" ? "Going" : "Back"} only)` : ""}` : undefined;
+    const revertable = [...(c.state === "added" ? c.changes : []), ...c.seats];
+    return (
+      <Chip key={`${c.id}:${c.state}`} id={c.id} name={name(c.id)} title={title}
+        note={<>{seats}{placedNote(c.id)}</>}
+        diff={c.state === "same" ? undefined : { state: c.state, dirs: c.dirs, strike: c.state === "removed" && !c.partial }}
+        onRevert={revertable.length ? () => onRevert(revertable) : undefined} />
+    );
+  };
   const col = "flex w-[110px] shrink-0 flex-col";
   const guestRows = (c: GuestCol) => (
     <>
@@ -93,28 +137,29 @@ export function TotalPanel({ riders, drivers, grouped, selfIds, guests, placedNo
       </div>
       <div className="flex flex-1 items-stretch">
         <div className={col}>
-          {drivers.map((d) => <Chip key={d.id} id={d.id} name={name(d.id)} note={`${d.seats - 1}${placedNote(d.id)}`} />)}
+          {drivers.map((c) => chip(c, true))}
           {guestRows("drivers")}
         </div>
         <div className={col}>
-          {grouped.offCampus.map((id) => <Chip key={id} id={id} name={name(id)} note={placedNote(id)} />)}
+          {grouped.offCampus.map((c) => chip(c))}
           {guestRows("offCampus")}
         </div>
         <div className={col}>
           {grouped.onCampus.map((g) => (
             <div key={g.keyword}>
               <div className={`${cell} font-medium uppercase`} style={{ background: "#a2c4c9", ...cellBorder }}>{g.keyword}</div>
-              {g.ids.map((id) => <Chip key={id} id={id} name={name(id)} note={placedNote(id)} />)}
+              {g.chips.map((c) => chip(c))}
             </div>
           ))}
           {guestRows("onCampus")}
         </div>
         <div className={col}>
-          {selfIds.map((id) => <Chip key={id} id={id} name={name(id)} note={placedNote(id)} />)}
+          {diy.map((c) => chip(c))}
           {guestRows("diy")}
         </div>
       </div>
-      <p className="px-1 py-1 text-[10px]" style={{ color: "var(--g-grey-600)" }}>Drag a name into a car; drop one here to unseat. Type in a column to add a temporary write-in. G/B = placed Going/Back.</p>
+      <p className="px-1 py-1 text-[10px]" style={{ color: "var(--g-grey-600)" }}>Drag a name into a car; drop one here to unseat. Type in a column to add a temporary write-in. G/B = placed Going/Back.
+        <br /><span style={{ color: DIFF.removed.fg }}>− red</span> / <span style={{ color: DIFF.added.fg }}>+ green</span> = changed from the form in this layout only (boxed G/B = that direction); ↺ reverts. Form responses are never edited.</p>
     </div>
   );
 }
