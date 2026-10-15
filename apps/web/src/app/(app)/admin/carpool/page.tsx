@@ -99,6 +99,7 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
     queuedDays(supabase, [event.id]),
   ]);
   const runStatus = runLabel(runBy.get(event.id), queued.has(event.id));
+  const eventName = (event.group as { name: string } | null)?.name ?? null;
   // The layout being edited (?carpool=, else the first). No layouts yet → a new,
   // unsaved one that the first Save creates.
   const current = (layouts ?? []).find((l) => l.id === carpoolParam) ?? layouts?.[0] ?? null;
@@ -144,8 +145,11 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <Link href="/admin/carpool" className="btn-text -ml-3" style={{ color: "var(--g-red)" }}>← Carpool</Link>
-        <h1 className="text-2xl font-normal">{event.title}</h1>
-        <span className="text-sm" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={event.starts_at} /></span>
+        {/* Event name · day · weekday + date, e.g. "Fall Regatta · Day 1 · Saturday, Oct 17" */}
+        <h1 className="text-2xl font-normal">
+          {[eventName, event.title].filter((t, i, all) => t && all.indexOf(t) === i).join(" · ")} · <LocalTime iso={event.starts_at} mode="weekday" />
+        </h1>
+        <span className="text-sm" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={event.starts_at} mode="time" /></span>
         <CarpoolStatusBadge status={runStatus} />
         <AutoRefresh active={!!runStatus?.active} />
       </div>

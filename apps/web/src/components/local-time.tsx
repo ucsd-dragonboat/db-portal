@@ -6,7 +6,7 @@ import { TEAM_TZ, fmtDate, fmtDateTime, fmtTime } from "@/lib/format";
 const subscribe = () => () => {};
 const useMounted = () => useSyncExternalStore(subscribe, () => true, () => false);
 
-type Mode = "datetime" | "date" | "time" | "month" | "day";
+type Mode = "datetime" | "date" | "time" | "month" | "day" | "weekday";
 
 /**
  * Renders a timestamp in the viewer's browser timezone. Server-renders in the team timezone
@@ -22,6 +22,7 @@ export default function LocalTime({ iso, mode = "datetime" }: { iso: string; mod
     case "time": text = fmtTime(iso, tz); break;
     case "month": text = d.toLocaleDateString(undefined, { month: "short", timeZone: tz }); break;
     case "day": text = d.toLocaleDateString(undefined, { day: "numeric", timeZone: tz }); break;
+    case "weekday": text = d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", timeZone: tz }); break;
     default: text = fmtDateTime(iso, tz);
   }
   return <time dateTime={iso} title={mounted ? d.toString() : undefined}>{text}</time>;
