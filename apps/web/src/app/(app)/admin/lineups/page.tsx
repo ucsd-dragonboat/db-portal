@@ -10,10 +10,24 @@ import type { Event, LineupRow, Profile } from "@/lib/database.types";
 import type { Lineup, Roster } from "@db/lineup";
 import LineupBuilder, { type BuilderDay } from "./builder";
 import type { FilingGroup } from "./file-dialog";
+import type { Metadata } from "next";
+import { dayParts, tabTitle } from "@/lib/tab-title";
 
 /** `event` is kept for the "Lineups" links on the Events, Group and Responses pages —
  * it now narrows the list to that day's event instead of opening a per-day workspace. */
 type Params = { set?: string; new?: string; event?: string };
+
+export async function generateMetadata({ searchParams }: { searchParams: Promise<Params> }): Promise<Metadata> {
+  const { set } = await searchParams;
+  if (!set) return { title: "Lineups" };
+  const supabase = await createClient();
+  const { data: rows } = await supabase.from("lineups").select("event_id").eq("set_id", set).not("event_id", "is", null).limit(1);
+  const eventId = rows?.[0]?.event_id;
+  const { data: day } = eventId
+    ? await supabase.from("events").select("title, starts_at, group:event_groups(name)").eq("id", eventId).maybeSingle()
+    : { data: null };
+  return { title: tabTitle("Lineups", ...dayParts(day)) };
+}
 
 /** A lineup is built first and filed to an event's days later, so the home screen
  * lists sets grouped by event rather than making you pick a day up front. */

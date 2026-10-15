@@ -15,6 +15,15 @@ import { createCarpoolLayout, deleteCarpoolLayout } from "./actions";
 import AutoRefresh from "@/components/auto-refresh";
 import CarpoolStatusBadge from "@/components/carpool-status";
 import { latestRuns, queuedDays, runLabel } from "@/lib/carpool-runs";
+import type { Metadata } from "next";
+import { dayParts, tabTitle } from "@/lib/tab-title";
+
+export async function generateMetadata({ searchParams }: { searchParams: Promise<{ event?: string }> }): Promise<Metadata> {
+  const { event } = await searchParams;
+  if (!event) return { title: "Carpool" };
+  const { data: day } = await (await createClient()).from("events").select("title, starts_at, group:event_groups(name)").eq("id", event).maybeSingle();
+  return { title: tabTitle("Carpool", ...dayParts(day)) };
+}
 
 export default async function AdminCarpoolPage({ searchParams }: { searchParams: Promise<{ event?: string; carpool?: string }> }) {
   const { event: eventId, carpool: carpoolParam } = await searchParams;

@@ -12,6 +12,8 @@ import { cancelJob, retryJob } from "./actions";
 const DAY = 86400e3;
 const clock = () => Date.now(); // a module-level helper, like sinceIso() on the form page
 
+export const metadata = { title: "Carpool · Job queue" };
+
 export default async function CarpoolJobsPage() {
   const { org } = await requireAdmin();
   const supabase = await createClient();

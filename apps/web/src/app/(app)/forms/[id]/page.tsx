@@ -9,6 +9,14 @@ import type { Event, FormQuestion, Rsvp } from "@/lib/database.types";
 import FillForm from "./fill-form";
 import RichText from "@/components/rich-text";
 import Icon from "@/components/icon";
+import type { Metadata } from "next";
+import { tabTitle } from "@/lib/tab-title";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const { data: form } = await (await createClient()).from("forms").select("title").eq("id", id).maybeSingle();
+  return { title: tabTitle("Forms", form?.title) };
+}
 
 export default async function FormFillPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ join?: string; saved?: string }> }) {
   const { id } = await params;
