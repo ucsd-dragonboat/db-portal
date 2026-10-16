@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enqueueDueForms, processQueue } from "@/lib/carpool-queue";
 import { removeDemoImages } from "@/lib/demo";
 import { allowRate } from "@/lib/rate-limit";
-import { pullGoogleCalendar } from "@/lib/google-calendar";
+import { pullGoogleCalendar, syncBirthdaysToGoogle } from "@/lib/google-calendar";
 import { notifyEventDeadline, notifyFormDeadline } from "@/lib/notifications";
 
 export const maxDuration = 60;
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   const gcal: Record<string, unknown> = {};
   try {
     const { data: syncs } = await supabase.from("google_calendar_sync").select("org_id");
-    for (const s of syncs ?? []) gcal[s.org_id] = await pullGoogleCalendar(s.org_id);
+    for (const s of syncs ?? []) gcal[s.org_id] = { pull: await pullGoogleCalendar(s.org_id), birthdays: await syncBirthdaysToGoogle(s.org_id) };
   } catch (e) {
     // Expected until migration 0023 runs; after that it's a real failure, so log it.
     console.error("[cron] google calendar pull failed:", e);

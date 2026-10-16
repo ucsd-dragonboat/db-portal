@@ -8,7 +8,9 @@ import type { Event, GoogleCalendarSync } from "@/lib/database.types";
  * Google → portal: pulled by the 10-min cron with an incremental sync token.
  * Policy: Google-side deletes only UNLINK the portal event; edits are
  * last-write-wins on title/times/location; notes stay portal-authored;
- * events created in Google import as kind "other" flagged needs_info. */
+ * events created in Google import as kind "other" flagged needs_info.
+ * Teammates' birthdays are pushed too, as yearly all-day events (syncBirthdaysToGoogle);
+ * the pull ignores all-day events, so they never come back as portal events. */
 
 const CAL_BASE = "https://www.googleapis.com/calendar/v3";
 const TIMEOUT = 10_000;
@@ -31,6 +33,7 @@ type GEvent = {
   id?: string; status?: string; summary?: string; description?: string; location?: string;
   start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string };
   extendedProperties?: { private?: Record<string, string> };
+  recurrence?: string[]; transparency?: string;
 };
 
 type EventWithGroup = Event & { group?: { name: string } | null };
@@ -89,6 +92,7 @@ async function connectCalendar(orgId: string, userId: string, calendarId: string
       pushed++;
     } catch (err) { console.error("[gcal] initial push", ev.id, err); }
   }
+  await syncBirthdaysToGoogle(orgId);
   return { pushed };
 }
 
@@ -259,4 +263,90 @@ async function applyGoogleItem(orgId: string, g: GEvent): Promise<boolean> {
     await admin.from("events").insert({ org_id: orgId, kind: "other", needs_info: true, google_event_id: g.id, title: summary, ...fields });
   }
   return true;
+}
+
+// ---------- birthdays ----------
+
+/** Google writes per call — the first sync of a big roster finishes over a few cron ticks. */
+const BIRTHDAY_WRITES_PER_RUN = 25;
+
+/** Stable Google event id per teammate (base32hex: 0-9 a-v), so no mapping table is needed. */
+const birthdayEventId = (userId: string) => `bd${userId.replace(/-/g, "")}`;
+
+/** Yearly all-day event on the month/day only — the birth year never reaches Google. */
+export function toGoogleBirthday(userId: string, name: string, birthday: string): GEvent {
+  const md = birthday.slice(5, 10); // "MM-DD"
+  const start = `2000-${md}`; // 2000 is a leap year, so 02-29 is a real date
+  const [y, m, d] = start.split("-").map(Number);
+  const end = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+  return {
+    id: birthdayEventId(userId),
+    summary: `🎂 ${name}'s birthday`,
+    start: { date: start }, end: { date: end },
+    // Feb 29 birthdays fall on Feb 28 in non-leap years.
+    recurrence: [md === "02-29" ? "RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=-1" : "RRULE:FREQ=YEARLY"],
+    transparency: "transparent", // shows as free
+    extendedProperties: { private: { portalBirthday: "1", portalUserId: userId } },
+  };
+}
+
+const sameBirthday = (a: GEvent, b: GEvent) =>
+  a.summary === b.summary && a.start?.date === b.start?.date && (a.recurrence ?? []).join() === (b.recurrence ?? []).join();
+
+/** Make the team calendar's birthday events match the roster: add new or changed
+ * birthdays, remove ones for people who left or cleared theirs. One list call, then
+ * writes only for what changed. Never throws — called from the cron and on connect. */
+export async function syncBirthdaysToGoogle(orgId: string): Promise<{ written: number } | { error: string }> {
+  try {
+    const sync = await getCalendarSync(orgId);
+    if (!sync) return { written: 0 };
+    const admin = createAdminClient();
+    const { data: members, error } = await admin.from("memberships").select("user_id, profile:profiles(full_name, birthday)").eq("org_id", orgId);
+    if (error) throw new Error(error.message);
+    const want = new Map<string, GEvent>();
+    for (const m of members ?? []) {
+      const p = m.profile as unknown as { full_name: string | null; birthday: string | null } | null;
+      if (p?.birthday) want.set(birthdayEventId(m.user_id), toGoogleBirthday(m.user_id, p.full_name?.trim() || "Teammate", p.birthday));
+    }
+
+    const token = await getAccessToken(sync.user_id);
+    const have = new Map<string, GEvent>();
+    let pageToken: string | undefined;
+    do {
+      const params = new URLSearchParams({ privateExtendedProperty: "portalBirthday=1", maxResults: "250" });
+      if (pageToken) params.set("pageToken", pageToken);
+      const data = await calFetch(token, eventsUrl(sync.calendar_id, `?${params}`));
+      for (const g of (data.items ?? []) as GEvent[]) if (g.id && g.status !== "cancelled") have.set(g.id, g);
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+
+    let written = 0;
+    for (const [id, ev] of want) {
+      if (written >= BIRTHDAY_WRITES_PER_RUN) break;
+      const cur = have.get(id);
+      if (cur && sameBirthday(cur, ev)) continue;
+      try {
+        if (cur) await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "PUT", body: JSON.stringify(ev) });
+        else {
+          try {
+            await calFetch(token, eventsUrl(sync.calendar_id), { method: "POST", body: JSON.stringify(ev) });
+          } catch (e) {
+            // 409: this id was used before and deleted — bring it back instead.
+            if (!(e instanceof CalApiError && e.status === 409)) throw e;
+            await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "PUT", body: JSON.stringify({ ...ev, status: "confirmed" }) });
+          }
+        }
+        written++;
+      } catch (err) { console.error("[gcal] birthday", id, err); }
+    }
+    for (const id of have.keys()) {
+      if (want.has(id) || written >= BIRTHDAY_WRITES_PER_RUN) continue;
+      try { await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "DELETE" }); written++; }
+      catch (err) { if (!(err instanceof CalApiError && (err.status === 404 || err.status === 410))) console.error("[gcal] birthday remove", id, err); }
+    }
+    return { written };
+  } catch (err) {
+    console.error("[gcal] birthdays", orgId, err);
+    return { error: err instanceof Error ? err.message : "birthday sync failed" };
+  }
 }
