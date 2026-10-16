@@ -8,7 +8,7 @@ import { expireOrg, expireUser } from "@/lib/session-cache";
 import { createClient } from "@/lib/supabase/server";
 import { cleanHtml } from "@/lib/html";
 import { disconnectGoogle } from "@/lib/google-sheets";
-import { createTeamCalendar, disconnectTeamCalendar, linkExistingCalendar, removeEventFromGoogle, syncEventToGoogle } from "@/lib/google-calendar";
+import { createTeamCalendar, disconnectTeamCalendar, linkExistingCalendar, removeEventFromGoogle, syncEventToGoogle, syncTeamCalendarNow } from "@/lib/google-calendar";
 import { notifyEventPosted } from "@/lib/notifications";
 import { syncSheetsForMember } from "@/lib/sheet-sync";
 
@@ -454,6 +454,16 @@ export async function connectTeamCalendarAction(_prev: { error?: string } | null
   }
   revalidatePath("/admin/settings"); revalidatePath("/admin/events");
   return null;
+}
+
+/** Settings "Sync now" on the team calendar. */
+export async function syncTeamCalendarAction(): Promise<AdminState & { summary?: string }> {
+  const { org } = await requireAdmin();
+  const r = await syncTeamCalendarNow(org.id);
+  revalidatePath("/admin/settings");
+  if ("error" in r) return { error: r.error };
+  const n = (k: number, word: string) => `${k} ${word}${k === 1 ? "" : "s"}`;
+  return { ok: true, summary: [`Pulled ${n(r.pulled, "change")}`, `pushed ${n(r.pushed, "event")}`, `${n(r.birthdays, "birthday")} updated`, ...(r.failed ? [`${r.failed} failed`] : [])].join(" · ") };
 }
 
 export async function disconnectTeamCalendarAction() {

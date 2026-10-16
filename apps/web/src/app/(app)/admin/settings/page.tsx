@@ -4,6 +4,7 @@ import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
 import { getCalendarSync, listWritableCalendars } from "@/lib/google-calendar";
 import { disconnectGoogleAccount, disconnectTeamCalendarAction, rotateJoinCode } from "../actions";
 import TeamCalendarForm from "./team-calendar-form";
+import SyncNowButton from "./sync-now-button";
 import PickupForm from "./pickup-form";
 import SavedLocationForm from "./saved-location-form";
 import PickupFromSaved from "./pickup-from-saved";
@@ -11,6 +12,9 @@ import { PickupRow, SavedLocationRow } from "./location-rows";
 import ConfirmForm from "@/components/confirm-form";
 import { demoEnabled } from "@/lib/demo";
 import { setDemoEnabled } from "@/app/demo/actions";
+
+// "Sync now" re-pushes every recent event, which can take a while on a big calendar.
+export const maxDuration = 60;
 
 export default async function AdminSettingsPage() {
   const { org, userId } = await requireAdmin();
@@ -75,15 +79,18 @@ export default async function AdminSettingsPage() {
         {google && (
           <div className="card mt-2 py-2 text-sm">
             {calSync ? (
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <span>
                   <b>Team calendar synced</b> — edit events in{" "}
                   <a href={`https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(calSync.calendar_id)}`} target="_blank" rel="noopener" className="underline">Google Calendar</a>{" "}
                   and they flow back here within ~10 minutes.
                 </span>
-                <ConfirmForm action={disconnectTeamCalendarAction} message="Stop syncing with Google Calendar? The Google calendar and all portal events are kept — they just stop mirroring.">
-                  <button className="text-xs text-red-600 underline whitespace-nowrap">Stop syncing</button>
-                </ConfirmForm>
+                <span className="flex shrink-0 items-start gap-3">
+                  <SyncNowButton />
+                  <ConfirmForm action={disconnectTeamCalendarAction} message="Stop syncing with Google Calendar? The Google calendar and all portal events are kept — they just stop mirroring.">
+                    <button className="text-xs text-red-600 underline whitespace-nowrap">Stop syncing</button>
+                  </ConfirmForm>
+                </span>
               </div>
             ) : (
               <div className="flex items-center justify-between gap-2">
