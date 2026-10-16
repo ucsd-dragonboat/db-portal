@@ -2,10 +2,12 @@ import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
 import { getCalendarSync, listWritableCalendars } from "@/lib/google-calendar";
-import { deletePickupLocation, deleteSavedLocation, disconnectGoogleAccount, disconnectTeamCalendarAction, rotateJoinCode } from "../actions";
+import { disconnectGoogleAccount, disconnectTeamCalendarAction, rotateJoinCode } from "../actions";
 import TeamCalendarForm from "./team-calendar-form";
 import PickupForm from "./pickup-form";
 import SavedLocationForm from "./saved-location-form";
+import PickupFromSaved from "./pickup-from-saved";
+import { PickupRow, SavedLocationRow } from "./location-rows";
 import ConfirmForm from "@/components/confirm-form";
 import { demoEnabled } from "@/lib/demo";
 import { setDemoEnabled } from "@/app/demo/actions";
@@ -39,13 +41,7 @@ export default async function AdminSettingsPage() {
         <SavedLocationForm />
         <ul className="mt-3 space-y-1">
           {locations?.map((l) => (
-            <li key={l.id} className="card py-2 flex items-start gap-3 text-sm">
-              <details className="flex-1 min-w-0">
-                <summary className="cursor-pointer list-none">{l.name} <span className="text-xs text-slate-400">{[l.address, l.city, l.zipcode].filter(Boolean).join(", ")}{l.lat != null ? ` (${l.lat.toFixed(4)}, ${l.lon?.toFixed(4)})` : " · no coords"}</span> <span className="text-xs text-slate-600 underline">Edit</span></summary>
-                <div className="mt-2"><SavedLocationForm loc={l} /></div>
-              </details>
-              <form action={deleteSavedLocation}><input type="hidden" name="id" value={l.id} /><button className="text-xs text-red-600 underline">Delete</button></form>
-            </li>
+            <SavedLocationRow key={l.id} loc={l} />
           ))}
           {!locations?.length && <li className="text-sm text-slate-400">None yet.</li>}
         </ul>
@@ -54,15 +50,10 @@ export default async function AdminSettingsPage() {
         <h2 className="text-lg font-medium mb-1">Pickup locations</h2>
         <p className="text-sm text-slate-500 mb-3">Named meetup spots paddlers can pick when they need a ride (e.g. each campus college, “Peterson Loop”). Add lat/lon so the carpool map can route to them; otherwise the paddler’s home address is used.</p>
         <PickupForm />
+        <PickupFromSaved options={(locations ?? []).filter((l) => !(pickups ?? []).some((p) => p.name.trim().toLowerCase() === l.name.trim().toLowerCase()))} />
         <ul className="mt-3 space-y-1">
           {pickups?.map((p) => (
-            <li key={p.id} className="card py-2 flex items-start gap-3 text-sm">
-              <details className="flex-1 min-w-0">
-                <summary className="cursor-pointer list-none">{p.name} <span className="text-xs text-slate-400">{p.lat != null ? `(${p.lat.toFixed(4)}, ${p.lon?.toFixed(4)})` : "no coords"}</span> <span className="text-xs text-slate-600 underline">Edit</span></summary>
-                <div className="mt-2"><PickupForm loc={p} /></div>
-              </details>
-              <form action={deletePickupLocation}><input type="hidden" name="id" value={p.id} /><button className="text-xs text-red-600 underline">Delete</button></form>
-            </li>
+            <PickupRow key={p.id} loc={p} />
           ))}
           {!pickups?.length && <li className="text-sm text-slate-400">None yet.</li>}
         </ul>
