@@ -39,8 +39,11 @@ export default async function AdminSettingsPage() {
         <SavedLocationForm />
         <ul className="mt-3 space-y-1">
           {locations?.map((l) => (
-            <li key={l.id} className="card py-2 flex items-center justify-between text-sm">
-              <span>{l.name} <span className="text-xs text-slate-400">{[l.address, l.city, l.zipcode].filter(Boolean).join(", ")}{l.lat != null ? ` (${l.lat.toFixed(4)}, ${l.lon?.toFixed(4)})` : " · no coords"}</span></span>
+            <li key={l.id} className="card py-2 flex items-start gap-3 text-sm">
+              <details className="flex-1 min-w-0">
+                <summary className="cursor-pointer list-none">{l.name} <span className="text-xs text-slate-400">{[l.address, l.city, l.zipcode].filter(Boolean).join(", ")}{l.lat != null ? ` (${l.lat.toFixed(4)}, ${l.lon?.toFixed(4)})` : " · no coords"}</span> <span className="text-xs text-slate-600 underline">Edit</span></summary>
+                <div className="mt-2"><SavedLocationForm loc={l} /></div>
+              </details>
               <form action={deleteSavedLocation}><input type="hidden" name="id" value={l.id} /><button className="text-xs text-red-600 underline">Delete</button></form>
             </li>
           ))}
@@ -53,8 +56,11 @@ export default async function AdminSettingsPage() {
         <PickupForm />
         <ul className="mt-3 space-y-1">
           {pickups?.map((p) => (
-            <li key={p.id} className="card py-2 flex items-center justify-between text-sm">
-              <span>{p.name} <span className="text-xs text-slate-400">{p.lat != null ? `(${p.lat.toFixed(4)}, ${p.lon?.toFixed(4)})` : "no coords"}</span></span>
+            <li key={p.id} className="card py-2 flex items-start gap-3 text-sm">
+              <details className="flex-1 min-w-0">
+                <summary className="cursor-pointer list-none">{p.name} <span className="text-xs text-slate-400">{p.lat != null ? `(${p.lat.toFixed(4)}, ${p.lon?.toFixed(4)})` : "no coords"}</span> <span className="text-xs text-slate-600 underline">Edit</span></summary>
+                <div className="mt-2"><PickupForm loc={p} /></div>
+              </details>
               <form action={deletePickupLocation}><input type="hidden" name="id" value={p.id} /><button className="text-xs text-red-600 underline">Delete</button></form>
             </li>
           ))}
