@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { expireOrg } from "@/lib/session-cache";
 import { DEMO_EMAIL_DOMAIN, deleteDemoSandbox } from "@/lib/demo";
 
 /** Demos page: admins of real teams only (it reaches across every sandbox). */
@@ -49,6 +50,7 @@ export async function setDemoExpiry(fd: FormData) {
   await createAdminClient().from("organizations")
     .update({ demo_expires_at: new Date(Date.now() + hours * 3600e3).toISOString() })
     .eq("id", orgId).eq("is_demo", true);
+  expireOrg(orgId);
   revalidatePath("/admin/demos");
 }
 

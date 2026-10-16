@@ -21,6 +21,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const monthEnd = addDays(addMonths(date, 1), -1);
   const fetchStart = [addDays(monthStart, -7), addDays(today, -1)].sort()[0];
   const fetchEnd = [addDays(monthEnd, 7), addDays(today, 90)].sort()[1];
+  // Birthdays and the feed token don't depend on the events, so they load alongside.
+  const membersQ = supabase.from("memberships").select("profile:profiles(full_name, birthday)").eq("org_id", org.id).then((r) => r); // .then starts it now
+  const tokenQ = getOrCreateCalendarToken(userId).catch(() => null); // null: migration 0020 not run yet
   const { data: events } = await supabase
     .from("events")
     .select("id, title, kind, starts_at, ends_at, location_name, rsvps(user_id, status), group:event_groups(name)")
@@ -55,14 +58,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   for (const r of cps ?? []) if (attach[r.event_id]) attach[r.event_id].carpool = true;
 
   // Teammates' birthdays (migration 0034) — only the month and day reach the browser.
-  const { data: members } = await supabase.from("memberships").select("profile:profiles(full_name, birthday)").eq("org_id", org.id);
+  const { data: members } = await membersQ;
   const birthdays: Birthday[] = (members ?? []).flatMap((m) => {
     const p = m.profile as unknown as { full_name: string; birthday: string | null } | null;
     return p?.birthday ? [{ name: p.full_name || "Teammate", md: p.birthday.slice(5) }] : [];
   });
 
-  let feedToken: string | null = null;
-  try { feedToken = await getOrCreateCalendarToken(userId); } catch { /* migration 0020 not run yet */ }
+  const feedToken = await tokenQ;
 
   return <CalendarShell events={calEvents} birthdays={birthdays} attach={attach} isAdmin={isAdmin} view={view} date={date} today={today} feedToken={feedToken} />;
 }

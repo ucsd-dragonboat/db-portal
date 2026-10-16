@@ -24,8 +24,10 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // Refreshes the session cookie if needed. Do not remove.
-  const { data: { user } } = await supabase.auth.getUser();
+  // Refreshes the session cookie if needed. Do not remove. getClaims checks the JWT
+  // locally (asymmetric signing keys), so a click no longer waits on Supabase Auth.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims.sub;
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
