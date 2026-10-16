@@ -15,6 +15,10 @@ export type GridHandlers = {
   /** Typing/dropping someone into an empty Driver cell creates their car in `band`. */
   addDriver: (dir: DirKey, band: "onCampus" | "offCampus", riderId: string) => void;
   removeCar: (dir: DirKey, carId: string) => void;
+  /** Drag a car left/right (or to the other campus band): before `beforeCarId`, or the band's end. */
+  moveCar: (dir: DirKey, carId: string, band: "onCampus" | "offCampus", beforeCarId: string | null) => void;
+  /** Someone dropped on a car's driver cell takes it over; the old driver takes their spot. */
+  swapDriver: (dir: DirKey, carId: string, riderId: string) => void;
   setComment: (dir: DirKey, carId: string, comment: string) => void;
 };
 
@@ -29,8 +33,23 @@ const opt = (riders: Record<string, Rider>, id: string): NameOption => ({ id, na
 
 /** One car as spreadsheet columns: pink driver cell on top, white passenger cells
  * below. Cars with more than 4 passenger seats take two columns inside a black box. */
-function CarColumn({ dir, car, riders, options, rows, h }: {
-  dir: DirKey; car: Car; riders: Record<string, Rider>; options: NameOption[]; rows: number; h: GridHandlers;
+/** Drag payloads are "<kind>:<id>:<origin>" — "rider:<riderId>:<going|back|roster>" or
+ * "car:<carId>:<going|back>". Ids can contain ":" themselves (car "g:<driver>", write-in
+ * "x:<random>"), so the id is everything between the first and last segment. */
+export function parseDrag(payload: string): { kind: string; id: string; origin: string } {
+  const parts = payload.split(":");
+  return { kind: parts[0] ?? "", id: parts.slice(1, -1).join(":"), origin: parts.at(-1) ?? "" };
+}
+
+/** Drop on a car's driver cell: a car moves before it; a person takes over as its driver. */
+function dropOnDriver(dir: DirKey, band: "onCampus" | "offCampus", car: Car, payload: string, h: GridHandlers) {
+  const { kind, id, origin } = parseDrag(payload);
+  if (kind === "car" && origin === dir) h.moveCar(dir, id, band, car.id);
+  else if (kind === "rider" && id) h.swapDriver(dir, car.id, id);
+}
+
+function CarColumn({ dir, band, car, riders, options, rows, h }: {
+  dir: DirKey; band: "onCampus" | "offCampus"; car: Car; riders: Record<string, Rider>; options: NameOption[]; rows: number; h: GridHandlers;
 }) {
   const seats = car.capacity - 1;
   const wide = seats > 4;
@@ -40,8 +59,10 @@ function CarColumn({ dir, car, riders, options, rows, h }: {
     <div className="shrink-0" style={{ width: cols * 100, outline: wide ? "2px solid #000" : undefined, outlineOffset: -1, zIndex: wide ? 1 : undefined }}>
       <div className="group flex h-[22px] items-center gap-0.5 px-1 text-[13px]" style={{ background: SHEET.driver, ...cellBorder }}
         onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); h.drop(dir, { kind: "car", carId: car.id }, e.dataTransfer.getData("text/plain")); }}>
-        <span className="min-w-0 flex-1 truncate font-medium" title={riders[car.driverId]?.name}>{riders[car.driverId]?.name ?? "?"}</span>
+        onDrop={(e) => { e.preventDefault(); dropOnDriver(dir, band, car, e.dataTransfer.getData("text/plain"), h); }}>
+        <span draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", `car:${car.id}:${dir}`)}
+          className="min-w-0 flex-1 cursor-grab truncate font-medium"
+          title={`${riders[car.driverId]?.name ?? ""} — drag to move this car; drop a person here to make them the driver`}>{riders[car.driverId]?.name ?? "?"}</span>
         <input type="number" min={1} max={15} value={car.capacity} onChange={(e) => h.setCap(dir, car.id, Number(e.target.value))}
           className="w-8 rounded-sm bg-white/60 px-0.5 text-center text-[11px] outline-none" title="Capacity incl. driver" />
         <button type="button" onClick={() => h.toggleLock(dir, car.id)}
@@ -82,7 +103,11 @@ function EmptyColumn({ dir, band, driverOptions, rows, h }: {
   return (
     <div className="w-[100px] shrink-0">
       <NameCell value={null} options={driverOptions} onPick={(id) => h.addDriver(dir, band, id)}
-        onDropRider={(payload) => { const [k, id] = payload.split(":"); if (k === "rider") h.addDriver(dir, band, id); }}
+        onDropRider={(payload) => {
+          const { kind: k, id, origin } = parseDrag(payload);
+          if (k === "rider") h.addDriver(dir, band, id);
+          else if (k === "car" && origin === dir) h.moveCar(dir, id, band, null); // to the end of this band
+        }}
         className="!bg-[#fecccc]" />
       {Array.from({ length: rows + 1 }, (_, i) => <div key={i} className="h-[22px] bg-white" style={cellBorder} />)}
     </div>
@@ -113,7 +138,7 @@ export function CarGrid({ dir, band, label, directionLabel, cars, riders, option
           <div style={{ background: SHEET.filler, height: rows * 22, ...cellBorder }} />
           <div className="flex h-[22px] items-center px-1 text-[12px] italic" style={{ background: SHEET.filler, ...cellBorder }}>Comment</div>
         </div>
-        {cars.map((c) => <CarColumn key={c.id} dir={dir} car={c} riders={riders} options={options} rows={rows} h={h} />)}
+        {cars.map((c) => <CarColumn key={c.id} dir={dir} band={band} car={c} riders={riders} options={options} rows={rows} h={h} />)}
         {Array.from({ length: emptyCols }, (_, i) => <EmptyColumn key={`e${i}`} dir={dir} band={band} driverOptions={driverOptions} rows={rows} h={h} />)}
       </div>
     </div>

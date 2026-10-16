@@ -60,7 +60,7 @@ function GuestInput({ onAdd }: { onAdd: (name: string) => void }) {
 
 /** Right-of-grid TOTAL block, styled like the template. Columns accept hand-typed
  * write-ins (guests) and stretch to the sheet's full height with gridlines. */
-export function TotalPanel({ riders, drivers, driverSeats, grouped, diy, guests, placedNote, onUnseatDrop, onAddGuest, onRemoveGuest, onRevert }: {
+export function TotalPanel({ riders, drivers, driverSeats, grouped, diy, guests, placedNote, onUnseatDrop, onRoleDrop, onAddGuest, onRemoveGuest, onRevert }: {
   riders: Record<string, Rider>;
   drivers: DiffChip[];
   /** Seats (incl. driver) each form driver put on the form. */
@@ -71,6 +71,8 @@ export function TotalPanel({ riders, drivers, driverSeats, grouped, diy, guests,
   /** riderId → " · G B" note showing where they're already placed. */
   placedNote: (id: string) => string;
   onUnseatDrop: (payload: string) => void;
+  /** A person dropped on one of the columns (switches how they ride). */
+  onRoleDrop: (col: GuestCol, payload: string) => void;
   onAddGuest: (col: GuestCol, name: string) => void;
   onRemoveGuest: (id: string) => void;
   onRevert: (changes: FormChange[]) => void;
@@ -103,7 +105,15 @@ export function TotalPanel({ riders, drivers, driverSeats, grouped, diy, guests,
         onRevert={revertable.length ? () => onRevert(revertable) : undefined} />
     );
   };
+  const [over, setOver] = useState<GuestCol | null>(null);
   const col = "flex w-[110px] shrink-0 flex-col";
+  // Each column is its own drop target; the rest of the panel still unseats.
+  const dropCol = (c: GuestCol) => ({
+    className: `${col} ${over === c ? "ring-2 ring-inset ring-sky-400" : ""}`,
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setOver(c); },
+    onDragLeave: () => setOver((o) => (o === c ? null : o)),
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setOver(null); onRoleDrop(c, e.dataTransfer.getData("text/plain")); },
+  });
   const guestRows = (c: GuestCol) => (
     <>
       {guestsIn(c).map((g) => <Chip key={g.id} id={g.id} name={g.name} note={placedNote(g.id)} onRemove={() => onRemoveGuest(g.id)} />)}
@@ -136,15 +146,15 @@ export function TotalPanel({ riders, drivers, driverSeats, grouped, diy, guests,
         <div className={`${cell} w-[110px] shrink-0 bg-white`} style={cellBorder} />
       </div>
       <div className="flex flex-1 items-stretch">
-        <div className={col}>
+        <div {...dropCol("drivers")}>
           {drivers.map((c) => chip(c, true))}
           {guestRows("drivers")}
         </div>
-        <div className={col}>
+        <div {...dropCol("offCampus")}>
           {grouped.offCampus.map((c) => chip(c))}
           {guestRows("offCampus")}
         </div>
-        <div className={col}>
+        <div {...dropCol("onCampus")}>
           {grouped.onCampus.map((g) => (
             <div key={g.keyword}>
               <div className={`${cell} font-medium uppercase`} style={{ background: "#a2c4c9", ...cellBorder }}>{g.keyword}</div>
@@ -153,12 +163,12 @@ export function TotalPanel({ riders, drivers, driverSeats, grouped, diy, guests,
           ))}
           {guestRows("onCampus")}
         </div>
-        <div className={col}>
+        <div {...dropCol("diy")}>
           {diy.map((c) => chip(c))}
           {guestRows("diy")}
         </div>
       </div>
-      <p className="px-1 py-1 text-[10px]" style={{ color: "var(--g-grey-600)" }}>Drag a name into a car; drop one here to unseat. Type in a column to add a temporary write-in. G/B = placed Going/Back.
+      <p className="px-1 py-1 text-[10px]" style={{ color: "var(--g-grey-600)" }}>Drag a name into a car, or between these columns to switch driver / needs a ride / DIY (both directions); drop a passenger on their own column to unseat. Drag a car&apos;s driver name to move the car; drop a person on a driver cell to make them the driver. Type in a column to add a temporary write-in. G/B = placed Going/Back.
         <br /><span style={{ color: DIFF.removed.fg }}>− red</span> / <span style={{ color: DIFF.added.fg }}>+ green</span> = changed from the form in this layout only (boxed G/B = that direction); ↺ reverts. Form responses are never edited.</p>
     </div>
   );
@@ -219,6 +229,7 @@ export function DiscrepancyTracker({ rows, riders }: {
   riders: Record<string, Rider>;
 }) {
   const sorted = [...rows].sort((a, b) => (riders[a.id]?.name ?? "").localeCompare(riders[b.id]?.name ?? ""));
+  const going = rows.filter((r) => r.needGoing).length, back = rows.filter((r) => r.needBack).length;
   const c = `${cell} w-[130px] shrink-0`;
   // Names can carry a long typed pickup address ("Alex @ 123 Some St…"); the cells are a
   // fixed row height, so keep each name on one line and show the rest on hover.
@@ -238,6 +249,11 @@ export function DiscrepancyTracker({ rows, riders }: {
         </div>
       ))}
       {!sorted.length && <div className={`${cell} bg-white`} style={{ ...cellBorder, color: "var(--g-grey-600)" }}>No discrepancies 🎉</div>}
+      <div className="flex font-bold" style={{ background: "#d0e0e3" }}>
+        <div className={nameCell} style={cellBorder}>Total</div>
+        <div className={`${c} justify-center`} style={{ ...cellBorder, color: going ? "var(--g-red)" : undefined }}>{going}</div>
+        <div className={`${c} justify-center`} style={{ ...cellBorder, color: back ? "var(--g-red)" : undefined }}>{back}</div>
+      </div>
     </div>
   );
 }

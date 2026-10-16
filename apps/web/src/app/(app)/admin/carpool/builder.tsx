@@ -7,11 +7,11 @@ import {
   addDriverToDirSet, carpoolToTsv, carRoutePoints, discrepancies, groupNeedsRide,
   locationKey, mirrorDirSet, movedRiders, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
   removeFromDirSet, upgradeCarpoolData,
-  DIRS, driversIn, formChanges, formRole, revertAll, revertChange, ridersIn, roleIn, setRole,
+  DIRS, driversIn, matchKeyword, moveCar, spotOf, swapDriver, formChanges, formRole, revertAll, revertChange, ridersIn, roleIn, setRole,
   type CarpoolDataV2, type CarpoolGuest, type Destination, type FormChange, type FormRides, type MatchText, type OsrmRoute, type RideRole, type Rider,
 } from "@db/carpool";
 import { optimizeLayout, routeCar, saveCarpool } from "./actions";
-import { CarGrid, DiyRow, SHEET, type DirKey, type GridHandlers } from "./car-grid";
+import { CarGrid, DiyRow, SHEET, parseDrag, type DirKey, type GridHandlers } from "./car-grid";
 import { DiscrepancyTracker, FunFactPanel, NotesPanel, TotalPanel, type DiffChip } from "./side-panels";
 
 const RouteMap = dynamic(() => import("@/components/route-map"), { ssr: false });
@@ -105,7 +105,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
       return roleIn(s, dir, riderId, form) === "diy" && fr !== "diy" ? setRole(next, dir, riderId, fr === "driver" ? "rider" : fr, form) : next;
     }),
     drop: (dir, target, payload) => {
-      const [kind, id] = payload.split(":");
+      const { kind, id } = parseDrag(payload);
       if (kind !== "rider" || !effRiders[id]) return;
       h.place(dir, target, id);
     },
@@ -124,11 +124,49 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
       return setRole(next, dir, driver, fr === "driver" ? "rider" : fr, form);
     }),
     setComment: (dir, carId, comment) => setDir(dir, (d) => mapCarsIn(d, (c) => (c.id === carId ? { ...c, comment } : c))),
+    moveCar: (dir, carId, band, beforeCarId) => setDir(dir, (d) => moveCar(d, carId, band, beforeCarId)),
+    // The dropped person drives this car; its old driver takes their old spot (and role).
+    swapDriver: (dir, carId, riderId) => setData((s) => {
+      if (!effRiders[riderId]) return s;
+      const r = swapDriver(s[dir], carId, riderId, dir === "going" ? "g" : "b");
+      if (!r) return s;
+      const oldRole: RideRole = r.oldDriverSpot === "driver" ? "driver" : r.oldDriverSpot === "diy" ? "diy" : "rider";
+      return setRole(setRole({ ...s, [dir]: r.dir }, dir, riderId, "driver", form), dir, r.oldDriverId, oldRole, form);
+    }),
   };
   const unseatDrop = (payload: string) => {
-    const [kind, id, origin] = payload.split(":");
+    const { kind, id, origin } = parseDrag(payload);
     if (kind !== "rider" || (origin !== "going" && origin !== "back")) return;
     h.unseat(origin as DirKey, id);
+  };
+  // Dropping someone on a people-list column switches how they ride, in BOTH directions:
+  // DRIVERS gives them a car, NEED RIDE takes their car away, DIY puts them in the DIY row.
+  // A passenger dropped on the column they already belong to is just unseated, as before.
+  const roleDrop = (col: CarpoolGuest["col"], payload: string) => {
+    const { kind, id, origin } = parseDrag(payload);
+    if (kind !== "rider" || !effRiders[id]) return;
+    if (id.startsWith("x:")) { // a write-in just moves to that column
+      setData((s) => ({ ...s, guests: s.guests.map((g) => (g.id === id ? { ...g, col } : g)) }));
+      return;
+    }
+    const role: RideRole = col === "drivers" ? "driver" : col === "diy" ? "diy" : "rider";
+    if ((origin === "going" || origin === "back") && roleIn(data, origin, id, form) === role) { h.unseat(origin, id); return; }
+    setData((s) => DIRS.reduce((acc, dir) => {
+      const prefix = dir === "going" ? "g" : "b";
+      const spot = spotOf(acc[dir], id);
+      let d = acc[dir];
+      if (role === "driver") {
+        if (spot.kind !== "driver") {
+          const band = matchKeyword(matchText[id] ?? "", acc.collegeKeywords) ? "onCampus" : "offCampus";
+          d = addDriverToDirSet(d, band, id, drivers.find((x) => x.id === id)?.seats ?? 5, prefix);
+        }
+      } else {
+        if (spot.kind === "driver") d = removeCarFromDirSet(d, spot.carId); // its passengers become unplaced
+        if (role === "rider") d = { ...d, diy: d.diy.filter((p) => p !== id) };
+        else if (spot.kind !== "diy") d = { ...removeFromDirSet(d, id), diy: [...removeFromDirSet(d, id).diy, id] };
+      }
+      return setRole({ ...acc, [dir]: d }, dir, id, role, form);
+    }, s));
   };
   const placedNote = (id: string) => {
     const g = placedGoing.has(id), b = placedBack.has(id);
@@ -326,7 +364,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
                 </div>
                 <div className="w-[14px] shrink-0 self-stretch" style={{ background: SHEET.sep }} />
                 <TotalPanel riders={effRiders} drivers={diff.drivers} driverSeats={new Map(drivers.map((d) => [d.id, d.seats]))} grouped={diff.grouped} diy={diff.diy} guests={data.guests}
-                  placedNote={placedNote} onUnseatDrop={unseatDrop} onAddGuest={addGuest} onRemoveGuest={removeGuest} onRevert={revert} />
+                  placedNote={placedNote} onUnseatDrop={unseatDrop} onRoleDrop={roleDrop} onAddGuest={addGuest} onRemoveGuest={removeGuest} onRevert={revert} />
               </div>
             </div>
             {destination && (
