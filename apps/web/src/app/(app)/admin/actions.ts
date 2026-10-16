@@ -100,6 +100,19 @@ export async function addPickupLocation(_: AdminState, fd: FormData): Promise<Ad
   return { ok: true };
 }
 
+/** Pickup locations "Add from saved locations": copies a saved location's name and coordinates. */
+export async function addPickupFromSaved(_: AdminState, fd: FormData): Promise<AdminState> {
+  const { org } = await requireAdmin();
+  const supabase = await createClient();
+  const { data: loc } = await supabase.from("saved_locations").select("name, lat, lon, sort_order")
+    .eq("id", String(fd.get("saved_id"))).eq("org_id", org.id).maybeSingle();
+  if (!loc) return { error: "Pick a saved location" };
+  const { error } = await supabase.from("pickup_locations").insert({ org_id: org.id, name: loc.name, lat: loc.lat, lon: loc.lon, sort_order: loc.sort_order });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/settings");
+  return { ok: true };
+}
+
 export async function updatePickupLocation(_: AdminState, fd: FormData): Promise<AdminState> {
   const { org } = await requireAdmin();
   const supabase = await createClient();

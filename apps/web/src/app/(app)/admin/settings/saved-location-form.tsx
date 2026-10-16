@@ -4,11 +4,14 @@ import { useActionState, useEffect, useRef } from "react";
 import { addSavedLocation, updateSavedLocation, type AdminState } from "../actions";
 import type { SavedLocation } from "@/lib/database.types";
 
-/** Adds a saved location, or edits `loc` when given. */
-export default function SavedLocationForm({ loc }: { loc?: SavedLocation }) {
+/** Adds a saved location, or edits `loc` when given (then calls onSaved). */
+export default function SavedLocationForm({ loc, onSaved }: { onSaved?: () => void; loc?: SavedLocation }) {
   const [state, action, pending] = useActionState<AdminState, FormData>(loc ? updateSavedLocation : addSavedLocation, {});
   const ref = useRef<HTMLFormElement>(null);
-  useEffect(() => { if (state.ok && !loc) ref.current?.reset(); }, [state, loc]);
+  useEffect(() => {
+    if (!state.ok) return;
+    if (loc) onSaved?.(); else ref.current?.reset();
+  }, [state, loc, onSaved]);
   return (
     <form ref={ref} action={action} className="card space-y-2 text-sm">
       {loc && <input type="hidden" name="id" value={loc.id} />}
@@ -25,7 +28,6 @@ export default function SavedLocationForm({ loc }: { loc?: SavedLocation }) {
         <button disabled={pending} className="btn-primary">{loc ? "Save" : "Add"}</button>
       </div>
       {state.error && <p className="text-red-600">{state.error}</p>}
-      {loc && state.ok && !pending && <p className="text-green-700">Saved.</p>}
     </form>
   );
 }
