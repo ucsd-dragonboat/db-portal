@@ -137,19 +137,20 @@ export async function disconnectTeamCalendar(orgId: string) {
   await admin.from("google_calendar_sync").delete().eq("org_id", orgId);
 }
 
-/** Mirror one portal event to Google (create or update). Never throws — sync is best-effort. */
-export async function syncEventToGoogle(eventId: string): Promise<void> {
+/** Mirror one portal event to Google (create or update). Never throws — sync is best-effort.
+ * Resolves true when the event is now in Google. */
+export async function syncEventToGoogle(eventId: string): Promise<boolean> {
   try {
     const admin = createAdminClient();
     const { data: ev } = await admin.from("events").select("*, group:event_groups(name)").eq("id", eventId).maybeSingle();
-    if (!ev) return;
+    if (!ev) return false;
     const sync = await getCalendarSync(ev.org_id);
-    if (!sync) return;
+    if (!sync) return false;
     const token = await getAccessToken(sync.user_id);
     if (ev.google_event_id) {
       try {
         await calFetch(token, eventsUrl(sync.calendar_id, `/${ev.google_event_id}`), { method: "PATCH", body: JSON.stringify(toGoogle(ev)) });
-        return;
+        return true;
       } catch (e) {
         if (!(e instanceof CalApiError && (e.status === 404 || e.status === 410))) throw e;
         // the Google copy is gone — fall through and create a fresh one
@@ -157,8 +158,10 @@ export async function syncEventToGoogle(eventId: string): Promise<void> {
     }
     const g = await calFetch(token, eventsUrl(sync.calendar_id), { method: "POST", body: JSON.stringify(toGoogle(ev)) });
     await admin.from("events").update({ google_event_id: g.id }).eq("id", ev.id);
+    return true;
   } catch (err) {
     console.error("[gcal] push", eventId, err);
+    return false;
   }
 }
 
@@ -296,7 +299,7 @@ const sameBirthday = (a: GEvent, b: GEvent) =>
 /** Make the team calendar's birthday events match the roster: add new or changed
  * birthdays, remove ones for people who left or cleared theirs. One list call, then
  * writes only for what changed. Never throws — called from the cron and on connect. */
-export async function syncBirthdaysToGoogle(orgId: string): Promise<{ written: number } | { error: string }> {
+export async function syncBirthdaysToGoogle(orgId: string, maxWrites = BIRTHDAY_WRITES_PER_RUN): Promise<{ written: number } | { error: string }> {
   try {
     const sync = await getCalendarSync(orgId);
     if (!sync) return { written: 0 };
@@ -322,7 +325,7 @@ export async function syncBirthdaysToGoogle(orgId: string): Promise<{ written: n
 
     let written = 0;
     for (const [id, ev] of want) {
-      if (written >= BIRTHDAY_WRITES_PER_RUN) break;
+      if (written >= maxWrites) break;
       const cur = have.get(id);
       if (cur && sameBirthday(cur, ev)) continue;
       try {
@@ -340,7 +343,7 @@ export async function syncBirthdaysToGoogle(orgId: string): Promise<{ written: n
       } catch (err) { console.error("[gcal] birthday", id, err); }
     }
     for (const id of have.keys()) {
-      if (want.has(id) || written >= BIRTHDAY_WRITES_PER_RUN) continue;
+      if (want.has(id) || written >= maxWrites) continue;
       try { await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "DELETE" }); written++; }
       catch (err) { if (!(err instanceof CalApiError && (err.status === 404 || err.status === 410))) console.error("[gcal] birthday remove", id, err); }
     }
@@ -349,4 +352,27 @@ export async function syncBirthdaysToGoogle(orgId: string): Promise<{ written: n
     console.error("[gcal] birthdays", orgId, err);
     return { error: err instanceof Error ? err.message : "birthday sync failed" };
   }
+}
+
+/** Settings "Sync now": the cron's work right away, plus a full re-push so Google
+ * matches the portal. Pulls first, so Google-side edits since the last tick aren't
+ * overwritten by the push. */
+export async function syncTeamCalendarNow(orgId: string): Promise<{ pulled: number; pushed: number; failed: number; birthdays: number } | { error: string }> {
+  if (!(await getCalendarSync(orgId))) return { error: "No team calendar is connected." };
+  const pull = await pullGoogleCalendar(orgId);
+  if ("error" in pull) return { error: `Couldn't read Google Calendar: ${pull.error}` };
+
+  const since = new Date(Date.now() - 30 * 86400e3).toISOString(); // same window as connecting
+  const { data: events } = await createAdminClient().from("events").select("id").eq("org_id", orgId).gte("starts_at", since).order("starts_at");
+  let pushed = 0, failed = 0;
+  const ids = (events ?? []).map((e) => e.id);
+  for (let i = 0; i < ids.length; i += 5) {
+    const results = await Promise.all(ids.slice(i, i + 5).map(syncEventToGoogle));
+    pushed += results.filter(Boolean).length;
+    failed += results.length - results.filter(Boolean).length;
+  }
+
+  const b = await syncBirthdaysToGoogle(orgId, Infinity);
+  if ("error" in b) return { error: `Events synced, but birthdays failed: ${b.error}` };
+  return { pulled: pull.applied, pushed, failed, birthdays: b.written };
 }
