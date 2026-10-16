@@ -10,6 +10,7 @@ import { testPattern } from "@/lib/pattern";
 import { attachPickupCoords, notFoundWarning } from "@/lib/geocode";
 import { parseBirthday } from "@/lib/birthday";
 import { saveDefaultPickup } from "@/lib/default-pickup";
+import { expireUser } from "@/lib/session-cache";
 import { answeredParts } from "@/lib/form-sections";
 
 export type SubmitState = { error?: string; saved?: boolean; warning?: string };
@@ -38,7 +39,10 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
     if (!p?.birthday) return { error: "Please enter your birthday." };
   }
   const w = String(fd.get("weight_lb") ?? "").trim();
-  if (w || birthday) await supabase.from("profiles").update({ ...(w ? { weight_lb: Number(w) } : {}), ...(birthday ? { birthday } : {}) }).eq("id", user.id);
+  if (w || birthday) {
+    await supabase.from("profiles").update({ ...(w ? { weight_lb: Number(w) } : {}), ...(birthday ? { birthday } : {}) }).eq("id", user.id);
+    expireUser(user.id);
+  }
 
   // Sections (Google Forms-style): only what's on this respondent's path through the
   // form counts. Skipped sections' questions aren't required and aren't stored.

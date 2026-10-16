@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { expireUser } from "@/lib/session-cache";
 import { createAccount, lookupEmail, normalizeEmail, safeNext, startSession } from "@/lib/email-signin";
 import { allowRate, clientIp, RATE_LIMIT_MSG } from "@/lib/rate-limit";
 
@@ -79,6 +80,7 @@ export async function completeReset(_: ResetState, fd: FormData): Promise<ResetS
   if (!user) return { error: "Your reset link expired — request a new one from the sign-in page." };
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: error.message };
+  expireUser(user.id);
   redirect("/dashboard");
 }
 

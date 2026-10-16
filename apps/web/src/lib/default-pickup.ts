@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { defaultSpotColumns, savedSpotId } from "@/lib/campus-spots";
+import { expireUser } from "@/lib/session-cache";
 
 type Row = { ride: string; pickup_location_id: string | null; pickup_address: string | null; pickup_lat: number | null; pickup_lon: number | null };
 
@@ -18,4 +19,6 @@ export async function saveDefaultPickup(supabase: SupabaseClient<Database>, user
     await supabase.from("profiles").update({
       ...defaultSpotColumns(null), address: row.pickup_address, city: null, zipcode: null, lat: row.pickup_lat, lon: row.pickup_lon,
     }).eq("id", userId);
+  else return;
+  expireUser(userId);
 }

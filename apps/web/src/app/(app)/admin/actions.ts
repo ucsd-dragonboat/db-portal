@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
+import { expireOrg, expireUser } from "@/lib/session-cache";
 import { createClient } from "@/lib/supabase/server";
 import { cleanHtml } from "@/lib/html";
 import { disconnectGoogle } from "@/lib/google-sheets";
@@ -18,6 +19,7 @@ export async function rotateJoinCode() {
   const { org } = await requireAdmin();
   const supabase = await createClient();
   await supabase.rpc("rotate_join_code", { org: org.id });
+  expireOrg(org.id);
   revalidatePath("/admin/settings");
 }
 const str = (v: FormDataEntryValue | null) => (v === null || String(v).trim() === "" ? null : String(v).trim());
@@ -69,6 +71,7 @@ export async function setMemberRole(fd: FormData) {
   const supabase = await createClient();
   await supabase.from("memberships").update({ role: String(fd.get("role")) as "admin" | "member" })
     .eq("org_id", org.id).eq("user_id", target);
+  expireUser(target);
   revalidatePath("/admin/members");
 }
 
@@ -78,6 +81,7 @@ export async function removeMember(fd: FormData) {
   if (target === userId) return;
   const supabase = await createClient();
   await supabase.from("memberships").delete().eq("org_id", org.id).eq("user_id", target);
+  expireUser(target);
   revalidatePath("/admin/members");
 }
 
@@ -341,6 +345,7 @@ export async function updateMember(fd: FormData) {
     full_name: String(fd.get("full_name") ?? "").trim(), address: str(fd.get("address")), city: str(fd.get("city")), zipcode: str(fd.get("zipcode")),
     lat: optNum(fd.get("lat")), lon: optNum(fd.get("lon")), car_passengers: optNum(fd.get("car_passengers")) ?? 0, gender: (g as "male" | "female" | "other" | null), weight_lb: optNum(fd.get("weight_lb")),
   }).eq("id", String(fd.get("user_id")));
+  expireUser(String(fd.get("user_id")));
   after(() => syncSheetsForMember(String(fd.get("user_id"))));
   revalidatePath("/admin/members");
 }
@@ -354,6 +359,7 @@ export async function setMemberCap(_: AdminState, fd: FormData): Promise<AdminSt
   if (enabled && (!Number.isFinite(cap) || cap! < 1)) return { error: "Cap must be at least 1" };
   const { error } = await supabase.from("organizations").update({ member_cap: cap }).eq("id", org.id);
   if (error) return { error: error.message.includes("member_cap") ? "Run migration 0024_member_cap.sql first" : error.message };
+  expireOrg(org.id);
   revalidatePath("/admin/members");
   return { ok: true };
 }
@@ -366,6 +372,7 @@ export async function setAttendanceAdjustment(_: AdminState, fd: FormData): Prom
   if (!Number.isFinite(value)) return { error: "Must be a whole number" };
   const { error } = await supabase.from("profiles").update({ attendance_adjustment: value }).eq("id", String(fd.get("user_id")));
   if (error) return { error: error.message.includes("attendance_adjustment") ? "Run migration 0025_carpool_trips.sql first" : error.message };
+  expireUser(String(fd.get("user_id")));
   revalidatePath("/statistics");
   return { ok: true };
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { expireUser } from "@/lib/session-cache";
 import { regenerateCalendarToken } from "@/lib/calendar-token";
 import { syncSheetsForMember } from "@/lib/sheet-sync";
 import { geocode } from "@/lib/geocode";
@@ -49,6 +50,7 @@ export async function saveProfile(_: ProfileState, formData: FormData): Promise<
     ...(formData.has("default_spot") ? defaultSpotColumns(str(formData.get("default_spot"))) : {}),
   }).eq("id", user.id);
   if (error) return { error: error.message };
+  expireUser(user.id);
   after(() => syncSheetsForMember(user.id)); // name / phone / weight are sheet columns
   revalidatePath("/profile");
   return { saved: true, geocoded };
@@ -61,8 +63,9 @@ export async function setPassword(_: PasswordState, formData: FormData): Promise
   const password = String(formData.get("password") ?? "");
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
   const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({ password });
+  const { data, error } = await supabase.auth.updateUser({ password });
   if (error) return { error: error.message };
+  if (data.user) expireUser(data.user.id); // admin-password gate re-checks
   return { saved: true };
 }
 
