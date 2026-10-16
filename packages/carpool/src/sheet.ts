@@ -293,3 +293,49 @@ export function carpoolToTsv(
   const funBlock = funFact ? [[], [funFact.question], ...funFact.rows.map((r) => [r.name, r.text])] : []
   return [...block('GOING', d.going), [], ...block('BACK', d.back), ...notesBlock, ...funBlock].map((r) => r.map(clean).join('\t')).join('\n')
 }
+
+/** Drag a car left/right: move it before `beforeCarId` in `band` (end of the band
+ * when null). Moving between the on/off-campus bands is allowed. */
+export function moveCar(dir: DirSet, carId: string, band: 'onCampus' | 'offCampus', beforeCarId: string | null): DirSet {
+  const car = [...dir.onCampus, ...dir.offCampus].find((c) => c.id === carId)
+  if (!car || carId === beforeCarId) return dir
+  const out: DirSet = { ...dir, onCampus: dir.onCampus.filter((c) => c.id !== carId), offCampus: dir.offCampus.filter((c) => c.id !== carId) }
+  const list = [...out[band]]
+  const at = beforeCarId ? list.findIndex((c) => c.id === beforeCarId) : -1
+  list.splice(at < 0 ? list.length : at, 0, car)
+  return { ...out, [band]: list }
+}
+
+/** Where someone is in one direction. */
+export type Spot = { kind: 'driver'; carId: string } | { kind: 'passenger'; carId: string; index: number } | { kind: 'diy' } | { kind: 'none' }
+
+export function spotOf(dir: DirSet, id: string): Spot {
+  for (const c of [...dir.onCampus, ...dir.offCampus]) {
+    if (c.driverId === id) return { kind: 'driver', carId: c.id }
+    const i = c.passengerIds.indexOf(id)
+    if (i >= 0) return { kind: 'passenger', carId: c.id, index: i }
+  }
+  return dir.diy.includes(id) ? { kind: 'diy' } : { kind: 'none' }
+}
+
+/** Drop someone onto a car's driver cell: they take over that car (its seats and
+ * passengers), and the old driver takes their previous spot — their seat in another
+ * car, their own car, DIY, or nowhere. Returns where the old driver ended up. */
+export function swapDriver(dir: DirSet, carId: string, newDriverId: string, prefix: DirPrefix): { dir: DirSet; oldDriverId: string; oldDriverSpot: Spot['kind'] } | null {
+  const target = [...dir.onCampus, ...dir.offCampus].find((c) => c.id === carId)
+  if (!target || target.driverId === newDriverId) return null
+  const oldDriverId = target.driverId
+  const from = spotOf(dir, newDriverId)
+  const map = (cars: Car[]): Car[] => cars.map((c) => {
+    if (c.id === carId) {
+      // A passenger of this same car swaps seats with the driver.
+      const passengerIds = c.passengerIds.map((p) => (p === newDriverId ? oldDriverId : p))
+      return { ...c, id: `${prefix}:${newDriverId}`, driverId: newDriverId, passengerIds }
+    }
+    if (from.kind === 'driver' && c.id === from.carId) return { ...c, id: `${prefix}:${oldDriverId}`, driverId: oldDriverId }
+    if (from.kind === 'passenger' && c.id === from.carId) return { ...c, passengerIds: c.passengerIds.map((p) => (p === newDriverId ? oldDriverId : p)) }
+    return c
+  })
+  const diy = from.kind === 'diy' ? dir.diy.map((p) => (p === newDriverId ? oldDriverId : p)) : dir.diy
+  return { dir: { onCampus: map(dir.onCampus), offCampus: map(dir.offCampus), diy }, oldDriverId, oldDriverSpot: from.kind }
+}

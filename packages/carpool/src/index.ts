@@ -27,11 +27,14 @@ export {
   groupNeedsRide,
   discrepancies,
   layoutMembers,
+  moveCar,
+  spotOf,
+  swapDriver,
   carpoolToTsv,
   movedRiders,
   seatSnapshot,
 } from './sheet'
-export type { MatchText, PlaceTarget } from './sheet'
+export type { MatchText, PlaceTarget, Spot } from './sheet'
 export { haversineKm, locationKey } from './geo'
 export { assignCarpool, orderStops } from './assign'
 export {
