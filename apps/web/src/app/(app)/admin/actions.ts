@@ -8,7 +8,7 @@ import { expireOrg, expireUser } from "@/lib/session-cache";
 import { createClient } from "@/lib/supabase/server";
 import { cleanHtml } from "@/lib/html";
 import { disconnectGoogle } from "@/lib/google-sheets";
-import { createTeamCalendar, disconnectTeamCalendar, linkExistingCalendar, removeEventFromGoogle, syncEventToGoogle, syncTeamCalendarNow } from "@/lib/google-calendar";
+import { createTeamCalendar, disconnectTeamCalendar, linkExistingCalendar, removeEventFromGoogle, syncBirthdaysToGoogle, syncEventToGoogle, syncTeamCalendarNow } from "@/lib/google-calendar";
 import { notifyEventPosted } from "@/lib/notifications";
 import { syncSheetsForMember } from "@/lib/sheet-sync";
 
@@ -82,6 +82,7 @@ export async function removeMember(fd: FormData) {
   const supabase = await createClient();
   await supabase.from("memberships").delete().eq("org_id", org.id).eq("user_id", target);
   expireUser(target);
+  after(() => syncBirthdaysToGoogle(org.id)); // take their birthday off the team Google Calendar
   revalidatePath("/admin/members");
 }
 
@@ -463,7 +464,7 @@ export async function syncTeamCalendarAction(): Promise<AdminState & { summary?:
   revalidatePath("/admin/settings");
   if ("error" in r) return { error: r.error };
   const n = (k: number, word: string) => `${k} ${word}${k === 1 ? "" : "s"}`;
-  return { ok: true, summary: [`Pulled ${n(r.pulled, "change")}`, `pushed ${n(r.pushed, "event")}`, `${n(r.birthdays, "birthday")} updated`, ...(r.failed ? [`${r.failed} failed`] : [])].join(" · ") };
+  return { ok: true, summary: [`Pulled ${n(r.pulled, "change")}`, `pushed ${n(r.pushed, "event")}`, `${n(r.birthdays, "birthday")} updated`, ...(r.failed ? [`${r.failed} failed`] : []), ...(r.more ? ["more left — the 10-minute sync will finish it"] : [])].join(" · ") };
 }
 
 export async function disconnectTeamCalendarAction() {
