@@ -1,5 +1,5 @@
-// Auto-carpool cron endpoint. Poked every 10 minutes by Supabase pg_cron
-// (migration 0014). Queues one job per linked day of each form whose due date has
+// Auto-carpool cron endpoint. Poked by Supabase pg_cron (migration 0014) on 10-minute
+// ticks that have work — public.cron_has_work(), migration 0041. Queues one job per linked day of each form whose due date has
 // passed (once per form, tracked by forms.carpools_generated_at), then builds as
 // many queued days as fit this tick (lib/carpool-queue.ts). Protected by CRON_SECRET.
 

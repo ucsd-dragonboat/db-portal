@@ -464,7 +464,7 @@ export async function syncTeamCalendarAction(): Promise<AdminState & { summary?:
   revalidatePath("/admin/settings");
   if ("error" in r) return { error: r.error };
   const n = (k: number, word: string) => `${k} ${word}${k === 1 ? "" : "s"}`;
-  return { ok: true, summary: [`Pulled ${n(r.pulled, "change")}`, `pushed ${n(r.pushed, "event")}`, `${n(r.birthdays, "birthday")} updated`, ...(r.failed ? [`${r.failed} failed`] : []), ...(r.more ? ["more left — the 10-minute sync will finish it"] : [])].join(" · ") };
+  return { ok: true, summary: [`Pulled ${n(r.pulled, "change")}`, `pushed ${n(r.pushed, "event")}`, `${n(r.birthdays, "birthday")} updated`, ...(r.failed ? [`${r.failed} failed`] : []), ...(r.more ? ["more left — the automatic sync will finish it"] : [])].join(" · ") };
 }
 
 export async function disconnectTeamCalendarAction() {
