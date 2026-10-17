@@ -83,7 +83,7 @@ export default async function AdminSettingsPage() {
                 <span>
                   <b>Team calendar synced</b> — edit events in{" "}
                   <a href={`https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(calSync.calendar_id)}`} target="_blank" rel="noopener" className="underline">Google Calendar</a>{" "}
-                  and they flow back here within ~10 minutes.
+                  and they flow back here within about an hour.
                 </span>
                 <span className="flex shrink-0 items-start gap-3">
                   <SyncNowButton />
