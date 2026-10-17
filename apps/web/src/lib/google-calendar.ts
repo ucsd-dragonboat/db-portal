@@ -179,8 +179,14 @@ export async function removeEventFromGoogle(orgId: string, googleEventId: string
   }
 }
 
+/** Pull time budget. A big backlog drains over several ticks: when the budget runs out
+ * mid-way, the next page token is saved (as "page:<token>") and the next pull resumes. */
+const PULL_BUDGET_MS = 15_000;
+const PAGE_PREFIX = "page:";
+
 /** Import changes made in Google Calendar since the last pull. Never throws — called from the cron. */
-export async function pullGoogleCalendar(orgId: string): Promise<{ applied: number } | { error: string }> {
+export async function pullGoogleCalendar(orgId: string, budgetMs = PULL_BUDGET_MS): Promise<{ applied: number; more?: boolean } | { error: string }> {
+  const started = Date.now();
   try {
     const admin = createAdminClient();
     const sync = await getCalendarSync(orgId);
@@ -190,6 +196,7 @@ export async function pullGoogleCalendar(orgId: string): Promise<{ applied: numb
     let applied = 0;
     let syncToken = sync.sync_token;
     let pageToken: string | undefined;
+    if (syncToken?.startsWith(PAGE_PREFIX)) { pageToken = syncToken.slice(PAGE_PREFIX.length); syncToken = null; }
     let nextSyncToken: string | undefined;
     let retriedFull = false;
     for (;;) {
@@ -206,7 +213,8 @@ export async function pullGoogleCalendar(orgId: string): Promise<{ applied: numb
       try {
         data = await calFetch(token, eventsUrl(sync.calendar_id, `?${params}`));
       } catch (e) {
-        if (e instanceof CalApiError && e.status === 410 && !retriedFull) { // sync token expired — full resync once
+        // Sync token expired (410), or a saved page token was rejected — full resync once.
+        if (e instanceof CalApiError && (e.status === 410 || (e.status === 400 && pageToken)) && !retriedFull) {
           retriedFull = true; syncToken = null; pageToken = undefined; continue;
         }
         throw e;
@@ -214,7 +222,14 @@ export async function pullGoogleCalendar(orgId: string): Promise<{ applied: numb
       for (const g of (data.items ?? []) as GEvent[]) {
         if (await applyGoogleItem(orgId, g)) applied++;
       }
-      if (data.nextPageToken) { pageToken = data.nextPageToken; continue; }
+      if (data.nextPageToken) {
+        pageToken = data.nextPageToken;
+        if (Date.now() - started > budgetMs) {
+          await admin.from("google_calendar_sync").update({ sync_token: PAGE_PREFIX + pageToken, updated_at: new Date().toISOString() }).eq("org_id", orgId);
+          return { applied, more: true };
+        }
+        continue;
+      }
       nextSyncToken = data.nextSyncToken;
       break;
     }
@@ -230,7 +245,10 @@ export async function pullGoogleCalendar(orgId: string): Promise<{ applied: numb
 
 /** Apply one changed Google event to the portal. Returns true when something was written. */
 async function applyGoogleItem(orgId: string, g: GEvent): Promise<boolean> {
-  if (!g.id) return false;
+  // Our own birthday events (and instances of the old recurring ones), and all-day
+  // events, are never imported — skip them before touching the database.
+  if (!g.id || BIRTHDAY_ID.test(g.id)) return false;
+  if (g.status !== "cancelled" && !g.start?.dateTime) return false;
   const admin = createAdminClient();
   const { data: byGid } = await admin.from("events").select("id, google_event_id, group:event_groups(name)").eq("org_id", orgId).eq("google_event_id", g.id).maybeSingle();
   let linked = byGid ?? null;
@@ -270,46 +288,61 @@ async function applyGoogleItem(orgId: string, g: GEvent): Promise<boolean> {
 
 // ---------- birthdays ----------
 
-/** Google writes per call — the first sync of a big roster finishes over a few cron ticks. */
+/** Google writes per cron run — the first sync of a big roster finishes over a few ticks. */
 const BIRTHDAY_WRITES_PER_RUN = 25;
 
-/** Stable Google event id per teammate (base32hex: 0-9 a-v), so no mapping table is needed. */
-const birthdayEventId = (userId: string) => `bd${userId.replace(/-/g, "")}`;
+/** One plain all-day event per teammate per year: `bd<user id hex><yyyy>`. The old
+ * yearly-recurring ones (#130) were `bd<user id hex>` with no year. */
+const BIRTHDAY_ID = /^bd[0-9a-f]{32}/;
+const OUR_BIRTHDAY = /^bd([0-9a-f]{32})(\d{4})?$/;
+const userHex = (userId: string) => userId.replace(/-/g, "");
+const isLeap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 
-/** Yearly all-day event on the month/day only — the birth year never reaches Google. */
-export function toGoogleBirthday(userId: string, name: string, birthday: string): GEvent {
-  const md = birthday.slice(5, 10); // "MM-DD"
-  const start = `2000-${md}`; // 2000 is a leap year, so 02-29 is a real date
-  const [y, m, d] = start.split("-").map(Number);
-  const end = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+/** That year's birthday on the month/day only — the birth year never reaches Google.
+ * Feb 29 birthdays fall on Feb 28 in non-leap years. */
+export function toGoogleBirthday(userId: string, name: string, birthday: string, year: number): GEvent {
+  let md = birthday.slice(5, 10); // "MM-DD"
+  if (md === "02-29" && !isLeap(year)) md = "02-28";
+  const [m, d] = md.split("-").map(Number);
+  const day = (n: number) => new Date(Date.UTC(year, m - 1, d + n)).toISOString().slice(0, 10);
   return {
-    id: birthdayEventId(userId),
+    id: `bd${userHex(userId)}${year}`,
     summary: `🎂 ${name}'s birthday`,
-    start: { date: start }, end: { date: end },
-    // Feb 29 birthdays fall on Feb 28 in non-leap years.
-    recurrence: [md === "02-29" ? "RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=-1" : "RRULE:FREQ=YEARLY"],
+    start: { date: day(0) }, end: { date: day(1) },
     transparency: "transparent", // shows as free
-    extendedProperties: { private: { portalBirthday: "1", portalUserId: userId } },
+    extendedProperties: { private: { portalBirthday: "1", portalUserId: userId, portalBirthdayYear: String(year) } },
   };
 }
 
-const sameBirthday = (a: GEvent, b: GEvent) =>
-  a.summary === b.summary && a.start?.date === b.start?.date && (a.recurrence ?? []).join() === (b.recurrence ?? []).join();
+const sameBirthday = (a: GEvent, b: GEvent) => a.summary === b.summary && a.start?.date === b.start?.date && !a.recurrence?.length;
 
-/** Make the team calendar's birthday events match the roster: add new or changed
- * birthdays, remove ones for people who left or cleared theirs. One list call, then
- * writes only for what changed. Never throws — called from the cron and on connect. */
-export async function syncBirthdaysToGoogle(orgId: string, maxWrites = BIRTHDAY_WRITES_PER_RUN): Promise<{ written: number } | { error: string }> {
+/** Make the team calendar's birthdays match the roster: this year's and next year's
+ * for everyone with a birthday (so each new year adds the following one). Removes all
+ * of a person's birthday events once they leave the team or clear their birthday, and
+ * the old recurring ones; past years stay for current teammates. One list call, then
+ * writes only for what changed, 5 at a time, stopping at maxWrites or the deadline.
+ * Never throws — called from the cron, on connect and by "Sync now". */
+export async function syncBirthdaysToGoogle(
+  orgId: string,
+  { maxWrites = BIRTHDAY_WRITES_PER_RUN, deadline = Infinity, now = new Date() }: { maxWrites?: number; deadline?: number; now?: Date } = {},
+): Promise<{ written: number; left: number } | { error: string }> {
   try {
     const sync = await getCalendarSync(orgId);
-    if (!sync) return { written: 0 };
+    if (!sync) return { written: 0, left: 0 };
     const admin = createAdminClient();
     const { data: members, error } = await admin.from("memberships").select("user_id, profile:profiles(full_name, birthday)").eq("org_id", orgId);
     if (error) throw new Error(error.message);
+    const year = now.getFullYear();
     const want = new Map<string, GEvent>();
+    const people = new Set<string>();
     for (const m of members ?? []) {
       const p = m.profile as unknown as { full_name: string | null; birthday: string | null } | null;
-      if (p?.birthday) want.set(birthdayEventId(m.user_id), toGoogleBirthday(m.user_id, p.full_name?.trim() || "Teammate", p.birthday));
+      if (!p?.birthday) continue;
+      people.add(userHex(m.user_id));
+      for (const y of [year, year + 1]) {
+        const ev = toGoogleBirthday(m.user_id, p.full_name?.trim() || "Teammate", p.birthday, y);
+        want.set(ev.id!, ev);
+      }
     }
 
     const token = await getAccessToken(sync.user_id);
@@ -323,31 +356,38 @@ export async function syncBirthdaysToGoogle(orgId: string, maxWrites = BIRTHDAY_
       pageToken = data.nextPageToken;
     } while (pageToken);
 
-    let written = 0;
+    const ops: (() => Promise<void>)[] = [];
+    for (const id of have.keys()) {
+      const m = id.match(OUR_BIRTHDAY);
+      if (!m || (m[2] && people.has(m[1]))) continue; // not ours, or a current teammate's
+      ops.push(async () => {
+        try { await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "DELETE" }); }
+        catch (e) { if (!(e instanceof CalApiError && (e.status === 404 || e.status === 410))) throw e; }
+      });
+    }
     for (const [id, ev] of want) {
-      if (written >= maxWrites) break;
       const cur = have.get(id);
       if (cur && sameBirthday(cur, ev)) continue;
-      try {
-        if (cur) await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "PUT", body: JSON.stringify(ev) });
-        else {
-          try {
-            await calFetch(token, eventsUrl(sync.calendar_id), { method: "POST", body: JSON.stringify(ev) });
-          } catch (e) {
-            // 409: this id was used before and deleted — bring it back instead.
-            if (!(e instanceof CalApiError && e.status === 409)) throw e;
-            await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "PUT", body: JSON.stringify({ ...ev, status: "confirmed" }) });
-          }
+      ops.push(async () => {
+        if (cur) { await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "PUT", body: JSON.stringify(ev) }); return; }
+        try {
+          await calFetch(token, eventsUrl(sync.calendar_id), { method: "POST", body: JSON.stringify(ev) });
+        } catch (e) {
+          // 409: this id was used before and deleted — bring it back instead.
+          if (!(e instanceof CalApiError && e.status === 409)) throw e;
+          await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "PUT", body: JSON.stringify({ ...ev, status: "confirmed" }) });
         }
-        written++;
-      } catch (err) { console.error("[gcal] birthday", id, err); }
+      });
     }
-    for (const id of have.keys()) {
-      if (want.has(id) || written >= maxWrites) continue;
-      try { await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "DELETE" }); written++; }
-      catch (err) { if (!(err instanceof CalApiError && (err.status === 404 || err.status === 410))) console.error("[gcal] birthday remove", id, err); }
+
+    let written = 0, done = 0;
+    while (done < ops.length && written < maxWrites && Date.now() < deadline) {
+      const batch = ops.slice(done, done + Math.min(5, maxWrites - written));
+      const results = await Promise.allSettled(batch.map((op) => op()));
+      for (const r of results) if (r.status === "fulfilled") written++; else console.error("[gcal] birthday", r.reason);
+      done += batch.length;
     }
-    return { written };
+    return { written, left: ops.length - done };
   } catch (err) {
     console.error("[gcal] birthdays", orgId, err);
     return { error: err instanceof Error ? err.message : "birthday sync failed" };
@@ -356,23 +396,26 @@ export async function syncBirthdaysToGoogle(orgId: string, maxWrites = BIRTHDAY_
 
 /** Settings "Sync now": the cron's work right away, plus a full re-push so Google
  * matches the portal. Pulls first, so Google-side edits since the last tick aren't
- * overwritten by the push. */
-export async function syncTeamCalendarNow(orgId: string): Promise<{ pulled: number; pushed: number; failed: number; birthdays: number } | { error: string }> {
+ * overwritten by the push. Stops cleanly before Vercel's limit; the cron finishes. */
+export async function syncTeamCalendarNow(orgId: string, budgetMs = 45_000): Promise<{ pulled: number; pushed: number; failed: number; birthdays: number; more: boolean } | { error: string }> {
+  const deadline = Date.now() + budgetMs;
   if (!(await getCalendarSync(orgId))) return { error: "No team calendar is connected." };
-  const pull = await pullGoogleCalendar(orgId);
+  const pull = await pullGoogleCalendar(orgId, budgetMs / 3);
   if ("error" in pull) return { error: `Couldn't read Google Calendar: ${pull.error}` };
+  let more = !!pull.more;
 
   const since = new Date(Date.now() - 30 * 86400e3).toISOString(); // same window as connecting
   const { data: events } = await createAdminClient().from("events").select("id").eq("org_id", orgId).gte("starts_at", since).order("starts_at");
   let pushed = 0, failed = 0;
   const ids = (events ?? []).map((e) => e.id);
   for (let i = 0; i < ids.length; i += 5) {
+    if (Date.now() >= deadline) { more = true; break; }
     const results = await Promise.all(ids.slice(i, i + 5).map(syncEventToGoogle));
     pushed += results.filter(Boolean).length;
     failed += results.length - results.filter(Boolean).length;
   }
 
-  const b = await syncBirthdaysToGoogle(orgId, Infinity);
+  const b = await syncBirthdaysToGoogle(orgId, { maxWrites: Infinity, deadline });
   if ("error" in b) return { error: `Events synced, but birthdays failed: ${b.error}` };
-  return { pulled: pull.applied, pushed, failed, birthdays: b.written };
+  return { pulled: pull.applied, pushed, failed, birthdays: b.written, more: more || b.left > 0 };
 }
