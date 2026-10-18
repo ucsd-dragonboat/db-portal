@@ -71,7 +71,7 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
     ...lead.map((q) => ({ q })),
     ...events.filter((e) => !marked.has(e.event.id)).map((e) => ({ day: e })),
     ...questions.slice(lead.length).flatMap<FormItem>((q) => q.type === "day"
-      ? (q.event_id && dayByEvent.has(q.event_id) ? [{ day: dayByEvent.get(q.event_id)! }] : [])
+      ? (q.event_id && !q.hidden && dayByEvent.has(q.event_id) ? [{ day: dayByEvent.get(q.event_id)! }] : [])
       : [{ q }]),
   ];
   const questionOf = (it: FormItem) => ("q" in it ? it.q : null);
@@ -183,7 +183,7 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
           )}
           {i === 0 && <>
             {header}
-            {events.length > 0 && (
+            {dayIdxOf.size > 0 && (
               <Q title={<><Icon name="house" /> Different address just for these rides?</>}
                 help="Optional. If you're driving from or need picking up somewhere other than your profile address this time, enter it once here — it applies to every day below where you chose your home address. Your profile isn't changed.">
                 <input name="ride_address" placeholder="Street address and city (leave blank to use your home address)" className="input-line w-full" />

@@ -87,12 +87,20 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
   const toggleEvent = (eid: string) => setF((s) => s.events.some((e) => e.event_id === eid)
     ? { ...s, events: s.events.filter((e) => e.event_id !== eid), questions: s.questions.filter((q) => !(q.type === "day" && q.event_id === eid)) }
     : { ...s, events: [...s.events, { event_id: eid, prompt: null }], questions: [...s.questions, dayMarker(eid)] });
+  /** Hides or brings back a day's attendance question; the day stays on the form either way. */
+  const setDayHidden = (eid: string, hidden: boolean) => set("questions", f.questions.map((q) => (q.type === "day" && q.event_id === eid ? { ...q, hidden: hidden || undefined } : q)));
   const setPrompt = (eid: string, prompt: string) => set("events", f.events.map((e) => (e.event_id === eid ? { ...e, prompt: prompt || null } : e)));
   const addQ = () => { const q: FormQuestion = { id: uid(), type: "single_choice", label: "", required: false, options: ["Option 1"] }; set("questions", [...f.questions, q]); setFocus(q.id); };
   const updQ = (qid: string, patch: Partial<FormQuestion>) => set("questions", f.questions.map((q) => (q.id === qid ? { ...q, ...patch } : q)));
   const delQ = (qid: string) => set("questions", f.questions.filter((q) => q.id !== qid));
   const dupQ = (qid: string) => { const i = f.questions.findIndex((q) => q.id === qid); const c = { ...f.questions[i], id: uid() }; const a = [...f.questions]; a.splice(i + 1, 0, c); set("questions", a); setFocus(c.id); };
-  const moveQ = (i: number, d: -1 | 1) => { const a = [...f.questions]; const j = i + d; if (j < 0 || j >= a.length || (j === 0 && a[0].type === "section")) return; [a[i], a[j]] = [a[j], a[i]]; set("questions", a); };
+  const moveQ = (i: number, d: -1 | 1) => {
+    const a = [...f.questions];
+    let j = i + d;
+    while (a[j]?.type === "day" && a[j].hidden) j += d; // hidden questions have no card to move past
+    if (j < 0 || j >= a.length || (j === 0 && a[0].type === "section")) return;
+    const [q] = a.splice(i, 1); a.splice(j, 0, q); set("questions", a);
+  };
 
   // Sections: markers[0] is section 1 (the form header) when the form has sections.
   const markers = f.questions.filter((q) => q.type === "section");
@@ -122,11 +130,13 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
     if (!window.confirm("Delete questions and section?")) return;
     const end = sectionEnd(f.questions, i);
     const gone = f.questions.slice(i, end);
-    const days = new Set(gone.filter((q) => q.type === "day").map((q) => q.event_id));
+    // A hidden day has no card in the section, so it stays on the form.
+    const kept = gone.filter((q) => q.type === "day" && q.hidden);
+    const days = new Set(gone.filter((q) => q.type === "day" && !q.hidden).map((q) => q.event_id));
     setF((s) => ({
       ...s,
       events: s.events.filter((e) => !days.has(e.event_id)),
-      questions: normalizeSections(dropTargets([...s.questions.slice(0, i), ...s.questions.slice(end)], f.questions[i].id)),
+      questions: normalizeSections(dropTargets([...s.questions.slice(0, i), ...kept, ...s.questions.slice(end)], f.questions[i].id)),
     }));
   };
   const mergeSection = (i: number) => set("questions", normalizeSections(dropTargets(f.questions.filter((_, k) => k !== i), f.questions[i].id)));
@@ -226,6 +236,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         {!events.length && !addingDays && <p className="text-sm" style={{ color: "var(--g-red)" }}>No upcoming events yet — click “New event & days”.</p>}
         {events.map((ev) => {
           const on = f.events.find((e) => e.event_id === ev.id);
+          const hidden = !!on && f.questions.some((q) => q.type === "day" && q.event_id === ev.id && q.hidden);
           const groupName = ev.group_id ? groups.find((g) => g.id === ev.group_id)?.name : null;
           return (
             <div key={ev.id} className="rounded px-2 py-1" style={{ background: on ? "var(--g-purple-soft)" : undefined }}>
@@ -234,7 +245,12 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
                 <span>{ev.title}</span><span className={`text-[10px] ${groupName ? "" : "uppercase"}`} style={{ color: "var(--g-grey-600)" }}>{groupName ?? ev.kind}</span>
                 <span className="ml-auto text-xs" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={ev.starts_at} /></span>
               </label>
-              {on && <input value={on.prompt ?? ""} onChange={(e) => setPrompt(ev.id, e.target.value)} placeholder={`Custom prompt (default: “${attendancePrompt(null, ev)}”)`} className="input-line ml-9 w-[calc(100%-2.25rem)] text-xs" />}
+              {hidden
+                ? <div className="ml-9 flex items-center gap-2 text-xs" style={{ color: "var(--g-grey-600)" }}>
+                    No attendance question for this day
+                    <button type="button" onClick={() => setDayHidden(ev.id, false)} className="btn-text py-0.5 text-xs"><Icon name="plus" /> Add question back</button>
+                  </div>
+                : on && <input value={on.prompt ?? ""} onChange={(e) => setPrompt(ev.id, e.target.value)} placeholder={`Custom prompt (default: “${attendancePrompt(null, ev)}”)`} className="input-line ml-9 w-[calc(100%-2.25rem)] text-xs" />}
             </div>
           );
         })}
@@ -315,9 +331,9 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         }
         if (q.type === "day") {
           const fe = f.events.find((e) => e.event_id === q.event_id);
-          if (!fe) return null;
+          if (!fe || q.hidden) return null;
           const ev = events.find((e) => e.id === fe.event_id);
-          const dayIdx = f.questions.slice(0, i).filter((x) => x.type === "day").length;
+          const dayIdx = f.questions.slice(0, i).filter((x) => x.type === "day" && !x.hidden).length;
           return (
             <div key={q.id} className="gf-card space-y-3">
               <div className="flex items-start justify-between gap-2">
@@ -331,7 +347,10 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
                   <span className="chip !py-0 text-[10px] whitespace-nowrap">Automatic</span>
                   <button type="button" onClick={() => moveQ(i, -1)} disabled={i === 0 || (i === 1 && f.questions[0].type === "section")} className="btn-text py-0.5 disabled:opacity-30" title="Move up"><Icon name="up" /></button>
                   <button type="button" onClick={() => moveQ(i, 1)} disabled={i === f.questions.length - 1} className="btn-text py-0.5 disabled:opacity-30" title="Move down"><Icon name="down" /></button>
-                  <button type="button" onClick={() => toggleEvent(fe.event_id)} className="btn-text py-0.5" title="Remove this day from the form"><Icon name="trash" /></button>
+                  <Menu label="Attendance question options" items={[
+                    { label: "Remove question, keep the day", run: () => setDayHidden(fe.event_id, true) },
+                    { label: "Remove day from form", run: () => toggleEvent(fe.event_id) },
+                  ]} />
                 </span>
               </div>
               {ev && <p className="text-xs" style={{ color: "var(--g-grey-600)" }}><LocalTime iso={ev.starts_at} /> · answers feed attendance, lineups and carpool</p>}

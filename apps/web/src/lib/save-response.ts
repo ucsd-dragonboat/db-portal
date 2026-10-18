@@ -55,7 +55,7 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
   // is driving or riding from "home" — a per-day address or pickup spot still wins.
   const rideAddress = String(fd.get("ride_address") ?? "").trim();
   const parsed = [];
-  const skippedDays = (links ?? []).filter((l) => !parts.dayAnswered(l.event_id)).map((l) => l.event_id);
+  const skippedDays = (links ?? []).filter((l) => !parts.dayAnswered(l.event_id) && !parts.dayHidden(l.event_id)).map((l) => l.event_id);
   for (const l of links ?? []) {
     if (!parts.dayAnswered(l.event_id)) continue;
     const v = parseAttendance(fd, `ev_${l.event_id}_`);
