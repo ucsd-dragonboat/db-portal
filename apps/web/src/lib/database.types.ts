@@ -272,6 +272,8 @@ export type FormQuestion = {
   required?: boolean;
   options?: string[];
   event_id?: string; // type "day" only: position marker for that day's attendance question
+  /** type "day" only: the day stays on the form but its attendance question isn't asked. */
+  hidden?: boolean;
   /** The answer has to match this regex. See lib/pattern.ts for the accepted forms. */
   answer_pattern?: string;
   /** What the member is told when answer_pattern fails. */

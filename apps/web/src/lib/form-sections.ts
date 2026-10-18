@@ -68,11 +68,18 @@ export function sectionPath<T>(sections: Section<T>[], questionOf: (it: T) => Fo
 }
 
 /** Server side: which questions and attendance days are on this respondent's path.
- * Days without a marker (older forms) belong to section 1. */
+ * Days without a marker (older forms) belong to section 1; hidden days aren't asked. */
 export function answeredParts(questions: FormQuestion[], valueOf: (qid: string) => unknown) {
   const sections = splitSections(questions, (q) => q);
   const { path, loop } = sectionPath(sections, (q) => q, valueOf);
   const onPath = new Set(path.flatMap((i) => sections[i].items));
-  const skippedDays = new Set(questions.filter((q) => q.type === "day" && q.event_id && !onPath.has(q)).map((q) => q.event_id!));
-  return { loop, isAnswered: (q: FormQuestion) => onPath.has(q), dayAnswered: (eventId: string) => !skippedDays.has(eventId) };
+  const skippedDays = new Set(questions.filter((q) => q.type === "day" && q.event_id && !q.hidden && !onPath.has(q)).map((q) => q.event_id!));
+  const hiddenDays = new Set(questions.filter((q) => q.type === "day" && q.hidden).map((q) => q.event_id));
+  return {
+    loop,
+    isAnswered: (q: FormQuestion) => onPath.has(q),
+    dayAnswered: (eventId: string) => !skippedDays.has(eventId) && !hiddenDays.has(eventId),
+    /** The day's question is hidden: it isn't asked, and earlier answers are left alone. */
+    dayHidden: (eventId: string) => hiddenDays.has(eventId),
+  };
 }
