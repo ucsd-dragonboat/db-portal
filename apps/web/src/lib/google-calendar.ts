@@ -314,6 +314,10 @@ export function toGoogleBirthday(userId: string, name: string, birthday: string,
   };
 }
 
+/** What a birthday sync would change: names (with the year) to add or fix, and how many
+ * events of people no longer on the team (or old recurring ones) would be deleted. */
+export type BirthdayPlan = { people: number; wanted: number; onCalendar: number; missing: string[]; outdated: string[]; stale: number };
+
 const sameBirthday = (a: GEvent, b: GEvent) => a.summary === b.summary && a.start?.date === b.start?.date && !a.recurrence?.length;
 
 /** Make the team calendar's birthdays match the roster: this year's and next year's
@@ -321,11 +325,12 @@ const sameBirthday = (a: GEvent, b: GEvent) => a.summary === b.summary && a.star
  * of a person's birthday events once they leave the team or clear their birthday, and
  * the old recurring ones; past years stay for current teammates. One list call, then
  * writes only for what changed, 5 at a time, stopping at maxWrites or the deadline.
- * Never throws — called from the cron, on connect and by "Sync now". */
+ * Never throws — called from the cron, on connect and by "Sync now". `dryRun` (the admin
+ * Status page) only reports what's out of step, writing nothing. */
 export async function syncBirthdaysToGoogle(
   orgId: string,
-  { maxWrites = BIRTHDAY_WRITES_PER_RUN, deadline = Infinity, now = new Date() }: { maxWrites?: number; deadline?: number; now?: Date } = {},
-): Promise<{ written: number; left: number } | { error: string }> {
+  { maxWrites = BIRTHDAY_WRITES_PER_RUN, deadline = Infinity, now = new Date(), dryRun = false }: { maxWrites?: number; deadline?: number; now?: Date; dryRun?: boolean } = {},
+): Promise<{ written: number; left: number; plan?: BirthdayPlan } | { error: string }> {
   try {
     const sync = await getCalendarSync(orgId);
     if (!sync) return { written: 0, left: 0 };
@@ -357,9 +362,11 @@ export async function syncBirthdaysToGoogle(
     } while (pageToken);
 
     const ops: (() => Promise<void>)[] = [];
+    const plan: BirthdayPlan = { people: people.size, wanted: want.size, onCalendar: have.size, missing: [], outdated: [], stale: 0 };
     for (const id of have.keys()) {
       const m = id.match(OUR_BIRTHDAY);
       if (!m || (m[2] && people.has(m[1]))) continue; // not ours, or a current teammate's
+      plan.stale++;
       ops.push(async () => {
         try { await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "DELETE" }); }
         catch (e) { if (!(e instanceof CalApiError && (e.status === 404 || e.status === 410))) throw e; }
@@ -368,6 +375,7 @@ export async function syncBirthdaysToGoogle(
     for (const [id, ev] of want) {
       const cur = have.get(id);
       if (cur && sameBirthday(cur, ev)) continue;
+      (cur ? plan.outdated : plan.missing).push(ev.summary!.replace(/^🎂 |'s birthday$/g, "") + ` (${id.slice(-4)})`);
       ops.push(async () => {
         if (cur) { await calFetch(token, eventsUrl(sync.calendar_id, `/${id}`), { method: "PUT", body: JSON.stringify(ev) }); return; }
         try {
@@ -380,6 +388,7 @@ export async function syncBirthdaysToGoogle(
       });
     }
 
+    if (dryRun) return { written: 0, left: ops.length, plan };
     let written = 0, done = 0;
     while (done < ops.length && written < maxWrites && Date.now() < deadline) {
       const batch = ops.slice(done, done + Math.min(5, maxWrites - written));
