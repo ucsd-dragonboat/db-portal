@@ -6,7 +6,7 @@ import { MATRIX_PROVIDERS, ROUTE_PROVIDERS, buildNominatimSearchUrl, parseNomina
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getAccessToken, getSheetTabs, googleClientEnv, listSpreadsheets } from "@/lib/google-sheets";
-import { getCalendarSync, listWritableCalendars } from "@/lib/google-calendar";
+import { getCalendarSync, listWritableCalendars, syncBirthdaysToGoogle } from "@/lib/google-calendar";
 import type { Database } from "@/lib/database.types";
 
 export type CheckStatus = "ok" | "warn" | "fail" | "skip";
@@ -278,6 +278,27 @@ const CHECKS: Check[] = [
         if (!res.ok) return googleStatus({ status: res.status, message: `calendar ${res.status}` });
         return ok(`“${String(json?.summary ?? sync.calendar_id)}” opens. Incremental sync token: ${sync.sync_token ? "present" : "missing (next pull does a full sync)"}.`);
       } catch (e) { return googleStatus(e); }
+    },
+  },
+  {
+    id: "google.birthdays", group: "Google OAuth", label: "Team calendar birthdays",
+    description: "Every teammate with a birthday has this year's and next year's 🎂 event on the team calendar, and no one who left still does. Read-only — Settings → Sync now (or the hourly automatic sync) fixes gaps.",
+    async run(ctx) {
+      const sync = await getCalendarSync(ctx.orgId).catch(() => null);
+      if (!sync) return skip("No team calendar linked.");
+      const r = await syncBirthdaysToGoogle(ctx.orgId, { dryRun: true });
+      if ("error" in r) return googleStatus(new Error(r.error));
+      const p = r.plan!;
+      const list = (names: string[]) => names.slice(0, 6).join(", ") + (names.length > 6 ? ` +${names.length - 6} more` : "");
+      const summary = `${p.people} teammate${p.people === 1 ? "" : "s"} with a birthday → ${p.wanted} events expected; ${p.onCalendar} birthday events on the calendar.`;
+      if (!p.missing.length && !p.outdated.length && !p.stale) return ok(`In sync. ${summary}`);
+      return warn([
+        summary,
+        p.missing.length ? `Missing ${p.missing.length}: ${list(p.missing)}.` : "",
+        p.outdated.length ? `Out of date ${p.outdated.length}: ${list(p.outdated)}.` : "",
+        p.stale ? `${p.stale} left over from people no longer on the team (or old repeating events).` : "",
+        "Settings → Sync now fixes these (the hourly automatic sync also does, 25 at a time).",
+      ].filter(Boolean).join(" "));
     },
   },
   {
