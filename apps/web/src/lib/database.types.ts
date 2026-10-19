@@ -26,6 +26,10 @@ export type Profile = {
   lon: number | null;
   car_passengers: number;
   attendance_adjustment: number;
+  /** Admin corrections to the Statistics driving totals (migration 0043). */
+  drives_adjustment: number;
+  miles_adjustment: number;
+  minutes_adjustment: number;
   created_at: string;
   updated_at: string;
 };
@@ -365,7 +369,7 @@ export type Database = {
     Tables: {
       profiles: {
         Row: Row<Profile>;
-        Insert: Insert<Profile, "phone" | "weight_lb" | "birthday" | "default_pickup_location_id" | "default_saved_location_id" | "gender" | "side_preference" | "can_steer" | "can_drum" | "address" | "city" | "zipcode" | "lat" | "lon" | "car_passengers" | "attendance_adjustment" | "created_at" | "updated_at" | "full_name">;
+        Insert: Insert<Profile, "phone" | "weight_lb" | "birthday" | "default_pickup_location_id" | "default_saved_location_id" | "gender" | "side_preference" | "can_steer" | "can_drum" | "address" | "city" | "zipcode" | "lat" | "lon" | "car_passengers" | "attendance_adjustment" | "drives_adjustment" | "miles_adjustment" | "minutes_adjustment" | "created_at" | "updated_at" | "full_name">;
         Update: Partial<Profile>;
         Relationships: [];
       };

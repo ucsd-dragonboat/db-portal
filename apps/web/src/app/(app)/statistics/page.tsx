@@ -3,7 +3,7 @@ import Icon from "@/components/icon";
 import { requireOrg } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import type { CarpoolTrip, Membership, Profile } from "@/lib/database.types";
-import { AttendanceCell, PairsView } from "./forms";
+import { PairsView, StatCell } from "./forms";
 
 export default async function StatisticsPage() {
   const { org, isAdmin } = await requireOrg();
@@ -34,7 +34,7 @@ export default async function StatisticsPage() {
       <div>
         <h1 className="text-2xl font-normal">Statistics</h1>
         <p className="text-sm" style={{ color: "var(--g-grey-600)" }}>
-          Attendance and driving totals for the whole team. Miles/minutes only count carpools published after this page shipped.
+          Attendance and driving totals for the whole team. Miles/minutes only count carpools published after this page shipped.{isAdmin && " Type a new total in any cell and Save to correct it — later carpools keep adding to it."}
         </p>
       </div>
 
@@ -49,16 +49,25 @@ export default async function StatisticsPage() {
           </thead>
           <tbody>
             {roster.map((m, i) => {
-              const d = driverStats[m.user_id];
-              const attendance = (attendanceYes[m.user_id] ?? 0) + m.profile.attendance_adjustment;
+              const d = driverStats[m.user_id], p = m.profile;
+              // Shown = computed + the admin's correction (migrations 0025, 0043).
+              const att = attendanceYes[m.user_id] ?? 0, drives = d?.timesDriven ?? 0, miles = d?.milesDriven ?? 0, mins = d?.minutesDriven ?? 0;
+              const shown = {
+                attendance: att + p.attendance_adjustment,
+                drives: drives + (p.drives_adjustment ?? 0),
+                miles: Math.round((miles + Number(p.miles_adjustment ?? 0)) * 10) / 10,
+                minutes: Math.round(mins + Number(p.minutes_adjustment ?? 0)),
+              };
+              const cell = (field: keyof typeof shown, computed: number, text: string, step = 1) =>
+                isAdmin ? <StatCell userId={m.user_id} field={field} computed={computed} value={shown[field]} step={step} /> : text;
               return (
                 <tr key={m.user_id}>
                   <td className="gutter">{i + 1}</td>
-                  <td className="font-medium whitespace-nowrap">{m.profile.full_name || m.profile.email}</td>
-                  <td>{isAdmin ? <AttendanceCell userId={m.user_id} value={attendance} /> : attendance}</td>
-                  <td>{d?.timesDriven ?? 0}</td>
-                  <td>{d ? d.milesDriven.toFixed(1) : "0.0"}</td>
-                  <td>{d ? Math.round(d.minutesDriven) : 0}</td>
+                  <td className="font-medium whitespace-nowrap">{p.full_name || p.email}</td>
+                  <td>{cell("attendance", att, String(shown.attendance))}</td>
+                  <td>{cell("drives", drives, String(shown.drives))}</td>
+                  <td>{cell("miles", miles, shown.miles.toFixed(1), 0.1)}</td>
+                  <td>{cell("minutes", mins, String(shown.minutes))}</td>
                 </tr>
               );
             })}
