@@ -13,6 +13,7 @@ import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
 import SheetsLink from "./sheets-link";
 import ConfirmForm from "@/components/confirm-form";
 import { deleteResponseAsAdmin } from "./actions";
+import { fileHref, isFileAnswer } from "@/lib/form-files";
 
 export default async function FormResponsesPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ google?: string }> }) {
   const [{ id }, { google: googleReturn }] = await Promise.all([params, searchParams]);
@@ -24,7 +25,10 @@ export default async function FormResponsesPage({ params, searchParams }: { para
   const events = input.events;
   const rsvpBy = new Map<string, Rsvp>();
   for (const r of input.rsvps) rsvpBy.set(`${r.event_id}:${r.user_id}`, r);
-  const { profiles, responded, missing, header, rows, lateFlags } = buildResponseGrid(input);
+  const { questions, profiles, responded, missing, header, rows, lateFlags } = buildResponseGrid(input);
+  // File upload columns link each file (the grid itself holds just the names, for CSV/Sheets).
+  const answersBy = new Map(input.responses.map((r) => [r.user_id, (r.answers as Record<string, unknown> | null) ?? {}]));
+  const fileCols = new Map(questions.flatMap((q, k) => (q.type === "file_upload" ? [[4 + events.length + k, q.id] as const] : [])));
   const google = await getGoogleConnection(userId).catch(() => null); // null until migration 0022 runs
 
   return (
@@ -90,7 +94,14 @@ export default async function FormResponsesPage({ params, searchParams }: { para
                     <button className="underline" style={{ color: "var(--g-red)" }} title="Delete this response">Delete</button>
                   </ConfirmForm>
                 </td>
-                {r.map((c, j) => <td key={j} className="max-w-[240px] whitespace-pre-wrap" style={j === r.length - 1 && c ? { color: c === "Late" ? "var(--g-red)" : "var(--g-green)", fontWeight: 500 } : undefined}>{String(c)}</td>)}
+                {r.map((c, j) => {
+                  const files = fileCols.has(j) ? answersBy.get(responded[i].id)?.[fileCols.get(j)!] : undefined;
+                  return <td key={j} className="max-w-[240px] whitespace-pre-wrap" style={j === r.length - 1 && c ? { color: c === "Late" ? "var(--g-red)" : "var(--g-green)", fontWeight: 500 } : undefined}>
+                    {isFileAnswer(files)
+                      ? files.map((f, k) => <span key={f.path}>{k > 0 && ", "}<a href={fileHref(f.path)} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--g-purple)" }}>{f.name}</a></span>)
+                      : String(c)}
+                  </td>;
+                })}
               </tr>
             ))}
             {!rows.length && <tr><td colSpan={header.length + 2} className="p-3" style={{ color: "var(--g-grey-600)" }}>No responses yet.</td></tr>}

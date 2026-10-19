@@ -137,7 +137,7 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
   // Fun-fact panel: answerable questions from the form(s) linked to this day + everyone's answers.
   const forms = (formLinks ?? []).map((l) => l.form as unknown as { id: string; questions: unknown }).filter(Boolean);
   const funFactQuestions = forms.flatMap((f) => ((f.questions as FormQuestion[]) ?? [])
-    .filter((q) => q.type !== "info" && q.type !== "day" && q.type !== "section")
+    .filter((q) => q.type !== "info" && q.type !== "day" && q.type !== "section" && q.type !== "file_upload")
     .map((q) => ({ id: q.id, label: htmlToText(q.label) })));
   const funFactAnswers: Record<string, { userId: string; text: string }[]> = {};
   if (forms.length) {

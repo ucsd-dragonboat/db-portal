@@ -1,6 +1,7 @@
 import { toChoice, ATTENDANCE_OPTIONS, attendancePrompt } from "@/lib/attendance";
 import { htmlToText } from "@/lib/html";
 import { fmtSortable } from "@/lib/format";
+import { isFileAnswer } from "@/lib/form-files";
 import type { Form, FormQuestion, FormResponse, Profile, Rsvp } from "@/lib/database.types";
 
 const choiceLabel = Object.fromEntries(ATTENDANCE_OPTIONS.map((o) => [o.value, o.label.replace(/ [^\w\s]+$/u, "")]));
@@ -12,6 +13,7 @@ export type GridEvent = { id: string; title: string; starts_at: string; kind: st
 /** One stored answer → display text (arrays joined, booleans Yes/No, HTML flattened). */
 export function flattenAnswer(a: unknown): string {
   if (a == null || a === "") return "";
+  if (isFileAnswer(a)) return a.map((f) => f.name).join(", ");
   if (Array.isArray(a)) return a.join(", ");
   if (typeof a === "boolean") return a ? "Yes" : "No";
   return htmlToText(String(a));

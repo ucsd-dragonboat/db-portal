@@ -17,6 +17,7 @@ import { attendancePrompt } from "@/lib/attendance";
 import { htmlToText } from "@/lib/html";
 import { patternError, testPattern } from "@/lib/pattern";
 import { NEXT, SUBMIT } from "@/lib/form-sections";
+import { DEFAULT_MAX_FILES, DEFAULT_MAX_MB, FILE_KINDS, MAX_FILES_LIMIT, MAX_MB_LIMIT, TEAM_FILES_CAP, maxBytes, maxFiles } from "@/lib/form-files";
 
 type EventOpt = { id: string; title: string; kind: string; starts_at: string; group_id: string | null };
 type GroupOpt = { id: string; name: string };
@@ -27,6 +28,7 @@ const TYPES: { value: QuestionType; label: string; icon: string }[] = [
   { value: "short_text", label: "Short answer", icon: "―" },
   { value: "long_text", label: "Paragraph", icon: "☰" },
   { value: "number", label: "Number", icon: "#" },
+  { value: "file_upload", label: "File upload", icon: "⇪" },
   { value: "info", label: "Info block (no answer)", icon: "¶" },
 ];
 /** Question types whose answer is free text, so an answer pattern means something. */
@@ -373,7 +375,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
                     : <span className="text-base" style={{ color: "var(--g-grey-600)" }}>{q.type === "info" ? "Title (optional)" : "Question"}</span>}
               </div>
               {active && (
-                <select value={q.type} onChange={(e) => updQ(q.id, { type: e.target.value as QuestionType, ...(PATTERN_TYPES.includes(e.target.value as QuestionType) ? {} : { answer_pattern: undefined, answer_error: undefined }), options: ["single_choice", "multi_choice"].includes(e.target.value) ? (q.options?.length ? q.options : ["Option 1"]) : undefined, ...(e.target.value === "info" ? { required: false } : {}) })} className="input w-48">
+                <select value={q.type} onChange={(e) => updQ(q.id, { type: e.target.value as QuestionType, ...(PATTERN_TYPES.includes(e.target.value as QuestionType) ? {} : { answer_pattern: undefined, answer_error: undefined }), options: ["single_choice", "multi_choice"].includes(e.target.value) ? (q.options?.length ? q.options : ["Option 1"]) : undefined, ...(e.target.value === "info" ? { required: false } : {}), ...(e.target.value === "file_upload" ? { max_files: q.max_files ?? DEFAULT_MAX_FILES, max_mb: q.max_mb ?? DEFAULT_MAX_MB } : {}) })} className="input w-48">
                   {TYPES.map((x) => <option key={x.value} value={x.value}>{x.icon} {x.label}</option>)}
                 </select>
               )}
@@ -399,6 +401,7 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
             {q.type === "yes_no" && <div className="text-sm space-y-1" style={{ color: "var(--g-grey-600)" }}>
               {(["yes", "no"] as const).map((v) => <div key={v} className="flex items-center gap-3"><span className="flex-1 capitalize">◯ {v}</span>{branchSelect(q, v)}</div>)}
             </div>}
+            {q.type === "file_upload" && <FileSettings q={q} active={active} onChange={(patch) => updQ(q.id, patch)} />}
             {(q.type === "short_text" || q.type === "long_text" || q.type === "number") && <div className="text-sm border-b border-dotted w-1/2 pb-1" style={{ color: "var(--g-grey-600)", borderColor: "var(--g-grey-300)" }}>{t.label} text</div>}
 
             {active && (
@@ -431,6 +434,46 @@ export default function FormEditor({ id, initial, events, groups, pickups }: { i
         <ConfirmForm action={deleteForm} message={`Delete “${f.title || "this form"}” and all its responses? This can’t be undone.`}><input type="hidden" name="id" value={id} /><button className="btn-danger-text">Delete form</button></ConfirmForm>
         <span style={{ color: "var(--g-grey-600)" }}>Members get name / weight / phone / address from their profile automatically.</span>
       </div>
+    </div>
+  );
+}
+
+/** A File upload question: Google's settings (file types, how many, how big) when
+ * selected, a preview of the upload button otherwise. */
+function FileSettings({ q, active, onChange }: { q: FormQuestion; active: boolean; onChange: (patch: Partial<FormQuestion>) => void }) {
+  const kinds = q.file_kinds ?? [];
+  const clamp = (v: string, max: number) => Math.min(max, Math.max(1, Math.round(Number(v)) || 1));
+  const summary = `Up to ${maxFiles(q)} file${maxFiles(q) === 1 ? "" : "s"}, ${maxBytes(q) / 1048576} MB each${kinds.length ? ` · ${FILE_KINDS.filter((k) => kinds.includes(k.key)).map((k) => k.label).join(", ")}` : ""}`;
+  if (!active) return (
+    <div className="flex items-center gap-3 text-sm" style={{ color: "var(--g-grey-600)" }}>
+      <span className="rounded border px-3 py-1" style={{ borderColor: "var(--g-grey-300)" }}>⇪ Add file</span>{summary}
+    </div>
+  );
+  return (
+    <div className="space-y-3 text-sm">
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={!!q.file_kinds} onChange={(e) => onChange({ file_kinds: e.target.checked ? [] : undefined })} className="accent-[var(--g-purple)] w-4 h-4" />
+        Allow only specific file types
+      </label>
+      {q.file_kinds && (
+        <div className="ml-6 grid grid-cols-2 gap-1 sm:grid-cols-4">
+          {FILE_KINDS.map((k) => (
+            <label key={k.key} className="flex items-center gap-2">
+              <input type="checkbox" checked={kinds.includes(k.key)} onChange={(e) => onChange({ file_kinds: e.target.checked ? [...kinds, k.key] : kinds.filter((x) => x !== k.key) })} className="accent-[var(--g-purple)] w-4 h-4" />
+              {k.label}
+            </label>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-6">
+        <label className="flex items-center gap-2">Maximum number of files
+          <input type="number" min={1} max={MAX_FILES_LIMIT} value={maxFiles(q)} onChange={(e) => onChange({ max_files: clamp(e.target.value, MAX_FILES_LIMIT) })} className="input w-20 py-1" />
+        </label>
+        <label className="flex items-center gap-2">Maximum file size (MB)
+          <input type="number" min={1} max={MAX_MB_LIMIT} value={maxBytes(q) / 1048576} onChange={(e) => onChange({ max_mb: clamp(e.target.value, MAX_MB_LIMIT) })} className="input w-20 py-1" />
+        </label>
+      </div>
+      <p className="text-xs" style={{ color: "var(--g-grey-600)" }}>Files are private — only team admins and the person who uploaded them can open them. Up to {MAX_FILES_LIMIT} files and {MAX_MB_LIMIT} MB per file; the team has {TEAM_FILES_CAP / 1048576} MB of uploads in total.</p>
     </div>
   );
 }

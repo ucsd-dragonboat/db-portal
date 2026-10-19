@@ -73,7 +73,7 @@ export default async function PublicFormPage({ params, searchParams }: { params:
       <div className="mx-auto max-w-[640px] space-y-3">
         {form.status === "open"
           ? <FillForm titleCard={titleCard(true)} laterTitleCard={titleCard(false)} formId={id} events={events} rsvpBy={{}} questions={(form.questions as unknown as FormQuestion[]) ?? []}
-              existingAnswers={null} pickups={pickups ?? []} defaultSeats={null} weightLb={null} askWeight={form.ask_weight} askBirthday campusPickup={form.campus_pickup ?? null} submittedAt={null}
+              anonymous existingAnswers={null} pickups={pickups ?? []} defaultSeats={null} weightLb={null} askWeight={form.ask_weight} askBirthday campusPickup={form.campus_pickup ?? null} submittedAt={null}
               submitAction={submitPublicForm} header={identity} />
           : <>{titleCard(true)}<div className="gf-card text-sm" style={grey}>This form is no longer accepting responses.</div></>}
         <p className="text-center text-xs pt-4" style={grey}>{org.name} · Team Portal</p>

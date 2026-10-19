@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enqueueDueForms, processQueue } from "@/lib/carpool-queue";
 import { removeDemoImages } from "@/lib/demo";
 import { allowRate } from "@/lib/rate-limit";
+import { FORM_FILES_BUCKET } from "@/lib/form-files";
 import { pullGoogleCalendar, syncBirthdaysToGoogle } from "@/lib/google-calendar";
 import { notifyEventDeadline, notifyFormDeadline } from "@/lib/notifications";
 
@@ -59,7 +60,7 @@ export async function POST(req: Request) {
 
   // Once a day, delete images nothing uses anymore (migration 0039). The 3-day grace
   // covers drafts and half-filled answers that haven't been saved yet.
-  let imagesSwept = 0;
+  let imagesSwept = 0, filesSwept = 0;
   if (await allowRate("image-sweep", 1, 86400)) {
     const { data: orphans, error } = await supabase.rpc("orphan_images", { min_age: "3 days" });
     if (error) console.error("[cron] image sweep:", error.message);
@@ -69,9 +70,19 @@ export async function POST(req: Request) {
       if (rmErr) { console.error("[cron] image sweep remove:", rmErr.message); break; }
       imagesSwept += batch.length;
     }
+    // Form uploads nothing points at: never submitted, removed from an answer, or the
+    // response/form was deleted (migration 0042).
+    const { data: files, error: fErr } = await supabase.rpc("orphan_form_files", { min_age: "3 days" });
+    if (fErr) console.error("[cron] form file sweep:", fErr.message);
+    for (let i = 0; i < (files ?? []).length; i += 100) {
+      const batch = files!.slice(i, i + 100);
+      const { error: rmErr } = await supabase.storage.from(FORM_FILES_BUCKET).remove(batch);
+      if (rmErr) { console.error("[cron] form file sweep remove:", rmErr.message); break; }
+      filesSwept += batch.length;
+    }
   }
   // Carpool building goes last: if a slow build gets this call killed, the jobs above
   // have already run, and the build itself is re-queued by the next tick.
   const carpools = await processQueue(supabase, CARPOOL_BUDGET_MS);
-  return NextResponse.json({ carpools: { ...queued, ...carpools }, gcal, reminders, demoCleaned, imagesSwept });
+  return NextResponse.json({ carpools: { ...queued, ...carpools }, gcal, reminders, demoCleaned, imagesSwept, filesSwept });
 }

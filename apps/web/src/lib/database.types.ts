@@ -263,7 +263,7 @@ export type Rsvp = {
   updated_at: string;
 };
 
-export type QuestionType = "short_text" | "long_text" | "single_choice" | "multi_choice" | "yes_no" | "number" | "info" | "day" | "section";
+export type QuestionType = "short_text" | "long_text" | "single_choice" | "multi_choice" | "yes_no" | "number" | "info" | "day" | "section" | "file_upload";
 export type FormQuestion = {
   id: string;
   type: QuestionType;
@@ -289,6 +289,11 @@ export type FormQuestion = {
   /** single_choice / yes_no only, "Go to section based on answer": option → target
    * ("next", "submit" or a section marker id). Present = turned on. */
   branch?: Record<string, string>;
+  /** file_upload only (lib/form-files.ts): allowed FILE_KINDS keys (missing/empty = any
+   * type), how many files, and the largest file in MB. */
+  file_kinds?: string[];
+  max_files?: number;
+  max_mb?: number;
 };
 
 export type Form = {
@@ -579,6 +584,9 @@ export type Database = {
       attendance_counts: { Args: { org: string }; Returns: { user_id: string; n: number }[] };
       team_images: { Args: { p_org: string }; Returns: TeamImage[] };
       orphan_images: { Args: { min_age: string }; Returns: string[] };
+      form_file_meta: { Args: { p_paths: string[] }; Returns: { name: string; size: number; mime: string | null }[] };
+      form_files_bytes: { Args: { p_org: string }; Returns: number };
+      orphan_form_files: { Args: { min_age: string }; Returns: string[] };
       legacy_images_for: { Args: { p_org: string }; Returns: string[] };
       rewrite_image_path: { Args: { p_org: string; old_name: string; new_name: string }; Returns: number };
       claim_carpool_run: { Args: { p_skip: string[] }; Returns: CarpoolRun[] };

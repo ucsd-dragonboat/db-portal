@@ -17,6 +17,8 @@ import type { Event, FormQuestion, Rsvp } from "@/lib/database.types";
 import type { CampusSpot } from "@/lib/campus-spots";
 import Icon from "@/components/icon";
 import { SUBMIT, nextTarget, splitSections } from "@/lib/form-sections";
+import FileUploadField from "@/components/file-upload-field";
+import { isFileAnswer, type FileAnswer } from "@/lib/form-files";
 
 const Q = ({ title, required, help, meta, children, group, missing }: {
   title: React.ReactNode; required?: boolean; help?: string; meta?: React.ReactNode; children: React.ReactNode;
@@ -37,7 +39,7 @@ function ParagraphAnswer({ name, initial }: { name: string; initial: string }) {
   return (<><input type="hidden" name={name} value={v} /><RichEditor value={v} onChange={setV} minRows={3} placeholder="Your answer" /></>);
 }
 
-export default function FillForm({ formId, events, rsvpBy, questions, existingAnswers, pickups, defaultSeats, weightLb, askWeight, askBirthday = false, defaultPickupId = null, campusPickup = null, submittedAt, submitAction = submitForm, header, savedMessage, titleCard, laterTitleCard, intro }: {
+export default function FillForm({ formId, events, rsvpBy, questions, existingAnswers, pickups, defaultSeats, weightLb, askWeight, askBirthday = false, defaultPickupId = null, campusPickup = null, submittedAt, submitAction = submitForm, header, savedMessage, titleCard, laterTitleCard, intro, anonymous = false }: {
   formId: string; events: { prompt: string | null; event: Event }[]; rsvpBy: Record<string, Rsvp>; questions: FormQuestion[];
   existingAnswers: Record<string, unknown> | null; pickups: CampusSpot[]; defaultSeats: number | null; weightLb: number | null; askWeight: boolean; submittedAt: string | null;
   /** The member has no birthday on their profile yet (or is anonymous): ask for it, required. */
@@ -55,6 +57,8 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
   titleCard?: React.ReactNode; laterTitleCard?: React.ReactNode;
   /** Cards shown only on page 1, under the title card. */
   intro?: React.ReactNode;
+  /** The shared /f/ link: nobody's signed in, so uploaded files can't be opened again. */
+  anonymous?: boolean;
 }) {
   const [state, action, pending] = useActionState<SubmitState, FormData>(submitAction, {});
   const a = (id: string) => existingAnswers?.[id];
@@ -141,7 +145,7 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
         {q.help && <RichTextView html={q.help} />}
       </div>
     );
-    const group = q.required && (q.type === "long_text" || q.type === "multi_choice") ? q.id : undefined;
+    const group = q.required && (q.type === "long_text" || q.type === "multi_choice" || q.type === "file_upload") ? q.id : undefined;
     return (
       <Q key={q.id} title={<span className="[&>div]:inline-block [&>div]:align-top [&_p]:inline"><RichTextView html={q.label} className="!text-base" /></span>} required={q.required} help={q.help} group={group} missing={missing.has(q.id)}>
         {q.type === "short_text" && <input name={`q_${q.id}`} defaultValue={(a(q.id) as string) ?? ""} required={q.required} placeholder="Your answer" className="input-line w-1/2" />}
@@ -153,6 +157,7 @@ export default function FillForm({ formId, events, rsvpBy, questions, existingAn
         {q.type === "single_choice" && (q.options ?? []).map((o) => (
           <label key={o} className="gf-radio"><input type="radio" name={`q_${q.id}`} value={o} required={q.required} defaultChecked={a(q.id) === o} /> {o}</label>
         ))}
+        {q.type === "file_upload" && <FileUploadField formId={formId} q={q} initial={isFileAnswer(a(q.id)) ? (a(q.id) as FileAnswer[]) : []} canOpen={!anonymous} />}
         {q.type === "multi_choice" && (q.options ?? []).map((o) => (
           <label key={o} className="gf-radio"><input type="checkbox" name={`q_${q.id}`} value={o} defaultChecked={Array.isArray(a(q.id)) && (a(q.id) as string[]).includes(o)} /> {o}</label>
         ))}
