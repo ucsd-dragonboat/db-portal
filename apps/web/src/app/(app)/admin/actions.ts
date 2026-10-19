@@ -11,6 +11,7 @@ import { disconnectGoogle } from "@/lib/google-sheets";
 import { createTeamCalendar, disconnectTeamCalendar, linkExistingCalendar, removeEventFromGoogle, syncBirthdaysToGoogle, syncEventToGoogle, syncTeamCalendarNow } from "@/lib/google-calendar";
 import { notifyEventPosted } from "@/lib/notifications";
 import { syncSheetsForMember } from "@/lib/sheet-sync";
+import { parseBirthday } from "@/lib/birthday";
 
 export type AdminState = { error?: string; ok?: boolean };
 
@@ -384,14 +385,20 @@ export async function importMembers(_: AdminState, fd: FormData): Promise<AdminS
 }
 
 export async function updateMember(fd: FormData) {
-  await requireAdmin();
+  const { org } = await requireAdmin();
   const supabase = await createClient();
   const g = str(fd.get("gender"));
+  // Blank clears the birthday; anything that isn't a real past date leaves it as it was.
+  const bdRaw = String(fd.get("birthday") ?? "").trim();
+  const birthday = bdRaw ? parseBirthday(bdRaw) : null;
+  const bdChanged = (!bdRaw || !!birthday) && (birthday ?? "") !== String(fd.get("birthday_was") ?? "");
   await supabase.from("profiles").update({
     full_name: String(fd.get("full_name") ?? "").trim(), address: str(fd.get("address")), city: str(fd.get("city")), zipcode: str(fd.get("zipcode")),
     lat: optNum(fd.get("lat")), lon: optNum(fd.get("lon")), car_passengers: optNum(fd.get("car_passengers")) ?? 0, gender: (g as "male" | "female" | "other" | null), weight_lb: optNum(fd.get("weight_lb")),
+    ...(bdChanged ? { birthday } : {}),
   }).eq("id", String(fd.get("user_id")));
   expireUser(String(fd.get("user_id")));
+  if (bdChanged) after(() => syncBirthdaysToGoogle(org.id)); // keep the team Google Calendar's birthdays right
   after(() => syncSheetsForMember(String(fd.get("user_id"))));
   revalidatePath("/admin/members");
 }
