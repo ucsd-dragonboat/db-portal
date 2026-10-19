@@ -3,6 +3,7 @@
 // lines start with a space), text values escape \ ; , and newlines.
 
 import { fmtDateTime, TEAM_TZ } from "@/lib/format";
+import { birthdayInYear } from "@/lib/birthday";
 
 export type IcsEvent = {
   id: string;
@@ -49,7 +50,16 @@ function icsUtc(iso: string): string {
 
 const TWO_HOURS_MS = 2 * 3600e3;
 
-export function buildIcs({ name, origin, events }: { name: string; origin: string; events: IcsEvent[] }): string {
+/** A teammate's birthday: "MM-DD" only — the birth year never leaves the portal. */
+export type IcsBirthday = { userId: string; name: string; md: string };
+
+/** YYYYMMDD of month-day `md` in `year`, shifted by `plusDays` (Feb 29 → Feb 28 in other years). */
+function icsDate(md: string, year: number, plusDays = 0): string {
+  const [m, d] = birthdayInYear(md, year).split("-").map(Number);
+  return new Date(Date.UTC(year, m - 1, d + plusDays)).toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+export function buildIcs({ name, origin, events, birthdays = [], now = new Date() }: { name: string; origin: string; events: IcsEvent[]; birthdays?: IcsBirthday[]; now?: Date }): string {
   const host = new URL(origin).host;
   const lines: string[] = [
     "BEGIN:VCALENDAR",
@@ -80,6 +90,25 @@ export function buildIcs({ name, origin, events }: { name: string; origin: strin
       `DESCRIPTION:${icsEscape(description)}`,
       "END:VEVENT",
     );
+  }
+  // Birthdays: this year's and next year's, like the team Google Calendar sync — all-day
+  // and free, so they never block anyone's schedule.
+  const year = now.getUTCFullYear();
+  const stamp = icsUtc(new Date(Date.UTC(year, 0, 1)).toISOString());
+  for (const b of birthdays) {
+    for (const y of [year, year + 1]) {
+      lines.push(
+        "BEGIN:VEVENT",
+        `UID:bd-${b.userId}-${y}@${host}`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART;VALUE=DATE:${icsDate(b.md, y)}`,
+        `DTEND;VALUE=DATE:${icsDate(b.md, y, 1)}`,
+        `SUMMARY:${icsEscape(`🎂 ${b.name}'s birthday`)}`,
+        "CATEGORIES:birthday",
+        "TRANSP:TRANSPARENT",
+        "END:VEVENT",
+      );
+    }
   }
   lines.push("END:VCALENDAR");
   return lines.map(foldLine).join("\r\n") + "\r\n";
