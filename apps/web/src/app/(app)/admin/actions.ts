@@ -12,6 +12,7 @@ import { createTeamCalendar, disconnectTeamCalendar, linkExistingCalendar, remov
 import { notifyEventPosted } from "@/lib/notifications";
 import { syncSheetsForMember } from "@/lib/sheet-sync";
 import { parseBirthday } from "@/lib/birthday";
+import type { Profile } from "@/lib/database.types";
 
 export type AdminState = { error?: string; ok?: boolean };
 
@@ -418,13 +419,26 @@ export async function setMemberCap(_: AdminState, fd: FormData): Promise<AdminSt
 }
 
 /** Statistics page: manual delta added on top of the RSVP-derived attendance count. */
+/** Statistics page cells: the admin types the total they want shown; what's stored is the
+ * difference from the computed count, so later carpools/RSVPs keep adding to it. */
+const STAT_FIELDS = {
+  attendance: { column: "attendance_adjustment", whole: true, migration: "0025_carpool_trips.sql" },
+  drives: { column: "drives_adjustment", whole: true, migration: "0043_driving_adjustments.sql" },
+  miles: { column: "miles_adjustment", whole: false, migration: "0043_driving_adjustments.sql" },
+  minutes: { column: "minutes_adjustment", whole: true, migration: "0043_driving_adjustments.sql" },
+} as const;
+
 export async function setAttendanceAdjustment(_: AdminState, fd: FormData): Promise<AdminState> {
   await requireAdmin();
   const supabase = await createClient();
-  const value = Math.trunc(Number(fd.get("value")));
-  if (!Number.isFinite(value)) return { error: "Must be a whole number" };
-  const { error } = await supabase.from("profiles").update({ attendance_adjustment: value }).eq("id", String(fd.get("user_id")));
-  if (error) return { error: error.message.includes("attendance_adjustment") ? "Run migration 0025_carpool_trips.sql first" : error.message };
+  const f = STAT_FIELDS[String(fd.get("field") ?? "attendance") as keyof typeof STAT_FIELDS];
+  if (!f) return { error: "Unknown statistic" };
+  const raw = String(fd.get("value") ?? "").trim();
+  const value = Number(raw), computed = Number(fd.get("computed") ?? 0);
+  if (!raw || !Number.isFinite(value) || value < 0 || (f.whole && !Number.isInteger(value))) return { error: f.whole ? "Must be a whole number" : "Must be a number" };
+  // Miles/minutes columns are numeric, so the unrounded difference makes the shown total exactly what was typed.
+  const { error } = await supabase.from("profiles").update({ [f.column]: value - computed } as Partial<Pick<Profile, typeof f.column>>).eq("id", String(fd.get("user_id")));
+  if (error) return { error: error.message.includes(f.column) ? `Run migration ${f.migration} first` : error.message };
   expireUser(String(fd.get("user_id")));
   revalidatePath("/statistics");
   return { ok: true };

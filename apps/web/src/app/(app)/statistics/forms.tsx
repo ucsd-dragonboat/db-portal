@@ -4,12 +4,15 @@ import { useActionState, useMemo, useState } from "react";
 import type { PairStat } from "@db/carpool";
 import { setAttendanceAdjustment, type AdminState } from "../admin/actions";
 
-export function AttendanceCell({ userId, value }: { userId: string; value: number }) {
+/** An admin-editable total: `computed` is what the data says, `value` what's shown (computed + adjustment). */
+export function StatCell({ userId, field, computed, value, step = 1 }: { userId: string; field: "attendance" | "drives" | "miles" | "minutes"; computed: number; value: number; step?: number }) {
   const [state, action, pending] = useActionState<AdminState, FormData>(setAttendanceAdjustment, {});
   return (
     <form action={action} className="flex items-center gap-1">
       <input type="hidden" name="user_id" value={userId} />
-      <input name="value" type="number" defaultValue={value} className="input w-16 py-0.5 text-xs" />
+      <input type="hidden" name="field" value={field} />
+      <input type="hidden" name="computed" value={computed} />
+      <input key={value} name="value" type="number" min={0} step={step} defaultValue={value} className="input w-20 py-0.5 text-xs" />
       <button disabled={pending} className="btn-text py-0.5 text-xs">{pending ? "…" : "Save"}</button>
       {state.error && <span className="text-[11px]" style={{ color: "var(--g-red)" }}>{state.error}</span>}
     </form>
