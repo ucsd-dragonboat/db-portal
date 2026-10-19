@@ -12,8 +12,37 @@ import { parseBirthday } from "@/lib/birthday";
 import { saveDefaultPickup } from "@/lib/default-pickup";
 import { expireUser } from "@/lib/session-cache";
 import { answeredParts } from "@/lib/form-sections";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { fileAllowed, isFileAnswer, maxBytes, maxFiles, type FileAnswer } from "@/lib/form-files";
 
 export type SubmitState = { error?: string; saved?: boolean; warning?: string };
+
+/** A File upload answer (JSON from the fill page) checked against what's really in
+ * storage: only this form's folder, at most max_files, each within the question's size
+ * and type rules. Stores the size and type Storage recorded, not what the browser said. */
+async function checkFiles(orgId: string, formId: string, q: FormQuestion, raw: string): Promise<{ files: FileAnswer[] } | { error: string }> {
+  const label = htmlToText(q.label);
+  let picked: unknown = [];
+  try { if (raw.trim()) picked = JSON.parse(raw); } catch { /* handled below */ }
+  if (!isFileAnswer(picked)) return { error: `Couldn't read the files for "${label}" — please add them again.` };
+  const prefix = `${orgId}/${formId}/`;
+  const paths = [...new Set(picked.map((f) => f.path))].filter((p) => p.startsWith(prefix));
+  if (paths.length > maxFiles(q)) return { error: `"${label}" takes at most ${maxFiles(q)} file${maxFiles(q) === 1 ? "" : "s"}.` };
+  if (!paths.length) return { files: [] };
+  const { data: meta, error } = await createAdminClient().rpc("form_file_meta", { p_paths: paths });
+  if (error) return { error: error.message };
+  const stored = new Map((meta ?? []).map((m) => [m.name, m]));
+  const files: FileAnswer[] = [];
+  for (const path of paths) {
+    const m = stored.get(path);
+    const name = String(picked.find((f) => f.path === path)?.name ?? "").slice(0, 200) || path.split("/").pop()!;
+    if (!m) return { error: `"${name}" didn't finish uploading — please add it again.` };
+    if (m.size > maxBytes(q)) return { error: `"${name}" is over ${maxBytes(q) / 1048576} MB.` };
+    if (!fileAllowed(q.file_kinds, m.mime ?? "", path.split("/").pop()!)) return { error: `"${name}" isn't an allowed file type for "${label}".` };
+    files.push({ path, name, size: m.size, type: m.mime ?? "" });
+  }
+  return { files };
+}
 
 /** Validates and saves weight / attendance / answers for `userId` using their own (RLS-scoped) client.
  * `asAdmin`: an admin editing someone's response from the Responses tab (service-role
@@ -86,6 +115,11 @@ export async function saveResponse(supabase: SupabaseClient<Database>, userId: s
     let val: Json = null;
     if (q.type === "multi_choice") val = fd.getAll(key).map(String);
     else if (q.type === "yes_no") { const s = fd.get(key); val = s === "yes" ? true : s === "no" ? false : null; }
+    else if (q.type === "file_upload") {
+      const r = await checkFiles(form.org_id, formId, q, String(fd.get(key) ?? ""));
+      if ("error" in r) return { error: r.error };
+      val = r.files;
+    }
     else if (q.type === "number") { const s = String(fd.get(key) ?? "").trim(); val = s ? Number(s) : null; }
     else if (q.type === "long_text") { const raw = String(fd.get(key) ?? "").trim(); const clean = raw ? cleanHtml(raw) : ""; val = htmlToText(clean).trim() ? clean : null; }
     else val = String(fd.get(key) ?? "").trim() || null;
