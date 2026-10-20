@@ -7,6 +7,7 @@ import {
   faBullhorn, faDragon, faEye, faFileLines, faFlagCheckered, faFolder, faGear, faHeartPulse, faHand, faHouse, faImage, faLink, faLocationDot,
   faMagnifyingGlass, faMoon, faPen, faPhone, faPlus, faSailboat, faSun, faTableCells, faThumbtack, faTrashCan,
   faTriangleExclamation, faUser, faUsers, faWeightScale, faXmark,
+  faArrowUpZA, faCaretDown, faCaretRight, faDownload, faEyeSlash, faFilter, faLayerGroup, faRotateLeft, faTextHeight,
 } from "@fortawesome/free-solid-svg-icons";
 
 /** Central icon registry (Font Awesome free/solid) — semantic names so call sites read like the old emojis. */
@@ -52,6 +53,15 @@ export const ICONS = {
   search: faMagnifyingGlass,
   seat: faChair,              // 💺 seats
   sortAz: faArrowDownAZ,      // ⇅ sort menu
+  sortZa: faArrowUpZA,
+  caret: faCaretDown,         // ▾ column menu
+  caretRight: faCaretRight,   // ▸ submenu / collapsed group
+  download: faDownload,
+  eyeSlash: faEyeSlash,       // hide column
+  filter: faFilter,
+  group: faLayerGroup,        // group by column
+  reset: faRotateLeft,
+  textType: faTextHeight,     // Tт edit column type
   table: faTableCells,        // ▦ grid view
   sun: faSun,                 // 🌝 attendance
   trash: faTrashCan,          // 🗑 delete

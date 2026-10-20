@@ -1,10 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import Icon from "@/components/icon";
 import { addMember, importMembers, setMemberCap, updateMember, type AdminState } from "../actions";
 import type { Profile } from "@/lib/database.types";
-import { fmtBirthday } from "@/lib/birthday";
 
 const FIELDS: { name: keyof Profile; label: string; type?: string; w?: string }[] = [
   { name: "full_name", label: "Name" }, { name: "email", label: "Email", type: "email" }, { name: "address", label: "Address", w: "w-64" },
@@ -71,26 +69,13 @@ export function ImportMembersForm() {
   );
 }
 
-export function MemberRow({ index, profile: p, role, isSelf, roleForm, removeForm }: { index: number; profile: Profile; role: string; isSelf: boolean; roleForm: React.ReactNode; removeForm: React.ReactNode }) {
-  const [edit, setEdit] = useState(false);
-  if (!edit) {
-    return (
-      <tr>
-        <td className="gutter">{index}</td>
-        <td className="font-medium whitespace-nowrap">{p.full_name || "—"}{isSelf && " (you)"}</td><td>{p.email}</td><td className="max-w-[220px]">{p.address ?? "—"}</td>
-        <td>{p.lat ?? "—"}</td><td>{p.lon ?? "—"}</td><td>{p.city ?? "—"}</td><td>{p.zipcode ?? "—"}</td>
-        <td>{p.car_passengers > 0 ? <><Icon name="car" /> {p.car_passengers}</> : "0"}</td><td className="capitalize">{p.gender ?? "—"}</td><td>{p.weight_lb ?? "—"}</td>
-        <td className="whitespace-nowrap">{p.birthday ? fmtBirthday(p.birthday) : "—"}</td>
-        <td>{roleForm}</td>
-        <td className="whitespace-nowrap"><button type="button" onClick={() => setEdit(true)} className="btn-text py-0.5 text-xs" title="Edit"><Icon name="pen" /></button>{removeForm}</td>
-      </tr>
-    );
-  }
+/** The roster's ✏️ inline editor (members-sheet.tsx) — a row spanning the table. */
+export function MemberEditRow({ index, profile: p, role, colSpan, onClose }: { index: number; profile: Profile; role: string; colSpan: number; onClose: () => void }) {
   return (
     <tr>
       <td className="gutter">{index}</td>
-      <td colSpan={13} className="!p-2" style={{ background: "var(--g-blue-tint)" }}>
-        <form action={updateMember} onSubmit={() => setEdit(false)} className="flex flex-wrap items-end gap-2 text-xs">
+      <td colSpan={colSpan} className="!p-2" style={{ background: "var(--g-blue-tint)" }}>
+        <form action={updateMember} onSubmit={onClose} className="flex flex-wrap items-end gap-2 text-xs">
           <input type="hidden" name="user_id" value={p.id} />
           {FIELDS.filter((f) => f.name !== "email").map((f) => (
             <label key={f.name} className={f.w ?? "w-28"}><span className="label">{f.label}</span>
@@ -105,7 +90,7 @@ export function MemberRow({ index, profile: p, role, isSelf, roleForm, removeFor
           <label className="w-24"><span className="label">Passengers</span><input name="car_passengers" type="number" min={0} max={14} defaultValue={p.car_passengers} className="input py-1" /></label>
           <span className="w-full text-[11px]" style={{ color: "var(--g-grey-600)" }}>{p.email} · role: {role}</span>
           <button className="btn-primary py-1">Save</button>
-          <button type="button" onClick={() => setEdit(false)} className="btn-text py-1">Cancel</button>
+          <button type="button" onClick={onClose} className="btn-text py-1">Cancel</button>
         </form>
       </td>
     </tr>
