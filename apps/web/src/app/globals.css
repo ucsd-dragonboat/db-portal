@@ -117,6 +117,19 @@ button.sheet-cell:hover { background: #f5f6fa; border-color: #c8cde0; }
 .gsheet thead .labels th { font-weight: 700; white-space: nowrap; }
 .gsheet tbody tr:hover td { background: #f5f6fa; }
 .gsheet tr.pending td { background: #fffbeb; }
+/* Table tools (members-sheet.tsx): header ▾ menus, group rows */
+.gsheet .sheet-th-btn { margin-left: auto; padding: 0 3px; border-radius: 3px; color: #5f6368; opacity: 0; }
+.gsheet .sheet-th:hover .sheet-th-btn, .gsheet .sheet-th-btn:focus-visible, .gsheet .sheet-th-btn[aria-expanded="true"] { opacity: 1; }
+.gsheet .sheet-th-btn:hover { background: #e8eaed; }
+@media (hover: none) { .gsheet .sheet-th-btn { opacity: 1; } }
+.gsheet tr.sheet-group td { background: #e6f4ea; color: #137333; font-size: 11px; }
+.sheet-menu { min-width: 240px; padding: 6px 0; background: #fff; border-radius: 8px; color: #202124;
+  box-shadow: 0 2px 6px 2px rgba(60,64,67,.15), 0 1px 2px rgba(60,64,67,.3); }
+.sheet-menu-item { display: flex; width: 100%; align-items: center; gap: 12px; padding: 7px 16px; text-align: left; font-size: 14px; }
+.sheet-menu-item:hover:not(:disabled), .sheet-menu-item:focus-visible { background: #f1f3f4; outline: none; }
+.sheet-menu-item:disabled { opacity: .4; }
+.sheet-submenu { margin: 2px 8px 4px 32px; border-left: 2px solid #e8eaed; }
+.sheet-submenu .sheet-menu-item { font-size: 13px; padding: 5px 12px; }
 
 /* ---------- Lineup boats ----------
    Cloned from Brandon's standalone builder so the boat-editing UI looks like the
