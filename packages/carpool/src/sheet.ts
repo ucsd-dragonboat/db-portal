@@ -189,17 +189,32 @@ export function mirrorDirSet(going: DirSet): DirSet {
   return { onCampus: rekey(going.onCampus), offCampus: rekey(going.offCampus), diy: [...going.diy] }
 }
 
-/** TOTAL panel: needs-ride people bucketed under their campus keyword (list order),
- * everyone unmatched under off-campus. */
-export function groupNeedsRide(needsRide: string[], matchText: MatchText, keywords: string[]): { onCampus: { keyword: string; ids: string[] }[]; offCampus: string[] } {
+/** A spot name for sorting: leading emoji/symbols ("➰ Petersoon Loop") don't count. */
+const sortName = (s: string) => s.replace(/^[^\p{L}\p{N}]+/u, '')
+
+/** TOTAL panel: needs-ride people bucketed under their campus keyword (list order).
+ * `spots` (riderId → spot name) are riders whose answer was an on-campus pickup spot:
+ * they're on campus even when no keyword matches (a typo in the spot or keyword can't
+ * misfile them), under a heading with the spot's name, after the keyword groups (A → Z).
+ * Everyone else unmatched is off campus. */
+export function groupNeedsRide(needsRide: string[], matchText: MatchText, keywords: string[], spots: Record<string, string> = {}): { onCampus: { keyword: string; ids: string[] }[]; offCampus: string[] } {
   const byKeyword = new Map<string, string[]>()
+  const bySpot = new Map<string, string[]>()
   const offCampus: string[] = []
   for (const id of needsRide) {
     const k = matchKeyword(matchText[id] ?? '', keywords)
+    const spot = spots[id]?.trim()
     if (k) byKeyword.set(k, [...(byKeyword.get(k) ?? []), id])
+    else if (spot) bySpot.set(spot, [...(bySpot.get(spot) ?? []), id])
     else offCampus.push(id)
   }
-  return { onCampus: keywords.filter((k) => byKeyword.has(k)).map((k) => ({ keyword: k, ids: byKeyword.get(k)! })), offCampus }
+  return {
+    onCampus: [
+      ...keywords.filter((k) => byKeyword.has(k)).map((k) => ({ keyword: k, ids: byKeyword.get(k)! })),
+      ...[...bySpot.keys()].sort((a, b) => sortName(a).localeCompare(sortName(b))).map((s) => ({ keyword: s, ids: bySpot.get(s)! })),
+    ],
+    offCampus,
+  }
 }
 
 const placedIn = (dir: DirSet): Set<string> =>

@@ -154,6 +154,21 @@ describe('groupNeedsRide', () => {
     ])
     expect(out.offCampus).toEqual(['p2'])
   })
+  it('puts riders who picked a campus spot on campus even when no keyword matches', () => {
+    const text = { a: 'Ann ➰ Petersoon Loop', b: 'Bo ➰ Petersoon Loop', c: 'Cy home', d: 'Dee Muir Bus Loop', e: 'Eve Gilman Kiosk' }
+    const spots = { a: '➰ Petersoon Loop', b: '➰ Petersoon Loop', d: 'Muir Bus Loop', e: 'Gilman Kiosk' }
+    const out = groupNeedsRide(['a', 'b', 'c', 'd', 'e'], text, ['PETERSON', 'MUIR'], spots)
+    expect(out.onCampus).toEqual([
+      { keyword: 'MUIR', ids: ['d'] },                 // a keyword match still names the group
+      { keyword: 'Gilman Kiosk', ids: ['e'] },        // then spot-name groups, A → Z
+      { keyword: '➰ Petersoon Loop', ids: ['a', 'b'] }, // typo'd spot: on campus anyway
+    ])
+    expect(out.offCampus).toEqual(['c'])
+  })
+  it('a typed address that no keyword matches stays off campus', () => {
+    const out = groupNeedsRide(['x'], { x: 'Xi 9500 Gilman Dr' }, ['MUIR'], {})
+    expect(out).toEqual({ onCampus: [], offCampus: ['x'] })
+  })
 })
 
 describe('discrepancies', () => {

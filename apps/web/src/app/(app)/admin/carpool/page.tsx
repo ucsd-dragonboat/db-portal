@@ -98,7 +98,10 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
 
   const riders: Record<string, Rider> = {}, drivers: { id: string; seats: number }[] = [], needsRide: string[] = [];
   const pickupNames: Record<string, string> = {};
-  const [{ data: rs }, { data: layouts }, { data: pickups }, { data: formLinks }, runBy, queued] = await Promise.all([
+  // Riders whose answer was an on-campus spot → its name: they're on campus in the TOTAL
+  // panel whether or not a campus keyword matches the name.
+  const campusSpots: Record<string, string> = {};
+  const [{ data: rs }, { data: layouts }, { data: pickups }, { data: formLinks }, runBy, queued, { data: savedLocs }] = await Promise.all([
     // Yes only — a Maybe isn't attending until they change it (see lib/attendees.ts).
     supabase.from("rsvps").select("*, profile:profiles(*)").eq("event_id", event.id).eq("status", "yes"),
     supabase.from("carpools").select("*").eq("event_id", event.id).order("sort_order").order("created_at"),
@@ -106,7 +109,10 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
     supabase.from("form_events").select("form:forms(id, questions)").eq("event_id", event.id),
     latestRuns(supabase, [event.id]),
     queuedDays(supabase, [event.id]),
+    supabase.from("saved_locations").select("name").eq("org_id", org.id),
   ]);
+  // A saved-location spot is stored on the RSVP as the location's name (attachPickupCoords).
+  const savedSpotNames = new Set((savedLocs ?? []).map((s) => s.name.trim().toLowerCase()));
   const runStatus = runLabel(runBy.get(event.id), queued.has(event.id));
   const eventName = (event.group as { name: string } | null)?.name ?? null;
   // The layout being edited (?carpool=, else the first). No layouts yet → a new,
@@ -130,6 +136,8 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
     riders[out.rider.id] = out.rider;
     const pk = r.pickup_location_id ? pickupBy.get(r.pickup_location_id) : null;
     pickupNames[out.rider.id] = pk?.name ?? r.pickup_address ?? "";
+    if (r.ride === "needs_ride" && (pk || (r.pickup_address && savedSpotNames.has(r.pickup_address.trim().toLowerCase()))))
+      campusSpots[out.rider.id] = pk?.name ?? r.pickup_address!;
     if (out.capacity != null) drivers.push({ id: out.rider.id, seats: out.capacity });
     if (r.ride === "needs_ride") needsRide.push(out.rider.id);
   }
@@ -188,7 +196,7 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
       <CarpoolBuilder key={current?.id ?? `new:${event.id}`} eventId={event.id} carpoolId={current?.id ?? null} initialName={current?.name ?? "Carpool"}
         destination={event.location_lat != null && event.location_lon != null ? { lat: event.location_lat, lon: event.location_lon, label: event.location_name ?? event.title } : null}
         riders={riders} drivers={drivers} needsRide={needsRide} saved={saved}
-        pickupNames={pickupNames} funFactQuestions={funFactQuestions} funFactAnswers={funFactAnswers} />
+        pickupNames={pickupNames} campusSpots={campusSpots} funFactQuestions={funFactQuestions} funFactAnswers={funFactAnswers} />
     </div>
   );
 }
