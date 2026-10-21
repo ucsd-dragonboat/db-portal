@@ -29,7 +29,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   /** Riders whose answer was an on-campus spot → its name (on campus whatever the keywords say). */
   campusSpots: Record<string, string>;
   funFactQuestions: { id: string; label: string }[];
-  funFactAnswers: Record<string, { userId: string; text: string }[]>;
+  funFactAnswers: Record<string, { userId: string; name: string; text: string }[]>;
 }) {
   // What the form responses say. Changes to it live on this layout only (data.roles).
   const form = useMemo<FormRides>(() => ({ drivers, needsRide }), [drivers, needsRide]);
@@ -273,7 +273,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     try {
       // Same rows the fun-fact panel shows: answers from people in this layout's roster.
       const q = funFactQuestions.find((x) => x.id === data.funFactQuestionId);
-      const funFact = q ? { question: q.label, rows: (funFactAnswers[q.id] ?? []).filter((r) => effRiders[r.userId]).map((r) => ({ name: effRiders[r.userId].name, text: r.text })) } : undefined;
+      const funFact = q ? { question: q.label, rows: (funFactAnswers[q.id] ?? []).map((r) => ({ name: r.name, text: r.text })) } : undefined;
       // The TOTAL panel as shown: names, without people moved out of a column in both directions.
       const nameOf = (id: string) => effRiders[id]?.name ?? "?";
       const live = (cs: { id: string; state: string; partial: boolean }[]) => cs.filter((c) => !(c.state === "removed" && !c.partial)).map((c) => nameOf(c.id));
@@ -426,7 +426,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
             <DiscrepancyTracker rows={disc} riders={effRiders} />
             <NotesPanel notes={notes} riders={effRiders} />
             <FunFactPanel questions={funFactQuestions} answers={funFactAnswers} questionId={data.funFactQuestionId}
-              onPickQuestion={(id) => setData((s) => ({ ...s, funFactQuestionId: id }))} riders={effRiders} />
+              onPickQuestion={(id) => setData((s) => ({ ...s, funFactQuestionId: id }))} />
           </div>
         </div>
       </div>

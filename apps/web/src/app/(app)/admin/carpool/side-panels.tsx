@@ -196,15 +196,15 @@ export function NotesPanel({ notes, riders }: { notes: Record<string, string>; r
 }
 
 /** The template's yellow columns: pick a form question, rows of Name | Response. */
-export function FunFactPanel({ questions, answers, questionId, onPickQuestion, riders }: {
+/** Everyone who answered the chosen question on the day's form — not just this day's riders. */
+export function FunFactPanel({ questions, answers, questionId, onPickQuestion }: {
   questions: { id: string; label: string }[];
-  answers: Record<string, { userId: string; text: string }[]>;
+  answers: Record<string, { userId: string; name: string; text: string }[]>;
   questionId: string | null;
   onPickQuestion: (id: string | null) => void;
-  riders: Record<string, Rider>;
 }) {
   if (!questions.length) return null;
-  const rows = (questionId ? answers[questionId] ?? [] : []).filter((r) => riders[r.userId]);
+  const rows = questionId ? answers[questionId] ?? [] : [];
   return (
     <div className="w-[300px] shrink-0 text-[13px]" style={{ borderLeft: `1px solid ${GRID}`, borderTop: `1px solid ${GRID}` }}>
       <select value={questionId ?? ""} onChange={(e) => onPickQuestion(e.target.value || null)}
@@ -214,7 +214,7 @@ export function FunFactPanel({ questions, answers, questionId, onPickQuestion, r
       </select>
       {questionId && rows.map((r) => (
         <div key={r.userId} className="flex" style={{ background: "#ffff00" }}>
-          <div className={`${cell} w-[110px] shrink-0 truncate`} style={cellBorder} title={riders[r.userId].name}>{riders[r.userId].name}</div>
+          <div className={`${cell} w-[110px] shrink-0 truncate`} style={cellBorder} title={r.name}>{r.name}</div>
           <div className="min-w-0 flex-1 whitespace-pre-wrap px-1 py-0.5 text-[13px]" style={cellBorder}>{r.text}</div>
         </div>
       ))}

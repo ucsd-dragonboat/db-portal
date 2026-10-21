@@ -147,13 +147,18 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
   const funFactQuestions = forms.flatMap((f) => ((f.questions as FormQuestion[]) ?? [])
     .filter((q) => q.type !== "info" && q.type !== "day" && q.type !== "section" && q.type !== "file_upload")
     .map((q) => ({ id: q.id, label: htmlToText(q.label) })));
-  const funFactAnswers: Record<string, { userId: string; text: string }[]> = {};
+  // Every response to the form, not just people riding this day — so names come with them.
+  const funFactAnswers: Record<string, { userId: string; name: string; text: string }[]> = {};
   if (forms.length) {
-    const { data: responses } = await supabase.from("form_responses").select("user_id, answers").in("form_id", forms.map((f) => f.id));
+    const { data: responses } = await supabase.from("form_responses").select("user_id, answers, profile:profiles(full_name, email)").in("form_id", forms.map((f) => f.id));
     for (const q of funFactQuestions) {
       const rows = (responses ?? [])
-        .map((r) => ({ userId: r.user_id, text: flattenAnswer((r.answers as Record<string, unknown> | null)?.[q.id]) }))
-        .filter((r) => r.text);
+        .map((r) => {
+          const p = r.profile as unknown as { full_name: string | null; email: string } | null;
+          return { userId: r.user_id, name: p?.full_name || p?.email || "?", text: flattenAnswer((r.answers as Record<string, unknown> | null)?.[q.id]) };
+        })
+        .filter((r) => r.text)
+        .sort((a, b) => a.name.localeCompare(b.name));
       if (rows.length) funFactAnswers[q.id] = rows;
     }
   }
