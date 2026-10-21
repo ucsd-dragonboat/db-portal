@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRidesGrid, buildRidesSheet, gridToTsv, type RidesPeople, type SheetGrid } from './rides-sheet'
+import { a1, buildRidesGrid, buildRidesSheet, gridToTsv, type RidesPeople, type SheetGrid } from './rides-sheet'
 import { upgradeCarpoolData } from './sheet'
 import type { Car, DirSet } from './types'
 
@@ -97,6 +97,34 @@ describe('buildRidesGrid', () => {
   it('without a question: no panel and no trailing separator', () => {
     const g5 = buildRidesGrid(sample(), { nameOf, people })
     expect(g5.every((row) => row.length === 15)).toBe(true)
+  })
+  it('adds the discrepancy tracker below, counting exactly the name cells of this layout', () => {
+    // Body ends at row 43 (BACK DIY); tracker header 2 rows later = row 46, data from row 47.
+    const q = at(g, 45, 0)!.v!
+    expect(q.startsWith('=QUERY(ARRAYFORMULA(TRIM({')).toBe(true)
+    const ranges = q.slice(q.indexOf('{') + 1, q.indexOf('}')).split(';')
+    expect(ranges).toEqual([
+      'FLATTEN(B4:J8)', 'FLATTEN(B11:J15)', 'FLATTEN(B18:J22)',   // GOING: on campus, off campus, DIY (Driver row + passengers)
+      'FLATTEN(B25:J29)', 'FLATTEN(B32:J36)', 'FLATTEN(B39:J43)', // BACK
+      'L7:L8', 'M7:M8', 'N8:N8', 'N10:N11', 'O7:O8',              // TOTAL: N skips SEVENTH (N7) and ➰ PETERSOON LOOP (N9)
+    ])
+    expect([at(g, 6, 13)?.v, at(g, 8, 13)?.v]).toEqual(['SEVENTH', '➰ PETERSOON LOOP']) // the skipped cells really are headings
+    expect(q).toContain("group by Col1 label Col1 'Name', count(Col1) 'Count'")
+    expect([at(g, 45, 2)?.v, at(g, 46, 2)?.v]).toEqual(['Total', '=SUM(B47:B)/3'])
+    expect([at(g, 45, 4)?.v, at(g, 46, 4)?.v]).toEqual(['Discrepancy', '=IFERROR(FILTER(A47:A, B47:B<>3), "")'])
+    expect(at(g, 45, 1)).toEqual({}) // spill cells are blank and unformatted
+    expect(at(g, 45, 10)).toEqual({}) // separators stop above the tracker
+  })
+  it('tracker follows the layout: a write-in group with no heading, trailing names, wide bands', () => {
+    const d = upgradeCarpoolData({ v: 2 }, {})
+    d.going.onCampus = Array.from({ length: 11 }, (_, i) => car(`c${i}`, ['a', 'b', 'c', 'd', 'e']))
+    const g6 = buildRidesGrid(d, { nameOf, people: { drivers: [], offCampus: ['x'], onCampus: [{ keyword: 'MUIR', names: ['y'] }, { keyword: '', names: ['w'] }], diy: [], total: 3 } })
+    const q = g6.flatMap((row) => row).find((c) => c?.v?.startsWith('=QUERY'))!.v!
+    expect(q).toContain('FLATTEN(B4:L9)') // 11 car columns, 5 passenger rows
+    expect(q).toContain(';O7:O7;P8:P9}') // off campus x; on campus y + write-in w after the MUIR heading
+  })
+  it('a1 handles columns past Z', () => {
+    expect([a1(0, 0), a1(9, 25), a1(0, 26), a1(2, 27)]).toEqual(['A1', 'Z10', 'AA1', 'AB3'])
   })
   it('widens past 9 columns for a band with more cars (banner follows)', () => {
     const d = upgradeCarpoolData({ v: 2 }, {})

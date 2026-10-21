@@ -55,5 +55,5 @@ export type { Trip, DriverStats, PairStat } from './stats'
 
 export { DIRS, formRole, roleIn, setRole, driversIn, ridersIn, formChanges, revertChange, revertAll } from './roles'
 export type { Dir, FormRides, FormChange } from './roles'
-export { buildRidesSheet, buildRidesGrid, gridToHtml, gridToTsv } from './rides-sheet'
+export { a1, buildRidesSheet, buildRidesGrid, gridToHtml, gridToTsv } from './rides-sheet'
 export type { RidesPeople, RidesSheetInput, SheetCell, SheetGrid } from './rides-sheet'
