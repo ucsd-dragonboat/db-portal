@@ -37,6 +37,23 @@ export function splitByCampus(cars: Car[], matchText: MatchText, keywords: strin
   return { onCampus, offCampus }
 }
 
+/** Re-sort one direction's existing cars into the on/off-campus grids by the driver's
+ * keyword match — for after the keywords change. Cars keep their passengers and their
+ * order within a grid; locked cars stay where they are. Returns how many cars moved. */
+export function regroupByCampus(dir: DirSet, matchText: MatchText, keywords: string[]): { dir: DirSet; moved: number } {
+  const onCampus: Car[] = []
+  const offCampus: Car[] = []
+  let moved = 0
+  for (const [from, cars] of [['onCampus', dir.onCampus], ['offCampus', dir.offCampus]] as const) {
+    for (const c of cars) {
+      const to = c.locked ? from : matchKeyword(matchText[c.driverId] ?? '', keywords) ? 'onCampus' : 'offCampus'
+      if (to !== from) moved++
+      ;(to === 'onCampus' ? onCampus : offCampus).push(c)
+    }
+  }
+  return moved ? { dir: { ...dir, onCampus, offCampus }, moved } : { dir, moved }
+}
+
 const isCar = (x: unknown): x is Car => {
   const c = x as Car
   return !!c && typeof c === 'object' && typeof c.driverId === 'string' && typeof c.capacity === 'number' && Array.isArray(c.passengerIds)
