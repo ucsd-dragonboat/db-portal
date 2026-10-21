@@ -22,10 +22,12 @@ const COLORS = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#7c3aed", "#db2777"
 /** Sheets-style rides workspace: GOING/BACK sections of ON/OFF-CAMPUS car columns
  * + DIY, TOTAL roster with campus grouping, fun-fact column, discrepancy tracker.
  * destination === null → Optimize and the route map are disabled. */
-export default function CarpoolBuilder({ eventId, carpoolId, initialName, destination, riders, drivers, needsRide, saved, pickupNames, funFactQuestions, funFactAnswers }: {
+export default function CarpoolBuilder({ eventId, carpoolId, initialName, destination, riders, drivers, needsRide, saved, pickupNames, campusSpots, funFactQuestions, funFactAnswers }: {
   eventId: string; carpoolId: string | null; initialName: string; destination: Destination | null; riders: Record<string, Rider>;
   drivers: { id: string; seats: number }[]; needsRide: string[]; saved: SavedCarpool | null;
   pickupNames: Record<string, string>;
+  /** Riders whose answer was an on-campus spot → its name (on campus whatever the keywords say). */
+  campusSpots: Record<string, string>;
   funFactQuestions: { id: string; label: string }[];
   funFactAnswers: Record<string, { userId: string; text: string }[]>;
 }) {
@@ -239,13 +241,13 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     };
     const riderChips = col("rider");
     const byId = new Map(riderChips.map((c) => [c.id, c]));
-    const g = groupNeedsRide(riderChips.map((c) => c.id), matchText, data.collegeKeywords);
+    const g = groupNeedsRide(riderChips.map((c) => c.id), matchText, data.collegeKeywords, campusSpots);
     return {
       drivers: col("driver"),
       grouped: { onCampus: g.onCampus.map((k) => ({ keyword: k.keyword, chips: k.ids.map((id) => byId.get(id)!) })), offCampus: g.offCampus.map((id) => byId.get(id)!) },
       diy: col("diy"),
     };
-  }, [riders, form, data, changes, matchText]);
+  }, [riders, form, data, changes, matchText, campusSpots]);
 
   const copyGoingToBack = () => {
     if (placedSet(data.back).size && !confirm("Overwrite the BACK section with a copy of GOING?")) return;
