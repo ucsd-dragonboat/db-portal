@@ -17,6 +17,7 @@ export { DEFAULT_CARPOOL_HEADER, DEFAULT_COLLEGE_KEYWORDS } from './types'
 export {
   matchKeyword,
   splitByCampus,
+  regroupByCampus,
   upgradeCarpoolData,
   reconcileDirSet,
   placeInDirSet,

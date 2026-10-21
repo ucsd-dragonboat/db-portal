@@ -11,6 +11,7 @@ import {
   mirrorDirSet,
   placeInDirSet,
   reconcileDirSet,
+  regroupByCampus,
   removeCarFromDirSet,
   removeFromDirSet,
   splitByCampus,
@@ -30,6 +31,31 @@ describe('matchKeyword', () => {
     expect(matchKeyword('lives at seventh & marshall', ['MARSHALL', 'SEVENTH'])).toBe('MARSHALL')
     expect(matchKeyword('Sixth college', DEFAULT_COLLEGE_KEYWORDS)).toBe('SIXTH')
     expect(matchKeyword('downtown', DEFAULT_COLLEGE_KEYWORDS)).toBeNull()
+  })
+})
+
+describe('regroupByCampus', () => {
+  const text = { a: 'Ann @ Muir', b: 'Bo @ Pepper Canyon', c: 'Cy @ Sixth', d: 'Dee (home)' }
+  it('moves existing cars to the grid the new keywords pick, keeping passengers and order', () => {
+    const d = dir({ onCampus: [car('a', 4, ['p1']), car('d')], offCampus: [car('b', 3, ['p2']), car('c')] })
+    const { dir: out, moved } = regroupByCampus(d, text, ['MUIR', 'PEPPER'])
+    expect(out.onCampus.map((c) => c.driverId)).toEqual(['a', 'b'])
+    expect(out.offCampus.map((c) => c.driverId)).toEqual(['d', 'c'])
+    expect(out.onCampus[1].passengerIds).toEqual(['p2'])
+    expect(moved).toBe(2)
+  })
+  it('leaves locked cars where they are', () => {
+    const d = dir({ offCampus: [{ ...car('a'), locked: true }, car('c')] })
+    const { dir: out, moved } = regroupByCampus(d, text, ['MUIR', 'SIXTH'])
+    expect(out.offCampus.map((c) => c.driverId)).toEqual(['a'])
+    expect(out.onCampus.map((c) => c.driverId)).toEqual(['c'])
+    expect(moved).toBe(1)
+  })
+  it('returns the same object when nothing moves', () => {
+    const d = dir({ onCampus: [car('a')], offCampus: [car('d')], diy: ['x'] })
+    const r = regroupByCampus(d, text, ['muir'])
+    expect(r.moved).toBe(0)
+    expect(r.dir).toBe(d)
   })
 })
 
