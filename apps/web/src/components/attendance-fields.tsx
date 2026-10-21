@@ -35,12 +35,24 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
   const [campus, setCampus] = useState<"on" | "off">(isSpot ? "on" : "off");
   const [picking, setPicking] = useState(false);
   const spotName = pickups.find((p) => p.id === pickup)?.name;
+  const chooseOnCampus = () => { setCampus("on"); if (fixed) setPickup(fixed); else if (!isSpot) { setPickup(""); setPicking(true); } };
+  const chooseOffCampus = () => { setCampus("off"); if (pickup !== "other") setPickup("home"); };
+  // "I need a ride" is two answers, on campus and off campus, so nobody lands on the
+  // off-campus default by accident. Both still post yes_needs_ride; the hidden `campus`
+  // field below says which. On campus only exists when there are campus spots.
+  type Option = { key: string; value: AttendanceChoice; label: string; checked: boolean; select: () => void };
+  const options = ATTENDANCE_OPTIONS.flatMap((o): Option[] => o.value !== "yes_needs_ride"
+    ? [{ key: o.value, value: o.value, label: o.label, checked: choice === o.value, select: () => setChoice(o.value) }]
+    : [
+        ...(pickups.length ? [{ key: "ride_on", value: o.value, label: "Yes, and I need a ride on campus", checked: choice === o.value && campus === "on", select: () => { setChoice(o.value); chooseOnCampus(); } }] : []),
+        { key: "ride_off", value: o.value, label: "Yes, and I need a ride off campus", checked: choice === o.value && campus === "off", select: () => { setChoice(o.value); chooseOffCampus(); } },
+      ]);
   return (
     <div className="space-y-2">
       <div>
-        {ATTENDANCE_OPTIONS.map((o) => (
-          <label key={o.value} className="gf-radio">
-            <input type="radio" name={`${prefix}choice`} value={o.value} required={required} checked={choice === o.value} onChange={() => setChoice(o.value)} />
+        {options.map((o) => (
+          <label key={o.key} className="gf-radio">
+            <input type="radio" name={`${prefix}choice`} value={o.value} required={required} checked={o.checked} onChange={o.select} />
             {o.label}{OPTION_ICONS[o.value] && <Icon name={OPTION_ICONS[o.value]!} />}
           </label>
         ))}
@@ -59,18 +71,8 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
       )}
       {choice === "yes_needs_ride" && (
         <div className="ml-2 mt-3 pl-3 border-l-2 text-sm space-y-2" style={{ borderColor: "var(--g-purple)" }}>
-          <div className="font-medium"><Icon name="house" /> Where should we pick you up?</div>
+          <div className="font-medium"><Icon name={campus === "on" ? "pin" : "house"} /> {campus === "on" ? "Which spot on campus?" : "Where should we pick you up?"}</div>
           <input type="hidden" name={`${prefix}campus`} value={campus} />
-          <div className="flex gap-4">
-            {pickups.length > 0 && (
-              <label className="gf-radio !py-1">
-                <input type="radio" checked={campus === "on"} onChange={() => { setCampus("on"); if (fixed) setPickup(fixed); else if (!isSpot) { setPickup(""); setPicking(true); } }} /> On campus
-              </label>
-            )}
-            <label className="gf-radio !py-1">
-              <input type="radio" checked={campus === "off"} onChange={() => { setCampus("off"); if (pickup !== "other") setPickup("home"); }} /> Off campus
-            </label>
-          </div>
           {campus === "on" ? (
             <div className="flex items-center gap-2">
               <input type="hidden" name={`${prefix}pickup`} value={pickup} />
@@ -95,7 +97,9 @@ export default function AttendanceFields({ prefix, existing, pickups, defaultSea
             </label>
           )}
           {picking && (
-            <Dialog title="Choose your pickup spot" onClose={() => { setPicking(false); if (!isSpot) { setCampus("off"); setPickup("home"); } }}>
+            // Closing without a spot keeps "on campus" (it was asked for); the hidden required
+            // input then blocks submitting until a spot is chosen.
+            <Dialog title="Choose your pickup spot" onClose={() => setPicking(false)}>
               <div className="grid grid-cols-2 gap-2">
                 {pickups.map((p) => (
                   <button key={p.id} type="button" onClick={() => { setPickup(p.id); setCampus("on"); setPicking(false); }}
