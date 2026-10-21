@@ -35,14 +35,16 @@ export type RidesSheetInput = {
   highlight?: Set<string>
 }
 
-export type SheetCell = { v?: string; bg?: string; fg?: string; bold?: boolean; italic?: boolean; align?: 'left' | 'center' | 'right'; size?: number; colspan?: number }
-/** null = covered by a merged cell to its left. */
+export type SheetCell = { v?: string; bg?: string; fg?: string; bold?: boolean; italic?: boolean; align?: 'left' | 'center' | 'right'; size?: number; colspan?: number; rowspan?: number }
+/** null = covered by a merged cell (to its left or above). */
 export type SheetGrid = (SheetCell | null)[][]
 
 /** At least the sheet's B–J width, so an empty band still reads like the template. */
 const MIN_CAR_COLS = 9
 const MIN_PASSENGER_ROWS = 4
 const DIY_ROWS = 5
+/** Each answer to the question merges across this many columns (long food recs fit). */
+const ANSWER_COLS = 3
 
 export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, highlight = new Set() }: RidesSheetInput): SheetGrid {
   const diyCols = (dir: DirSet) => Math.ceil(dir.diy.length / DIY_ROWS)
@@ -50,14 +52,15 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
   const SEP = N + 1, T = N + 2, SEP2 = N + 6, Q = N + 7
   const grid: SheetGrid = []
   const set = (r: number, c: number, cell: SheetCell) => {
-    while (grid.length <= r) grid.push([])
+    while (grid.length < r + (cell.rowspan ?? 1)) grid.push([])
+    for (let i = 0; i < (cell.rowspan ?? 1); i++) for (let k = 0; k < (cell.colspan ?? 1); k++) grid[r + i][c + k] = null
     grid[r][c] = cell
-    for (let k = 1; k < (cell.colspan ?? 1); k++) grid[r][c + k] = null
   }
 
-  // ---- left: banner, then GOING and BACK ----
-  set(0, 0, { v: d.header, bg: C.banner, fg: C.white, size: 18, align: 'center', colspan: N + 1 })
-  let r = 1
+  // ---- left: banner (A1 to the end of TOTAL, two rows tall), then GOING and BACK ----
+  set(0, 0, { v: d.header, bg: C.banner, fg: C.white, size: 18, align: 'center', colspan: T + 4, rowspan: 2 })
+  if (funFact) set(0, SEP2, { bg: C.banner, rowspan: 2 }) // the separator before the question, dark beside the banner
+  let r = 2
   const band = (dir: DirSet, which: 'onCampus' | 'offCampus', label: string, direction: string | null, bandBg: string) => {
     const cars: Car[] = dir[which]
     set(r, 0, direction ? { v: direction, bg: C.direction, fg: C.white, bold: true } : { bg: C.white })
@@ -67,8 +70,8 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
     for (let i = 0; i < N; i++) set(r, 1 + i, cars[i] ? { v: nameOf(cars[i].driverId), bg: C.driver, bold: true } : { bg: C.driver })
     r++
     const rows = Math.max(MIN_PASSENGER_ROWS, ...cars.map((c) => c.passengerIds.length))
+    set(r, 0, { bg: C.filler, rowspan: rows }) // one tall grey block, like A5:A8
     for (let p = 0; p < rows; p++, r++) {
-      set(r, 0, { bg: C.filler })
       for (let i = 0; i < N; i++) {
         const id = cars[i]?.passengerIds[p]
         set(r, 1 + i, id ? { v: nameOf(id), bg: which === 'onCampus' && highlight.has(id) ? C.highlight : C.white } : { bg: C.white })
@@ -83,8 +86,8 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
     set(r, 0, { bg: C.diy })
     set(r, 1, { v: 'DIY', bg: C.diy, align: 'center', colspan: N })
     r++
+    set(r, 0, { bg: C.filler, rowspan: DIY_ROWS })
     for (let row = 0; row < DIY_ROWS; row++, r++) {
-      set(r, 0, { bg: C.filler })
       for (let i = 0; i < N; i++) {
         const id = dir.diy[i * DIY_ROWS + row]
         set(r, 1 + i, { v: id ? nameOf(id) : '', bg: C.white })
@@ -134,13 +137,16 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
 
   // ---- the form question: Name | Response, to the right of TOTAL ----
   if (funFact) {
-    set(0, Q, { v: funFact.question, bg: C.question, bold: true, colspan: 2 })
-    funFact.rows.forEach((row, i) => { set(1 + i, Q, { v: row.name, bg: C.white }); set(1 + i, Q + 1, { v: row.text, bg: C.white }) })
+    set(0, Q, { v: funFact.question, bg: C.question, bold: true, colspan: 1 + ANSWER_COLS })
+    funFact.rows.forEach((row, i) => {
+      set(1 + i, Q, { v: row.name, bg: C.white })
+      set(1 + i, Q + 1, { v: row.text, bg: C.white, colspan: ANSWER_COLS })
+    })
     height = Math.max(height, 1 + funFact.rows.length)
   }
 
-  // Dark separators full height (below the banner row), and blank white everywhere else.
-  const width = funFact ? Q + 2 : SEP2
+  // Dark separators full height (below the banner), and blank white everywhere else.
+  const width = funFact ? Q + 1 + ANSWER_COLS : SEP2
   for (let row = 0; row < height; row++) {
     while (grid.length <= row) grid.push([])
     for (let c = 0; c < width; c++) {
@@ -160,7 +166,7 @@ export function gridToHtml(grid: SheetGrid): string {
       c.bg && `background-color:${c.bg}`, c.fg && `color:${c.fg}`, c.bold && 'font-weight:bold', c.italic && 'font-style:italic',
       c.align && `text-align:${c.align}`, c.size && `font-size:${c.size}pt`, 'border:1px solid #e2e2e2', 'padding:2px 3px', 'white-space:nowrap',
     ].filter(Boolean).join(';')
-    return `<td${c.colspan && c.colspan > 1 ? ` colspan="${c.colspan}"` : ''} style="${style}">${esc(flat(c.v ?? ''))}</td>`
+    return `<td${c.colspan && c.colspan > 1 ? ` colspan="${c.colspan}"` : ''}${c.rowspan && c.rowspan > 1 ? ` rowspan="${c.rowspan}"` : ''} style="${style}">${esc(flat(c.v ?? ''))}</td>`
   }
   const rows = grid.map((row) => `<tr>${row.map((c) => (c ? td(c) : '')).join('')}</tr>`)
   return `<meta charset="utf-8"><table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:10pt">${rows.join('')}</table>`
