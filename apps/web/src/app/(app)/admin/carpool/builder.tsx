@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
-  addDriverToDirSet, carpoolToTsv, carRoutePoints, discrepancies, groupNeedsRide,
+  addDriverToDirSet, buildRidesSheet, carRoutePoints, discrepancies, groupNeedsRide,
   locationKey, mirrorDirSet, movedRiders, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
   removeFromDirSet, upgradeCarpoolData,
   DIRS, driversIn, matchKeyword, moveCar, spotOf, swapDriver, formChanges, formRole, revertAll, revertChange, ridersIn, roleIn, setRole,
@@ -256,18 +256,48 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   };
 
   // Pickup spot / driving-from for anyone not leaving from home — shown in the notes
-  // panel and the copied NOTES section, never glued onto the name.
+  // panel, never glued onto the name.
   const notes = useMemo(() => Object.fromEntries(Object.entries(pickupNames).filter(([, p]) => p)
     .map(([id, p]) => [id, driverIdSet.has(id) ? `Driving from ${p}` : `Pickup: ${p}`])), [pickupNames, driverIdSet]);
 
-  // Tab-separated text pastes into Google Sheets as a grid (one column per car).
+  // The TOTAL panel's NEED RIDE · OFF CAMPUS people (write-ins there too): light blue
+  // when seated in an ON CAMPUS car, on screen and in the copied sheet.
+  const offCampusIds = useMemo(() => new Set([
+    ...diff.grouped.offCampus.filter((c) => !(c.state === "removed" && !c.partial)).map((c) => c.id),
+    ...data.guests.filter((g) => g.col === "offCampus").map((g) => g.id),
+  ]), [diff, data.guests]);
+
+  // Copies the Master Sheet ride tab's layout as an HTML table — Google Sheets keeps its
+  // colours and merged cells — with the same grid as plain text for other apps.
   const copyForSheets = async () => {
     try {
       // Same rows the fun-fact panel shows: answers from people in this layout's roster.
       const q = funFactQuestions.find((x) => x.id === data.funFactQuestionId);
       const funFact = q ? { question: q.label, rows: (funFactAnswers[q.id] ?? []).filter((r) => effRiders[r.userId]).map((r) => ({ name: effRiders[r.userId].name, text: r.text })) } : undefined;
-      await navigator.clipboard.writeText(carpoolToTsv(data, (id) => effRiders[id]?.name ?? "?", notes, funFact));
-      setMsg("Copied — paste into Google Sheets (one column per car: driver on top, passengers below)");
+      // The TOTAL panel as shown: names, without people moved out of a column in both directions.
+      const nameOf = (id: string) => effRiders[id]?.name ?? "?";
+      const live = (cs: { id: string; state: string; partial: boolean }[]) => cs.filter((c) => !(c.state === "removed" && !c.partial)).map((c) => nameOf(c.id));
+      const guestNames = (col: CarpoolGuest["col"]) => data.guests.filter((g) => g.col === col).map((g) => g.name);
+      const people = {
+        drivers: [...live(diff.drivers), ...guestNames("drivers")],
+        offCampus: [...live(diff.grouped.offCampus), ...guestNames("offCampus")],
+        onCampus: [
+          ...diff.grouped.onCampus.map((g) => ({ keyword: g.keyword, names: live(g.chips) })).filter((g) => g.names.length),
+          ...(guestNames("onCampus").length ? [{ keyword: "", names: guestNames("onCampus") }] : []), // write-ins: no heading, like on screen
+        ],
+        diy: [...live(diff.diy), ...guestNames("diy")],
+        total: Object.keys(riders).length,
+      };
+      const { html, tsv } = buildRidesSheet(data, { nameOf, people, funFact, highlight: offCampusIds });
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
+        await navigator.clipboard.write([new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([tsv], { type: "text/plain" }),
+        })]);
+      } else {
+        await navigator.clipboard.writeText(tsv);
+      }
+      setMsg("Copied — click cell A1 of a blank tab in Google Sheets and paste (colours and merged cells come with it)");
     } catch { setMsg("Couldn't copy — your browser blocked clipboard access"); }
   };
 
@@ -319,7 +349,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     const dOpts = dir === "going" ? options.goingDrivers : options.backDrivers;
     return (
       <section>
-        <CarGrid dir={dir} band="onCampus" label="ON CAMPUS" directionLabel={label} cars={data[dir].onCampus} riders={effRiders} options={options[dir]} driverOptions={dOpts} h={h} />
+        <CarGrid dir={dir} band="onCampus" label="ON CAMPUS" directionLabel={label} cars={data[dir].onCampus} riders={effRiders} options={options[dir]} driverOptions={dOpts} h={h} highlight={offCampusIds} />
         <CarGrid dir={dir} band="offCampus" label="OFF CAMPUS" cars={data[dir].offCampus} riders={effRiders} options={options[dir]} driverOptions={dOpts} h={h} />
         <DiyRow dir={dir} dirSet={data[dir]} riders={effRiders} options={options[dir]} h={h} />
       </section>
@@ -332,7 +362,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
         <input value={name} onChange={(e) => setName(e.target.value)} className="input w-40 py-1 text-sm font-medium" title="Layout name — members see it above this sheet" aria-label="Layout name" />
         <button type="button" onClick={() => optimize("unplaced")} disabled={!destination || optimizing} title={destination ? "Seat everyone still needing a ride in GOING, using real drive times (existing seats are kept)" : "Needs the day's location coordinates"} className="btn-primary py-1 disabled:cursor-not-allowed">{optimizing ? "Optimizing…" : "Optimize"}</button>
         <button type="button" onClick={copyGoingToBack} className="btn-secondary py-1">Copy Going → Back</button>
-        <button type="button" onClick={copyForSheets} className="btn-secondary py-1" title="Copies the rides as a grid — paste into Google Sheets: one column per car, driver on top, passengers underneath">Copy for Sheets</button>
+        <button type="button" onClick={copyForSheets} className="btn-secondary py-1" title="Copies the rides laid out like the Master Sheet ride tab — car grids, TOTAL people grid, then the question — with its colours. Paste into cell A1 of a blank Google Sheets tab.">Copy for Sheets</button>
         {changes.length > 0 && (
           <button type="button" onClick={revertEverything} className="btn-secondary py-1" style={{ color: "#1a7f37" }}
             title="This layout differs from the form responses (green + / red − in the TOTAL panel). Revert all of it.">

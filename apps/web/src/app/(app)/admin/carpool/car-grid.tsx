@@ -48,8 +48,10 @@ function dropOnDriver(dir: DirKey, band: "onCampus" | "offCampus", car: Car, pay
   else if (kind === "rider" && id) h.swapDriver(dir, car.id, id);
 }
 
-function CarColumn({ dir, band, car, riders, options, rows, h }: {
+function CarColumn({ dir, band, car, riders, options, rows, h, highlight }: {
   dir: DirKey; band: "onCampus" | "offCampus"; car: Car; riders: Record<string, Rider>; options: NameOption[]; rows: number; h: GridHandlers;
+  /** Passengers shown light blue (off-campus people in an on-campus car). */
+  highlight?: Set<string>;
 }) {
   const seats = car.capacity - 1;
   const wide = seats > 4;
@@ -84,6 +86,7 @@ function CarColumn({ dir, band, car, riders, options, rows, h }: {
               onClear={pid ? () => h.unseat(dir, pid) : undefined}
               dragPayload={pid ? `rider:${pid}:${dir}` : undefined}
               onDropRider={(payload) => h.drop(dir, { kind: "car", carId: car.id }, payload)}
+              className={pid && highlight?.has(pid) ? "!bg-[#c9daf8]" : ""}
             />
           );
         })}
@@ -117,9 +120,11 @@ function EmptyColumn({ dir, band, driverOptions, rows, h }: {
 /** One campus band of a direction: tan header row (with the red GOING/BACK cell on
  * the first band), then the "Driver" pink label column + flush car columns, padded
  * with empty typeable columns so the grid always looks like the sheet. */
-export function CarGrid({ dir, band, label, directionLabel, cars, riders, options, driverOptions, h }: {
+export function CarGrid({ dir, band, label, directionLabel, cars, riders, options, driverOptions, h, highlight }: {
   dir: DirKey; band: "onCampus" | "offCampus"; label: string; directionLabel?: string; cars: Car[];
   riders: Record<string, Rider>; options: NameOption[]; driverOptions: NameOption[]; h: GridHandlers;
+  /** Off-campus people: light blue when they're a passenger here (on-campus band only). */
+  highlight?: Set<string>;
 }) {
   const rows = Math.max(4, ...cars.map((c) => Math.ceil((c.capacity - 1) / (c.capacity - 1 > 4 ? 2 : 1))));
   const usedCols = cars.reduce((n, c) => n + (c.capacity - 1 > 4 ? 2 : 1), 0);
@@ -138,7 +143,7 @@ export function CarGrid({ dir, band, label, directionLabel, cars, riders, option
           <div style={{ background: SHEET.filler, height: rows * 22, ...cellBorder }} />
           <div className="flex h-[22px] items-center px-1 text-[12px] italic" style={{ background: SHEET.filler, ...cellBorder }}>Comment</div>
         </div>
-        {cars.map((c) => <CarColumn key={c.id} dir={dir} band={band} car={c} riders={riders} options={options} rows={rows} h={h} />)}
+        {cars.map((c) => <CarColumn key={c.id} dir={dir} band={band} car={c} riders={riders} options={options} rows={rows} h={h} highlight={band === "onCampus" ? highlight : undefined} />)}
         {Array.from({ length: emptyCols }, (_, i) => <EmptyColumn key={`e${i}`} dir={dir} band={band} driverOptions={driverOptions} rows={rows} h={h} />)}
       </div>
     </div>
