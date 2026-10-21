@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import {
   addDriverToDirSet, carpoolToTsv, carRoutePoints, discrepancies, groupNeedsRide,
   locationKey, mirrorDirSet, movedRiders, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
-  regroupByCampus, removeFromDirSet, upgradeCarpoolData,
+  removeFromDirSet, upgradeCarpoolData,
   DIRS, driversIn, matchKeyword, moveCar, spotOf, swapDriver, formChanges, formRole, revertAll, revertChange, ridersIn, roleIn, setRole,
   type CarpoolDataV2, type CarpoolGuest, type Destination, type FormChange, type FormRides, type MatchText, type OsrmRoute, type RideRole, type Rider,
 } from "@db/carpool";
@@ -59,9 +59,9 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   );
   const [routes, setRoutes] = useState<Record<string, OsrmRoute | null>>({});
   const [msg, setMsg] = useState<string | null>(null);
-  // The keywords box text as typed (so commas and spaces survive while typing); null =
-  // show the saved list. The list itself updates on every keystroke (TOTAL panel groups);
-  // Enter / Apply also re-sorts the existing cars between the campus grids.
+  // The keywords box text as typed (so commas and spaces survive); null = show the list
+  // in use. Enter, Apply or leaving the box puts it into use, regrouping the TOTAL
+  // panel's people. Cars stay in whichever grid they're in.
   const [keywordDraft, setKeywordDraft] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -187,16 +187,11 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
 
   // Real drive times via the server's routing fallback chain — the same optimizer the
   // auto-carpool cron uses. The result replaces GOING in the (unsaved) sheet.
-  const parseKeywords = (text: string) => text.split(",").map((k) => k.trim()).filter(Boolean);
-  /** Enter / Apply on the campus keywords: re-sort existing cars in both directions by
-   * their driver's keyword match (locked cars stay), and tidy the box's text. */
+  /** Enter / Apply / leaving the box: use the typed campus keywords. */
   const applyKeywords = () => {
-    const keywords = keywordDraft === null ? data.collegeKeywords : parseKeywords(keywordDraft);
-    const g = regroupByCampus(data.going, matchText, keywords), b = regroupByCampus(data.back, matchText, keywords);
-    setData((s) => ({ ...s, collegeKeywords: keywords, going: g.dir, back: b.dir }));
+    if (keywordDraft === null) return;
+    setData((s) => ({ ...s, collegeKeywords: keywordDraft.split(",").map((k) => k.trim()).filter(Boolean) }));
     setKeywordDraft(null);
-    const moved = g.moved + b.moved;
-    setMsg(moved ? `Moved ${moved} car${moved === 1 ? "" : "s"} to match the campus keywords — review, then Save` : "Campus keywords applied — every car is already in the right grid");
   };
   const [optimizing, setOptimizing] = useState(false);
   const optimize = async (mode: "unplaced" | "moved") => {
@@ -347,10 +342,10 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
         <form onSubmit={(e) => { e.preventDefault(); applyKeywords(); }} className="flex min-w-64 flex-1 items-center gap-1 text-xs">
           <label className="flex flex-1 items-center gap-1">Campus keywords
             <input value={keywordDraft ?? data.collegeKeywords.join(", ")}
-              onChange={(e) => { setKeywordDraft(e.target.value); setData((s) => ({ ...s, collegeKeywords: parseKeywords(e.target.value) })); }}
-              className="input flex-1 py-1 text-xs" title="Comma-separated; matched against name + pickup spot. Enter or Apply moves existing cars to match." />
+              onChange={(e) => setKeywordDraft(e.target.value)} onBlur={applyKeywords}
+              className="input flex-1 py-1 text-xs" title="Comma-separated; matched against name + pickup spot. Enter or Apply regroups the people in the TOTAL panel." />
           </label>
-          <button type="submit" className="btn-secondary py-1 text-xs" title="Move existing cars to the on-/off-campus grid these keywords pick (locked cars stay put)">Apply</button>
+          <button type="submit" disabled={keywordDraft === null} className="btn-secondary py-1 text-xs disabled:opacity-50" title="Regroup the people needing a ride by these keywords (cars stay where they are)">Apply</button>
         </form>
         {msg && <span className="w-full text-xs" style={{ color: "var(--g-grey-600)" }}>{msg}</span>}
       </div>
