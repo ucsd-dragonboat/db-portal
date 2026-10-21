@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   layoutMembers,
-  carpoolToTsv,
   movedRiders,
   seatSnapshot,
   addDriverToDirSet,
@@ -210,50 +209,11 @@ describe('seatSnapshot / movedRiders', () => {
   })
 })
 
-describe('carpoolToTsv', () => {
-  it('puts each driver atop their passengers, one column per car, GOING then BACK', () => {
-    const d = upgradeCarpoolData({ v: 2 }, {})
-    d.going = dir({ onCampus: [car('d1', 5, ['p1', 'p2'])], offCampus: [car('d2', 5, ['p3'])], diy: ['p4'] })
-    const names: Record<string, string> = { d1: 'Ann', d2: 'Bo', p1: 'Cy', p2: 'Di\tx', p3: 'Ed', p4: 'Flo' }
-    expect(carpoolToTsv(d, (id) => names[id]).split('\n')).toEqual([
-      'GOING',
-      'Ann\tBo\tDIY',
-      'Cy\tEd\tFlo',
-      'Di x\t\t',
-      '',
-      'BACK',
-      '(no cars)',
-    ])
-  })
-})
-
 describe('car comments', () => {
-  it('survive upgradeCarpoolData (blank ones dropped) and copy as a row under the passengers', () => {
+  it('survive upgradeCarpoolData (blank ones dropped)', () => {
     const d = upgradeCarpoolData({ v: 2, going: { onCampus: [{ ...car('d1', 5, ['p1', 'p2']), comment: 'leave 7:15' }, { ...car('d2', 5, ['p3']), comment: '  ' }], offCampus: [], diy: [] } }, {})
     expect(d.going.onCampus[0].comment).toBe('leave 7:15')
     expect('comment' in d.going.onCampus[1]).toBe(false)
-    const names: Record<string, string> = { d1: 'Ann', d2: 'Bo', p1: 'Cy', p2: 'Di', p3: 'Ed' }
-    expect(carpoolToTsv(d, (id) => names[id]).split('\n').slice(0, 5)).toEqual([
-      'GOING', 'Ann\tBo', 'Cy\tEd', 'Di\t', 'leave 7:15\t',
-    ])
   })
 })
 
-describe('carpoolToTsv notes', () => {
-  it('lists pickup notes for people in the layout in a NOTES section, not in the name cells', () => {
-    const d = upgradeCarpoolData({ v: 2 }, {})
-    d.going = dir({ onCampus: [car('d1', 5, ['p1'])] })
-    const names: Record<string, string> = { d1: 'Ann', p1: 'Cy', p9: 'Zed' }
-    const out = carpoolToTsv(d, (id) => names[id], { p1: 'Pickup: Peterson Loop', p9: 'Pickup: elsewhere', d1: '' }).split('\n')
-    expect(out.slice(0, 3)).toEqual(['GOING', 'Ann', 'Cy'])
-    expect(out.slice(-2)).toEqual(['NOTES', 'Cy\tPickup: Peterson Loop'])
-  })
-})
-
-describe('carpoolToTsv fun fact', () => {
-  it('appends the question then Name | Response rows, flattening multi-line answers', () => {
-    const d = upgradeCarpoolData({ v: 2 }, {})
-    const out = carpoolToTsv(d, (id) => id, {}, { question: 'Largest sea animal?', rows: [{ name: 'Bethany', text: 'moon jelly' }, { name: 'Anna', text: 'Albert\nthe whale' }] }).split('\n')
-    expect(out.slice(-3)).toEqual(['Largest sea animal?', 'Bethany\tmoon jelly', 'Anna\tAlbert the whale'])
-  })
-})

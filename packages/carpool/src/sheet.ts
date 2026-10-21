@@ -276,39 +276,6 @@ export function seatSnapshot(d: CarpoolDataV2, current: Record<string, { locatio
   return out
 }
 
-/** The layout as tab-separated text for pasting into Google Sheets: per direction, a
- * title row, then one column per car — driver on top, passengers underneath, and the
- * car's comment on one shared row below the passengers (only when some car has one) —
- * with a DIY column last when anyone's getting there themselves. `notes` (pickup spot
- * / driving-from, by rider id) go in a NOTES section at the end instead of the name
- * cells, and the chosen fun-fact question with everyone's responses goes last. Tabs and
- * newlines inside cells are flattened so a value can't break the grid. */
-export function carpoolToTsv(
-  d: CarpoolDataV2, nameOf: (id: string) => string, notes: Record<string, string> = {},
-  funFact?: { question: string; rows: { name: string; text: string }[] },
-): string {
-  const clean = (s: string) => s.replace(/[\t\r\n]+/g, ' ').trim()
-  const block = (title: string, dir: DirSet): string[][] => {
-    const cars = [...dir.onCampus, ...dir.offCampus]
-    const cols: string[][] = cars.map((c) => [nameOf(c.driverId), ...c.passengerIds.map(nameOf)])
-    if (dir.diy.length) cols.push(['DIY', ...dir.diy.map(nameOf)])
-    if (!cols.length) return [[title], ['(no cars)']]
-    const height = Math.max(...cols.map((c) => c.length))
-    const rows: string[][] = [[title]]
-    for (let i = 0; i < height; i++) rows.push(cols.map((c) => c[i] ?? ''))
-    // Comments line up on one row under everyone's passengers, like the builder's cells.
-    if (cars.some((c) => c.comment?.trim())) rows.push(cols.map((_, i) => cars[i]?.comment ?? ''))
-    return rows
-  }
-  // Where people are picked up / driving from, kept out of the name cells: a
-  // Name | Note list for everyone in this layout who has one.
-  const noted = [...layoutMembers(d)].filter((id) => notes[id]?.trim()).sort((a, b) => nameOf(a).localeCompare(nameOf(b)))
-  const notesBlock = noted.length ? [[], ['NOTES'], ...noted.map((id) => [nameOf(id), notes[id]])] : []
-  // The fun-fact column: the chosen form question, then Name | Response.
-  const funBlock = funFact ? [[], [funFact.question], ...funFact.rows.map((r) => [r.name, r.text])] : []
-  return [...block('GOING', d.going), [], ...block('BACK', d.back), ...notesBlock, ...funBlock].map((r) => r.map(clean).join('\t')).join('\n')
-}
-
 /** Drag a car left/right: move it before `beforeCarId` in `band` (end of the band
  * when null). Moving between the on/off-campus bands is allowed. */
 export function moveCar(dir: DirSet, carId: string, band: 'onCampus' | 'offCampus', beforeCarId: string | null): DirSet {
