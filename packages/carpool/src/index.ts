@@ -50,7 +50,7 @@ export { buildOsrmTableUrl, parseOsrmTable, optimizeCarpool } from './optimize'
 export type { CostMatrix, OptimizeOptions } from './optimize'
 export { ROUTE_PROVIDERS, MATRIX_PROVIDERS, decodePolyline } from './providers'
 export type { HttpRequest, ProviderKeys, RouteProvider, MatrixProvider } from './providers'
-export { computeDriverStats, computePairStats } from './stats'
+export { computeDriverStats, computePairStats, drivesByEvent } from './stats'
 export type { Trip, DriverStats, PairStat } from './stats'
 
 export { DIRS, formRole, roleIn, setRole, driversIn, ridersIn, formChanges, revertChange, revertAll } from './roles'

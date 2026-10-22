@@ -7,7 +7,7 @@ import {
   faBullhorn, faDragon, faEye, faFileLines, faFlagCheckered, faFolder, faGear, faHeartPulse, faHand, faHouse, faImage, faLink, faLocationDot,
   faMagnifyingGlass, faMoon, faPen, faPhone, faPlus, faSailboat, faSun, faTableCells, faThumbtack, faTrashCan,
   faTriangleExclamation, faUser, faUsers, faWeightScale, faXmark,
-  faArrowUpZA, faCaretDown, faCaretRight, faDownload, faEyeSlash, faFilter, faLayerGroup, faRotateLeft, faTextHeight,
+  faArrowUpZA, faCaretDown, faCircleInfo, faCaretRight, faDownload, faEyeSlash, faFilter, faLayerGroup, faRotateLeft, faTextHeight,
 } from "@fortawesome/free-solid-svg-icons";
 
 /** Central icon registry (Font Awesome free/solid) — semantic names so call sites read like the old emojis. */
@@ -36,6 +36,7 @@ export const ICONS = {
   gear: faGear,               // ⚙️
   hand: faHand,               // 🙋 needs a ride
   image: faImage,            // 🖼 images panel
+  info: faCircleInfo,         // ⓘ breakdown popups
   house: faHouse,             // 🏠 address
   link: faLink,               // 🔗 copy link
   list: faList,               // ☰ list view

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeDriverStats, computePairStats, type Trip } from './stats'
+import { computeDriverStats, computePairStats, drivesByEvent, type Trip } from './stats'
 
 const trip = (driverId: string, passengerIds: string[], distanceKm = 10, durationMin = 20): Trip => ({
   driverId, passengerIds, distanceKm, durationMin,
@@ -37,5 +37,23 @@ describe('computePairStats', () => {
 
   it('is a no-op for a driver-only trip', () => {
     expect(computePairStats([trip('d1', [])])).toEqual([])
+  })
+})
+
+describe('drivesByEvent', () => {
+  const trips = [
+    { eventId: 'e1', driverId: 'a', passengerIds: ['x'], distanceKm: 5, durationMin: 10 },
+    { eventId: 'e1', driverId: 'a', passengerIds: ['y'], distanceKm: 5, durationMin: 10 }, // BACK the same day
+    { eventId: 'e2', driverId: 'a', passengerIds: ['x', 'y'], distanceKm: 5, durationMin: 10 },
+    { eventId: 'e2', driverId: 'a', passengerIds: [], distanceKm: 5, durationMin: 10 },   // empty car
+    { eventId: 'e2', driverId: 'b', passengerIds: ['a'], distanceKm: 5, durationMin: 10 },
+  ]
+  it('counts drives per event, skipping empty cars', () => {
+    expect(drivesByEvent(trips)).toEqual({ a: { e1: 2, e2: 1 }, b: { e2: 1 } })
+  })
+  it('adds up to timesDriven', () => {
+    const stats = computeDriverStats(trips)
+    for (const [driver, byEvent] of Object.entries(drivesByEvent(trips)))
+      expect(Object.values(byEvent).reduce((n, c) => n + c, 0)).toBe(stats[driver].timesDriven)
   })
 })
