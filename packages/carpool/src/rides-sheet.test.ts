@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { a1, buildRidesGrid, buildRidesSheet, gridToTsv, type RidesPeople, type SheetGrid } from './rides-sheet'
+import { a1, buildRidesGrid, buildRidesSheet, gridToTsv, trackerCell, type RidesPeople, type SheetCell, type SheetGrid } from './rides-sheet'
 import { upgradeCarpoolData } from './sheet'
 import type { Car, DirSet } from './types'
 
@@ -9,151 +9,178 @@ const names: Record<string, string> = { d1: 'Jack (Seventh)', d2: 'Kenneth', p1:
 const nameOf = (id: string) => names[id] ?? id
 const people: RidesPeople = {
   drivers: ['Jack (Seventh)', 'Kenneth'], offCampus: ['Justin Zeng', 'Scott'],
-  onCampus: [{ keyword: 'Seventh', names: ['Logan'] }, { keyword: '➰ Petersoon Loop', names: ['Ann', 'Bo'] }], diy: ['Elyssa', 'Jude'], total: 9,
+  onCampus: [{ keyword: 'Seventh', names: ['Logan'] }, { keyword: '➰ Petersoon Loop', names: ['Ann', 'Bo'] }], diy: ['Elyssa', 'Jude'],
 }
-
 function sample() {
   const d = upgradeCarpoolData({ v: 2, header: 'LEAVE BY 8:15 AM, ISLAND BY 8:45 AM' }, {})
   d.going = dir({ onCampus: [car('d1', ['p1', 'p2'], { comment: '6AM Time Trial' })], offCampus: [car('d2', ['p3', 'p2'])], diy: ['p4', 'p5'] })
   d.back = dir({ onCampus: [car('b1', ['p2'])] })
   return d
 }
-const at = (g: SheetGrid, r: number, c: number) => g[r]?.[c] ?? undefined
-// Columns: A=0, cars 1–9, separator 10, TOTAL 11–14, separator 15, question name 16, answer 17–19.
-// Rows: banner 0–1 (A1:O2) · GOING on campus: band 2, drivers 3, passengers 4–7, comments 8 ·
-// off campus: band 9, drivers 10, passengers 11–14, comments 15 · DIY: 16, names 17–21 ·
-// blank 22 · BACK on campus band 23, drivers 24, passengers 25–28…
-const g = buildRidesGrid(sample(), { nameOf, people, highlight: new Set(['p2']), funFact: { question: 'SD food recs?', rows: [{ name: 'Anna', text: 'ninja creami' }, { name: 'Bo <b>', text: 'Taco\nstand' }] } })
+const funFact = { question: 'SD food recs?', rows: [{ name: 'Anna', text: 'ninja creami' }, { name: 'Bo <b>', text: 'Taco\nstand' }] }
+const g = buildRidesGrid(sample(), { nameOf, people, highlight: new Set(['p2']), funFact })
 
-describe('buildRidesGrid', () => {
-  it('merges the banner A1:O2 — label, 9 car columns, separator and TOTAL, two rows tall', () => {
-    expect(at(g, 0, 0)).toMatchObject({ v: 'LEAVE BY 8:15 AM, ISLAND BY 8:45 AM', bg: '#2f2f2f', fg: '#ffffff', colspan: 15, rowspan: 2 })
-    expect(g[0].slice(1, 15).every((c) => c === null) && g[1].slice(0, 15).every((c) => c === null)).toBe(true)
-    expect(at(g, 0, 15)).toMatchObject({ bg: '#2f2f2f', rowspan: 2 }) // P1:P2, dark beside the banner
+/** The cell at an A1 address. */
+const cell = (grid: SheetGrid, ref: string): SheetCell | null | undefined => {
+  const m = ref.match(/^([A-Z]+)(\d+)$/)!
+  const col = [...m[1]].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1
+  return grid[Number(m[2]) - 1]?.[col]
+}
+/** Every merged range in A1 notation. */
+const merges = (grid: SheetGrid) => grid.flatMap((row, r) => row.flatMap((c, k) =>
+  c && ((c.colspan ?? 1) > 1 || (c.rowspan ?? 1) > 1) ? [`${a1(r, k)}:${a1(r + (c.rowspan ?? 1) - 1, k + (c.colspan ?? 1) - 1)}`] : []))
+
+describe('buildRidesGrid: the Master Sheet template, cell for cell', () => {
+  it('has exactly the sheet\'s merged cells', () => {
+    expect(merges(g).sort()).toEqual([
+      'A1:O2', 'P1:P2',                                   // banner, dark separator top
+      'B3:J3', 'K3:K66', 'L3:M3', 'P3:P66',               // ON CAMPUS bar, separators, TOTAL
+      'A5:A10', 'B10:J10', 'A12:A16', 'B17:J17', 'A18:A22', // GOING grey blocks, OFF CAMPUS + DIY bars
+      'A23:J23',                                          // blank row
+      'B24:J24', 'A26:A31', 'B31:J31', 'A33:A37', 'B38:J38', 'A39:A43', // BACK
+      'A44:J45', 'A46:J47', 'A48:J49',                    // blank, teal, error notice
+      'A50:B66', 'C50:H51', 'C52:H64', 'C65:H66', 'I50:J66', // bottom block
+    ].sort())
   })
-  it('lays out GOING like the sheet: band, Driver row, passengers, comment row', () => {
-    expect(at(g, 2, 0)).toMatchObject({ v: 'GOING ➡️', bg: '#e80b0b' })
-    expect(at(g, 2, 1)).toMatchObject({ v: 'ON CAMPUS', bg: '#ffefbf', colspan: 9 })
-    expect(at(g, 3, 0)).toMatchObject({ v: 'Driver', bg: '#ffc6a9' })
-    expect(at(g, 3, 1)).toMatchObject({ v: 'Jack (Seventh)', bg: '#ffc6a9', bold: true })
-    expect(at(g, 3, 2)).toMatchObject({ bg: '#ffc6a9' }) // empty driver cells stay peach
-    expect([at(g, 4, 1)?.v, at(g, 5, 1)?.v]).toEqual(['Logan', 'Justin Zeng'])
-    expect(at(g, 8, 1)).toMatchObject({ v: '6AM Time Trial', bold: true })
-    expect(at(g, 9, 1)).toMatchObject({ v: 'OFF CAMPUS' })
-    expect(at(g, 10, 1)?.v).toBe('Kenneth')
-  })
-  it('merges the grey filler under each Driver label into one tall block (like A5:A8)', () => {
-    expect(at(g, 4, 0)).toMatchObject({ bg: '#d9d9d9', rowspan: 4 })
-    expect([5, 6, 7].every((r) => g[r][0] === null)).toBe(true)
-    expect(at(g, 8, 0)).toEqual({ bg: '#d9d9d9' }) // the comment row's grey cell is separate, not merged in
-    expect(at(g, 17, 0)).toMatchObject({ bg: '#d9d9d9', rowspan: 5 }) // DIY rows
-    const tall = upgradeCarpoolData({ v: 2 }, {})
-    tall.going.onCampus = [car('d1', ['a', 'b', 'c', 'd', 'e', 'f'])]
-    expect(at(buildRidesGrid(tall, { nameOf, people }), 4, 0)?.rowspan).toBe(6)
+  it('colours and labels match the export', () => {
+    expect(cell(g, 'A1')).toMatchObject({ v: 'LEAVE BY 8:15 AM, ISLAND BY 8:45 AM', bg: '#2f2f2f', fg: '#ffffff', size: 18, align: 'center' })
+    expect(cell(g, 'P1')).toMatchObject({ bg: '#2f2f2f' })
+    expect(cell(g, 'A3')).toMatchObject({ v: 'GOING ➡️', bg: '#e80b0b', fg: '#ffffff' })
+    expect(cell(g, 'B3')).toMatchObject({ v: 'ON CAMPUS', bg: '#ffefbf', align: 'center' })
+    expect(cell(g, 'A4')).toMatchObject({ v: 'Driver', bg: '#ffc6a9' })
+    expect(cell(g, 'B4')).toMatchObject({ v: 'Jack (Seventh)', bg: '#ffc6a9', bold: true })
+    expect(cell(g, 'C4')).toEqual({ bg: '#ffc6a9' })
+    expect(cell(g, 'A5')).toMatchObject({ bg: '#d9d9d9' })
+    expect(cell(g, 'B9')).toMatchObject({ v: '6AM Time Trial', bold: true })
+    expect(cell(g, 'B10')).toMatchObject({ v: 'OFF CAMPUS', bg: '#ffefbf' })
+    expect(cell(g, 'B11')?.v).toBe('Kenneth')
+    expect([cell(g, 'B12')?.v, cell(g, 'B13')?.v]).toEqual(['Scott', 'Justin Zeng'])
+    expect(cell(g, 'A17')).toMatchObject({ bg: '#d6ccfe' })
+    expect(cell(g, 'B17')).toMatchObject({ v: 'DIY', bg: '#d6ccfe' })
+    expect([cell(g, 'B18')?.v, cell(g, 'B19')?.v]).toEqual(['Elyssa', 'Jude'])
+    expect(cell(g, 'A24')).toMatchObject({ v: 'BACK ⬅️', bg: '#e80b0b' })
+    expect(cell(g, 'B24')).toMatchObject({ v: 'ON CAMPUS', bg: '#ffeebf' })
+    expect(cell(g, 'B25')?.v).toBe('Brandon')
+    expect(cell(g, 'A46')).toMatchObject({ bg: '#46bdc6' })
+    expect(cell(g, 'A48')).toMatchObject({ v: 'IF YOU SEE AN ERROR ("I only have a ride there!") DM BLUM IMMEDIATELY', bg: '#ff7c3a', fg: '#ffffff', size: 14 })
+    expect(cell(g, 'A50')).toMatchObject({ bg: '#666666' })
+    expect(cell(g, 'C50')).toMatchObject({ v: '.........', bg: '#666666', fg: '#ffffff' })
+    expect(cell(g, 'C52')).toMatchObject({ v: '...', bg: '#ffffff', align: 'center' })
+    expect(cell(g, 'K3')).toMatchObject({ bg: '#666666' })
   })
   it('highlights an off-campus person only as a passenger in an ON CAMPUS car', () => {
-    expect(at(g, 5, 1)).toMatchObject({ v: 'Justin Zeng', bg: '#c9daf8' })  // going, on campus
-    expect(at(g, 12, 1)).toMatchObject({ v: 'Justin Zeng', bg: '#ffffff' }) // going, off-campus car
-    expect(at(g, 4, 1)).toMatchObject({ v: 'Logan', bg: '#ffffff' })
-    expect(at(g, 25, 1)).toMatchObject({ v: 'Justin Zeng', bg: '#c9daf8' }) // back, on campus
+    expect(cell(g, 'B6')).toMatchObject({ v: 'Justin Zeng', bg: '#c9daf8' })  // GOING, on campus
+    expect(cell(g, 'B13')).toMatchObject({ v: 'Justin Zeng', bg: '#ffffff' }) // GOING, off-campus car
+    expect(cell(g, 'B5')).toMatchObject({ v: 'Logan', bg: '#ffffff' })
+    expect(cell(g, 'B26')).toMatchObject({ v: 'Justin Zeng', bg: '#c9daf8' }) // BACK, on campus
   })
-  it('puts DIY under its purple header, flowing down 5 rows per column', () => {
-    expect(at(g, 16, 1)).toMatchObject({ v: 'DIY', bg: '#d6ccfe', colspan: 9 })
-    expect([at(g, 17, 1)?.v, at(g, 18, 1)?.v, at(g, 19, 1)?.v]).toEqual(['Elyssa', 'Jude', ''])
-    const many = upgradeCarpoolData({ v: 2 }, {})
-    many.going.diy = Array.from({ length: 7 }, (_, i) => `x${i}`)
-    const g2 = buildRidesGrid(many, { nameOf, people: { ...people, onCampus: [] } })
-    expect([at(g2, 17, 1)?.v, at(g2, 21, 1)?.v, at(g2, 17, 2)?.v, at(g2, 18, 2)?.v]).toEqual(['x0', 'x4', 'x5', 'x6'])
+  it('counts each direction\'s people in J22 / J43', () => {
+    expect(cell(g, 'J22')).toMatchObject({ v: '=COUNTA(B4:J8,B11:J15,B18:J21)', align: 'right' })
+    expect(cell(g, 'J43')?.v).toBe('=COUNTA(B25:J29,B32:J36,B39:J42)')
   })
-  it('starts BACK after a blank row', () => {
-    expect(at(g, 23, 0)).toMatchObject({ v: 'BACK ⬅️' })
-    expect(at(g, 23, 1)).toMatchObject({ v: 'ON CAMPUS', bg: '#ffeebf' })
-    expect(at(g, 24, 1)?.v).toBe('Brandon')
-  })
-  it('puts the TOTAL people grid right of the cars, starting at GOING (row 3)', () => {
-    expect(at(g, 2, 10)).toMatchObject({ bg: '#666666' })
-    expect(at(g, 2, 11)).toMatchObject({ v: 'TOTAL', colspan: 2 })
-    expect(at(g, 2, 14)?.v).toBe('9')
-    expect([0, 1, 2, 3].map((i) => at(g, 3, 11 + i)?.v)).toEqual(['2', '2', '3', '2'])
-    expect([at(g, 4, 11)?.v, at(g, 4, 12)?.v, at(g, 4, 13)?.v, at(g, 4, 14)?.v]).toEqual(['DRIVERS', 'NEED RIDE', 'NEED RIDE', 'DIY'])
-    expect(at(g, 5, 12)).toMatchObject({ v: 'OFF CAMPUS', bg: '#cc0000' })
-    expect(at(g, 5, 13)).toMatchObject({ v: 'ON CAMPUS', bg: '#3c78d8' })
-    expect([6, 7, 8, 9].map((r) => at(g, r, 13)?.v)).toEqual(['SEVENTH', 'Logan', '➰ PETERSOON LOOP', 'Ann'])
-    expect(at(g, 6, 13)).toMatchObject({ bg: '#a2c4c9' })
-    expect([at(g, 6, 11)?.v, at(g, 7, 11)?.v, at(g, 6, 12)?.v, at(g, 6, 14)?.v]).toEqual(['Jack (Seventh)', 'Kenneth', 'Justin Zeng', 'Elyssa'])
+  it('TOTAL panel: rows and formulas like the sheet', () => {
+    expect(cell(g, 'L3')).toMatchObject({ v: 'TOTAL', bg: '#76a5af' })
+    expect(cell(g, 'O3')?.v).toBe('=L4+M4+N4+O4')
+    expect(cell(g, 'L4')?.v).toBe('=COUNTA(L6:L66)')
+    expect(cell(g, 'M4')?.v).toBe('=COUNTA(M7:M66)')
+    expect(cell(g, 'N4')?.v).toBe('=COUNTA(N8:N8,N10:N66)') // skips N7 SEVENTH and N9 ➰ PETERSOON LOOP
+    expect(cell(g, 'O4')?.v).toBe('=COUNTA(O6:O66)')
+    expect(cell(g, 'L4')).toMatchObject({ bg: '#d0e0e3', align: 'right' })
+    expect([cell(g, 'L5')?.v, cell(g, 'M5')?.v, cell(g, 'N5')?.v, cell(g, 'O5')?.v]).toEqual(['DRIVERS', 'NEED RIDE', 'NEED RIDE', 'DIY'])
+    expect(cell(g, 'M6')).toMatchObject({ v: 'OFF CAMPUS', bg: '#cc0000' })
+    expect(cell(g, 'N6')).toMatchObject({ v: 'ON CAMPUS', bg: '#3c78d8' })
+    expect([cell(g, 'L6')?.v, cell(g, 'L7')?.v, cell(g, 'O6')?.v, cell(g, 'O7')?.v]).toEqual(['Jack (Seventh)', 'Kenneth', 'Elyssa', 'Jude'])
+    expect([cell(g, 'M7')?.v, cell(g, 'M8')?.v]).toEqual(['Justin Zeng', 'Scott'])
+    expect([7, 8, 9, 10, 11].map((r) => cell(g, `N${r}`)?.v)).toEqual(['SEVENTH', 'Logan', '➰ PETERSOON LOOP', 'Ann', 'Bo'])
+    expect(cell(g, 'N7')).toMatchObject({ bg: '#a2c4c9' })
   })
   it('a group with no keyword (write-ins) gets no heading row', () => {
     const g4 = buildRidesGrid(sample(), { nameOf, people: { ...people, onCampus: [{ keyword: 'MUIR', names: ['Ann'] }, { keyword: '', names: ['Guest'] }] } })
-    expect([6, 7, 8].map((r) => at(g4, r, 13)?.v)).toEqual(['MUIR', 'Ann', 'Guest'])
+    expect([7, 8, 9].map((r) => cell(g4, `N${r}`)?.v)).toEqual(['MUIR', 'Ann', 'Guest'])
+    expect(cell(g4, 'N4')?.v).toBe('=COUNTA(N8:N66)')
   })
-  it('puts the question right of TOTAL: header over name + answer, each answer merged across 3 columns', () => {
-    expect(at(g, 2, 15)).toMatchObject({ bg: '#666666' })
-    expect(at(g, 0, 16)).toMatchObject({ v: 'SD food recs?', bg: '#ffff00', colspan: 4 })
-    expect([at(g, 1, 16)?.v, at(g, 1, 17)?.v, at(g, 2, 16)?.v]).toEqual(['Anna', 'ninja creami', 'Bo <b>'])
-    expect(at(g, 1, 17)?.colspan).toBe(3)
-    expect(g[1][18] === null && g[1][19] === null).toBe(true)
-    expect(g.every((row) => row.length === 20)).toBe(true)
+  it('question panel: Q1 "Name", R1 the question, then name | answer', () => {
+    expect(cell(g, 'Q1')).toMatchObject({ v: 'Name', bg: '#ffff00' })
+    expect(cell(g, 'R1')).toMatchObject({ v: 'SD food recs?', bg: '#ffff00' })
+    expect([cell(g, 'Q2')?.v, cell(g, 'R2')?.v, cell(g, 'Q3')?.v]).toEqual(['Anna', 'ninja creami', 'Bo <b>'])
+    expect(cell(g, 'R2')?.colspan).toBeUndefined()
   })
-  it('without a question: no panel and no trailing separator', () => {
+  it('discrepancy tracker at A67 over the exact name cells', () => {
+    expect(trackerCell(g)).toBe('A67')
+    const q = cell(g, 'A67')!.v!
+    expect(q.slice(q.indexOf('{') + 1, q.indexOf('}')).split(';')).toEqual([
+      'FLATTEN(B4:J8)', 'FLATTEN(B11:J15)', 'FLATTEN(B18:J21)',
+      'FLATTEN(B25:J29)', 'FLATTEN(B32:J36)', 'FLATTEN(B39:J42)',
+      'L6:L66', 'M7:M66', 'N8:N8', 'N10:N66', 'O6:O66',
+    ])
+    expect(q).toContain("group by Col1 label Col1 'Name', count(Col1) 'Count'")
+    expect([cell(g, 'C67')?.v, cell(g, 'C68')?.v, cell(g, 'E67')?.v, cell(g, 'E68')?.v])
+      .toEqual(['Total', '=SUM(B68:B)/3', 'Discrepancy', '=IFERROR(FILTER(A68:A, B68:B<>3), "")'])
+    expect(cell(g, 'B67')).toEqual({}) // spill cells blank and unformatted
+  })
+  it('without a question: no P separator or Q/R panel', () => {
     const g5 = buildRidesGrid(sample(), { nameOf, people })
     expect(g5.every((row) => row.length === 15)).toBe(true)
+    expect(merges(g5)).not.toContain('P3:P66')
   })
-  it('adds the discrepancy tracker below, counting exactly the name cells of this layout', () => {
-    // Body ends at row 43 (BACK DIY); tracker header 2 rows later = row 46, data from row 47.
-    const q = at(g, 45, 0)!.v!
-    expect(q.startsWith('=QUERY(ARRAYFORMULA(TRIM({')).toBe(true)
-    const ranges = q.slice(q.indexOf('{') + 1, q.indexOf('}')).split(';')
-    expect(ranges).toEqual([
-      'FLATTEN(B4:J8)', 'FLATTEN(B11:J15)', 'FLATTEN(B18:J22)',   // GOING: on campus, off campus, DIY (Driver row + passengers)
-      'FLATTEN(B25:J29)', 'FLATTEN(B32:J36)', 'FLATTEN(B39:J43)', // BACK
-      'L7:L8', 'M7:M8', 'N8:N8', 'N10:N11', 'O7:O8',              // TOTAL: N skips SEVENTH (N7) and ➰ PETERSOON LOOP (N9)
-    ])
-    expect([at(g, 6, 13)?.v, at(g, 8, 13)?.v]).toEqual(['SEVENTH', '➰ PETERSOON LOOP']) // the skipped cells really are headings
-    expect(q).toContain("group by Col1 label Col1 'Name', count(Col1) 'Count'")
-    expect([at(g, 45, 2)?.v, at(g, 46, 2)?.v]).toEqual(['Total', '=SUM(B47:B)/3'])
-    expect([at(g, 45, 4)?.v, at(g, 46, 4)?.v]).toEqual(['Discrepancy', '=IFERROR(FILTER(A47:A, B47:B<>3), "")'])
-    expect(at(g, 45, 1)).toEqual({}) // spill cells are blank and unformatted
-    expect(at(g, 45, 10)).toEqual({}) // separators stop above the tracker
+})
+
+describe('growing the template', () => {
+  it('a car with 6 passengers adds rows to its band; everything below and the tracker shift', () => {
+    const d = sample()
+    d.going.onCampus = [car('d1', ['a', 'b', 'c', 'd', 'e', 'f'])]
+    const g2 = buildRidesGrid(d, { nameOf, people })
+    expect(merges(g2)).toContain('A5:A12') // 6 passengers + comment + OFF CAMPUS bar
+    expect(cell(g2, 'B12')).toMatchObject({ v: 'OFF CAMPUS' })
+    expect(cell(g2, 'J24')?.v).toBe('=COUNTA(B4:J10,B13:J17,B20:J23)')
+    expect(trackerCell(g2)).toBe('A69')
+    expect(cell(g2, 'L4')?.v).toBe('=COUNTA(L6:L68)')
   })
-  it('tracker follows the layout: a write-in group with no heading, trailing names, wide bands', () => {
-    const d = upgradeCarpoolData({ v: 2 }, {})
-    d.going.onCampus = Array.from({ length: 11 }, (_, i) => car(`c${i}`, ['a', 'b', 'c', 'd', 'e']))
-    const g6 = buildRidesGrid(d, { nameOf, people: { drivers: [], offCampus: ['x'], onCampus: [{ keyword: 'MUIR', names: ['y'] }, { keyword: '', names: ['w'] }], diy: [], total: 3 } })
-    const q = g6.flatMap((row) => row).find((c) => c?.v?.startsWith('=QUERY'))!.v!
-    expect(q).toContain('FLATTEN(B4:L9)') // 11 car columns, 5 passenger rows
-    expect(q).toContain(';O7:O7;P8:P9}') // off campus x; on campus y + write-in w after the MUIR heading
-  })
-  it('a1 handles columns past Z', () => {
-    expect([a1(0, 0), a1(9, 25), a1(0, 26), a1(2, 27)]).toEqual(['A1', 'Z10', 'AA1', 'AB3'])
-  })
-  it('widens past 9 columns for a band with more cars (banner follows)', () => {
+  it('more than 9 cars widens the car grid; TOTAL and the banner move right', () => {
     const d = upgradeCarpoolData({ v: 2 }, {})
     d.going.onCampus = Array.from({ length: 11 }, (_, i) => car(`c${i}`))
     const g3 = buildRidesGrid(d, { nameOf, people })
-    expect(at(g3, 0, 0)?.colspan).toBe(17)
-    expect(at(g3, 3, 11)?.v).toBe('c10')
+    expect(merges(g3)).toEqual(expect.arrayContaining(['A1:Q2', 'B3:L3', 'M3:M66', 'N3:O3']))
+    expect(cell(g3, 'L4')?.v).toBe('c10')
+    expect(cell(g3, 'Q3')?.v).toBe('=N4+O4+P4+Q4')
+  })
+  it('a long DIY list adds DIY rows', () => {
+    const d = upgradeCarpoolData({ v: 2 }, {})
+    d.going.diy = Array.from({ length: 40 }, (_, i) => `x${i}`)
+    const g6 = buildRidesGrid(d, { nameOf, people })
+    expect([cell(g6, 'B18')?.v, cell(g6, 'B22')?.v, cell(g6, 'C18')?.v]).toEqual(['x0', 'x4', 'x5']) // 5 rows per column
+    expect(merges(g6)).toContain('A18:A23')
+    expect(trackerCell(g6)).toBe('A68')
+  })
+  it('a TOTAL list longer than the template stretches the bottom block', () => {
+    const g7 = buildRidesGrid(sample(), { nameOf, people: { ...people, drivers: Array.from({ length: 70 }, (_, i) => `D${i}`) } })
+    expect(cell(g7, 'L75')?.v).toBe('D69')
+    expect(merges(g7)).toEqual(expect.arrayContaining(['A50:B75', 'K3:K75', 'C65:H66'.replace('65', '74').replace('66', '75')]))
+    expect(trackerCell(g7)).toBe('A76')
+  })
+  it('a1 handles columns past Z', () => {
+    expect([a1(0, 0), a1(9, 25), a1(0, 26), a1(2, 27)]).toEqual(['A1', 'Z10', 'AA1', 'AB3'])
   })
 })
 
 describe('buildRidesSheet', () => {
   const out = buildRidesSheet(sample(), { nameOf, people, funFact: { question: 'Q', rows: [{ name: 'Bo <b>', text: 'Taco\nstand & "more"' }] } })
-  it('renders an HTML table Sheets keeps colours and merges from, escaped', () => {
+  it('renders an HTML table with the merges, escaped', () => {
     expect(out.html).toContain('<td colspan="15" rowspan="2" style="background-color:#2f2f2f;color:#ffffff;text-align:center;font-size:18pt')
-    expect(out.html).toContain('<td rowspan="4" style="background-color:#d9d9d9')
-    expect(out.html).toContain('<td colspan="3" style="background-color:#ffffff')
-    // A row's covered cells emit no <td>: row 2 is fully under the banner except P..T.
-    expect(out.html.split('<tr>')[2].match(/<td/g)?.length).toBe(2)
+    expect(out.html).toContain('<td rowspan="6" style="background-color:#d9d9d9') // A5:A10
+    expect(out.html).toContain('<td rowspan="64" style="background-color:#666666') // K3:K66
     expect(out.html).toContain('Bo &lt;b&gt;')
     expect(out.html).toContain('Taco stand &amp; &quot;more&quot;')
     expect(out.html).not.toContain('<b>')
+    expect(out.tracker).toBe('A67')
   })
   it('TSV keeps the same positions as the table', () => {
     const rows = out.tsv.split('\n')
     expect(rows[0].split('\t')[0]).toBe('LEAVE BY 8:15 AM, ISLAND BY 8:45 AM')
-    expect(rows[0].split('\t')[16]).toBe('Q') // banner's merged columns are blank, question lands in column 16
+    expect(rows[0].split('\t').slice(16, 18)).toEqual(['Name', 'Q'])
     expect(rows[3].split('\t').slice(0, 2)).toEqual(['Driver', 'Jack (Seventh)'])
-    expect(rows[1].split('\t')[16]).toBe('Bo <b>')
-    expect(rows[1].split('\t')[17]).toBe('Taco stand & "more"')
+    expect(rows[1].split('\t').slice(16, 18)).toEqual(['Bo <b>', 'Taco stand & "more"'])
+    expect(rows[66].startsWith('=QUERY(')).toBe(true)
     expect(gridToTsv([[{ v: 'a\tb' }, null, { v: 'c' }]])).toBe('a b\t\tc')
   })
 })

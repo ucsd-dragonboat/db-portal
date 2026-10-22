@@ -286,9 +286,8 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
           ...(guestNames("onCampus").length ? [{ keyword: "", names: guestNames("onCampus") }] : []), // write-ins: no heading, like on screen
         ],
         diy: [...live(diff.diy), ...guestNames("diy")],
-        total: Object.keys(riders).length,
       };
-      const { html, tsv } = buildRidesSheet(data, { nameOf, people, funFact, highlight: offCampusIds });
+      const { html, tsv, tracker } = buildRidesSheet(data, { nameOf, people, funFact, highlight: offCampusIds });
       if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
         await navigator.clipboard.write([new ClipboardItem({
           "text/html": new Blob([html], { type: "text/html" }),
@@ -297,7 +296,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
       } else {
         await navigator.clipboard.writeText(tsv);
       }
-      setMsg("Copied — click cell A1 of a blank tab in Google Sheets and paste (colours and merged cells come with it)");
+      setMsg(`Copied — click cell A1 of a blank tab in Google Sheets and paste (colours, merges and formulas come with it)${tracker === "A67" ? "" : ` · this layout is bigger than the template, so the discrepancy tracker is at ${tracker} instead of A67`}`);
     } catch { setMsg("Couldn't copy — your browser blocked clipboard access"); }
   };
 
