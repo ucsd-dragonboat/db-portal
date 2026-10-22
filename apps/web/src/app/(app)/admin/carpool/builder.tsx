@@ -48,6 +48,8 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
 
   const [data, setData] = useState<CarpoolDataV2>(initial);
   const [name, setName] = useState(initialName);
+  // Whether members can see this layout — Copy for Sheets saves without changing it.
+  const [published, setPublished] = useState(saved?.published ?? false);
   const router = useRouter();
 
   // Roster members + write-ins, one lookup for every cell/panel.
@@ -296,14 +298,20 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
       } else {
         await navigator.clipboard.writeText(tsv);
       }
-      setMsg(`Copied — click cell A1 of a blank tab in Google Sheets and paste (colours, merges and formulas come with it)${tracker === "A67" ? "" : ` · this layout is bigger than the template, so the discrepancy tracker is at ${tracker} instead of A67`}`);
+      const copied = `Copied — click cell A1 of a blank tab in Google Sheets and paste (colours, merges and formulas come with it)${tracker === "A67" ? "" : ` · this layout is bigger than the template, so the discrepancy tracker is at ${tracker} instead of A67`}`
+        + (funFact ? "" : funFactQuestions.length ? " · no fun-fact question picked, so Q/R are empty — pick one in the yellow panel and copy again" : "");
+      // Copying also saves (keeping the layout's published state), so what was pasted —
+      // including the picked question — is what's stored.
+      save(published, copied);
     } catch { setMsg("Couldn't copy — your browser blocked clipboard access"); }
   };
 
-  const save = (published: boolean) => start(async () => {
-    const r = await saveCarpool(carpoolId, eventId, name, data, published);
-    if ("error" in r) { setMsg(r.error); return; }
-    setMsg(published ? "Saved & published to members" : "Saved draft");
+  /** Save the layout; `published` true publishes it. `doneMsg` replaces the usual message. */
+  const save = (publish: boolean, doneMsg?: string) => start(async () => {
+    const r = await saveCarpool(carpoolId, eventId, name, data, publish);
+    if ("error" in r) { setMsg(doneMsg ? `${doneMsg} — but saving failed: ${r.error}` : r.error); return; }
+    setPublished(publish);
+    setMsg(doneMsg ? `${doneMsg} · saved` : publish ? "Saved & published to members" : "Saved draft");
     // First save of a brand-new layout: open it by id (and refresh the tabs).
     if (!carpoolId) router.replace(`/admin/carpool?event=${eventId}&carpool=${r.id}`);
     else router.refresh();
