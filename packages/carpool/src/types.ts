@@ -1,3 +1,4 @@
+import type { SheetColors } from './colors'
 export type LatLon = { lat: number; lon: number }
 
 export type Rider = {
@@ -72,6 +73,8 @@ export type CarpoolDataV2 = {
   /** Per-direction ride roles that differ from the person's form response (this layout
    * only — the RSVP is never edited). Missing = same as the form. */
   roles?: { going?: Record<string, RideRole>; back?: Record<string, RideRole> }
+  /** This layout's colour overrides (colors.ts); missing = the Master Sheet's colours. */
+  colors?: SheetColors
 }
 
 /** How someone gets there: drives, needs a ride, or gets there themselves. */

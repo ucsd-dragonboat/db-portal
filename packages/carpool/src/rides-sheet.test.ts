@@ -184,3 +184,22 @@ describe('buildRidesSheet', () => {
     expect(gridToTsv([[{ v: 'a\tb' }, null, { v: 'c' }]])).toBe('a b\t\tc')
   })
 })
+
+describe('layout colours', () => {
+  it('upgradeCarpoolData keeps valid #rrggbb overrides for known keys only', () => {
+    const d = upgradeCarpoolData({ v: 2, colors: { band: '#ABCDEF', driver: 'red', nope: '#000000', banner: '#123' } }, {})
+    expect(d.colors).toEqual({ band: '#abcdef' })
+    expect(upgradeCarpoolData({ v: 2, colors: { driver: 'red' } }, {}).colors).toBeUndefined()
+  })
+  it("Copy for Sheets uses the layout's colours, with readable text on them", () => {
+    const d = sample()
+    d.colors = { band: '#1155cc', driver: '#fff2cc', highlight: '#ff00ff', notice: '#000000' }
+    const g8 = buildRidesGrid(d, { nameOf, people, highlight: new Set(['p2']) })
+    expect(cell(g8, 'B3')).toMatchObject({ v: 'ON CAMPUS', bg: '#1155cc', fg: '#ffffff' }) // dark bar → white text
+    expect(cell(g8, 'B4')).toMatchObject({ v: 'Jack (Seventh)', bg: '#fff2cc', fg: '#000000' })
+    expect(cell(g8, 'B6')).toMatchObject({ v: 'Justin Zeng', bg: '#ff00ff' })
+    expect(cell(g8, 'A48')).toMatchObject({ bg: '#000000', fg: '#ffffff' })
+    expect(cell(g8, 'B24')).toMatchObject({ bg: '#ffeebf' }) // untouched colours stay default
+    expect(buildRidesSheet(d, { nameOf, people }).html).toContain('background-color:#1155cc;color:#ffffff')
+  })
+})

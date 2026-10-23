@@ -7,7 +7,7 @@ export type NameOption = { id: string; name: string };
 /** One sheet cell: a draggable name chip when filled, or a type-ahead input when
  * empty (filtered suggestions; Tab/Enter/click accepts, Escape clears, blur keeps
  * only an exact match). The whole cell doubles as a drop target. */
-export default function NameCell({ value, options, onPick, onClear, dragPayload, onDropRider, disabled = false, className = "" }: {
+export default function NameCell({ value, options, onPick, onClear, dragPayload, onDropRider, disabled = false, className = "", highlightColor }: {
   value: NameOption | null;
   options: NameOption[];
   onPick: (id: string) => void;
@@ -17,6 +17,8 @@ export default function NameCell({ value, options, onPick, onClear, dragPayload,
   onDropRider?: (payload: string) => void;
   disabled?: boolean;
   className?: string;
+  /** Background colour for this cell (e.g. the off-campus highlight); white otherwise. */
+  highlightColor?: string;
 }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
@@ -36,7 +38,7 @@ export default function NameCell({ value, options, onPick, onClear, dragPayload,
 
   // Spreadsheet-cell look: 22px rows, 13px text, light gridlines like the template.
   const base = `flex h-[22px] items-center px-1 text-[13px] ${over ? "ring-2 ring-inset ring-sky-400" : ""} ${className}`;
-  const border = { borderRight: "1px solid #e0e0e0", borderBottom: "1px solid #e0e0e0" };
+  const border = { borderRight: "1px solid #e0e0e0", borderBottom: "1px solid #e0e0e0", ...(highlightColor ? { background: highlightColor } : {}) };
 
   if (disabled) return <div className={base} style={{ background: "#f3f3f3", ...border }} />;
 

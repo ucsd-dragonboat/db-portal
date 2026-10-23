@@ -2,6 +2,8 @@
 
 import type { Car, DirSet, PlaceTarget, Rider } from "@db/carpool";
 import NameCell, { type NameOption } from "./name-cell";
+import { textOn } from "@db/carpool";
+import { colorBar, useSheetColors } from "./sheet-colors";
 
 export type DirKey = "going" | "back";
 
@@ -53,13 +55,14 @@ function CarColumn({ dir, band, car, riders, options, rows, h, highlight }: {
   /** Passengers shown light blue (off-campus people in an on-campus car). */
   highlight?: Set<string>;
 }) {
+  const ctx = useSheetColors();
   const seats = car.capacity - 1;
   const wide = seats > 4;
   const cols = wide ? 2 : 1;
   const cells = Array.from({ length: rows * cols }, (_, i) => i);
   return (
     <div className="shrink-0" style={{ width: cols * 100, outline: wide ? "2px solid #000" : undefined, outlineOffset: -1, zIndex: wide ? 1 : undefined }}>
-      <div className="group flex h-[22px] items-center gap-0.5 px-1 text-[13px]" style={{ background: SHEET.driver, ...cellBorder }}
+      <div className="group flex h-[22px] items-center gap-0.5 px-1 text-[13px]" style={{ background: ctx.c.driver, color: textOn(ctx.c.driver), ...cellBorder }}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); dropOnDriver(dir, band, car, e.dataTransfer.getData("text/plain"), h); }}>
         <span draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", `car:${car.id}:${dir}`)}
@@ -86,7 +89,7 @@ function CarColumn({ dir, band, car, riders, options, rows, h, highlight }: {
               onClear={pid ? () => h.unseat(dir, pid) : undefined}
               dragPayload={pid ? `rider:${pid}:${dir}` : undefined}
               onDropRider={(payload) => h.drop(dir, { kind: "car", carId: car.id }, payload)}
-              className={pid && highlight?.has(pid) ? "!bg-[#c9daf8]" : ""}
+              highlightColor={pid && highlight?.has(pid) ? ctx.c.highlight : undefined}
             />
           );
         })}
@@ -103,6 +106,7 @@ function CarColumn({ dir, band, car, riders, options, rows, h, highlight }: {
 function EmptyColumn({ dir, band, driverOptions, rows, h }: {
   dir: DirKey; band: "onCampus" | "offCampus"; driverOptions: NameOption[]; rows: number; h: GridHandlers;
 }) {
+  const { c } = useSheetColors();
   return (
     <div className="w-[100px] shrink-0">
       <NameCell value={null} options={driverOptions} onPick={(id) => h.addDriver(dir, band, id)}
@@ -111,7 +115,7 @@ function EmptyColumn({ dir, band, driverOptions, rows, h }: {
           if (k === "rider") h.addDriver(dir, band, id);
           else if (k === "car" && origin === dir) h.moveCar(dir, id, band, null); // to the end of this band
         }}
-        className="!bg-[#fecccc]" />
+        highlightColor={c.driver} />
       {Array.from({ length: rows + 1 }, (_, i) => <div key={i} className="h-[22px] bg-white" style={cellBorder} />)}
     </div>
   );
@@ -129,19 +133,21 @@ export function CarGrid({ dir, band, label, directionLabel, cars, riders, option
   const rows = Math.max(4, ...cars.map((c) => Math.ceil((c.capacity - 1) / (c.capacity - 1 > 4 ? 2 : 1))));
   const usedCols = cars.reduce((n, c) => n + (c.capacity - 1 > 4 ? 2 : 1), 0);
   const emptyCols = Math.max(1, 6 - usedCols); // pad to ≥6 columns like the sheet, always ≥1 open
+  const ctx = useSheetColors();
+  const bandKey = dir === "back" ? "bandBack" : "band";
   return (
     <div className="text-[13px]" style={{ borderLeft: `1px solid ${SHEET.grid}`, borderTop: `1px solid ${SHEET.grid}` }}>
       <div className="flex">
-        <div className="flex h-[22px] w-20 shrink-0 items-center px-1 font-medium text-white" style={{ background: directionLabel ? SHEET.direction : "#fff", ...cellBorder }}>
-          {directionLabel ?? ""}
-        </div>
-        <div className="flex h-[22px] flex-1 items-center justify-center font-medium" style={{ background: dir === "back" ? SHEET.bandBack : SHEET.band, ...cellBorder }}>{label}</div>
+        {directionLabel
+          ? <div {...colorBar(ctx, "direction")} className="flex h-[22px] w-20 shrink-0 items-center px-1 font-medium" style={{ ...colorBar(ctx, "direction").style, ...cellBorder }}>{directionLabel}</div>
+          : <div className="h-[22px] w-20 shrink-0 bg-white" style={cellBorder} />}
+        <div {...colorBar(ctx, bandKey)} className="flex h-[22px] flex-1 items-center justify-center font-medium" style={{ ...colorBar(ctx, bandKey).style, ...cellBorder }}>{label}</div>
       </div>
       <div className="flex">
         <div className="w-20 shrink-0">
-          <div className="flex h-[22px] items-center px-1" style={{ background: SHEET.driver, ...cellBorder }}>Driver</div>
-          <div style={{ background: SHEET.filler, height: rows * 22, ...cellBorder }} />
-          <div className="flex h-[22px] items-center px-1 text-[12px] italic" style={{ background: SHEET.filler, ...cellBorder }}>Comment</div>
+          <div {...colorBar(ctx, "driver")} className="flex h-[22px] items-center px-1" style={{ ...colorBar(ctx, "driver").style, ...cellBorder }}>Driver</div>
+          <div {...colorBar(ctx, "filler")} style={{ ...colorBar(ctx, "filler").style, height: rows * 22, ...cellBorder }} />
+          <div {...colorBar(ctx, "filler")} className="flex h-[22px] items-center px-1 text-[12px] italic" style={{ ...colorBar(ctx, "filler").style, ...cellBorder }}>Comment</div>
         </div>
         {cars.map((c) => <CarColumn key={c.id} dir={dir} band={band} car={c} riders={riders} options={options} rows={rows} h={h} highlight={band === "onCampus" ? highlight : undefined} />)}
         {Array.from({ length: emptyCols }, (_, i) => <EmptyColumn key={`e${i}`} dir={dir} band={band} driverOptions={driverOptions} rows={rows} h={h} />)}
@@ -154,16 +160,17 @@ export function CarGrid({ dir, band, label, directionLabel, cars, riders, option
 export function DiyRow({ dir, dirSet, riders, options, h }: {
   dir: DirKey; dirSet: DirSet; riders: Record<string, Rider>; options: NameOption[]; h: GridHandlers;
 }) {
+  const ctx = useSheetColors();
   return (
     <div className="text-[13px]" style={{ borderLeft: `1px solid ${SHEET.grid}` }}>
       <div className="flex">
-        <div className="h-[22px] w-20 shrink-0" style={{ background: SHEET.diy, ...cellBorder }} />
-        <div className="flex h-[22px] flex-1 items-center justify-center font-medium" style={{ background: SHEET.diy, ...cellBorder }}>DIY</div>
+        <div {...colorBar(ctx, "diy")} className="h-[22px] w-20 shrink-0" style={{ ...colorBar(ctx, "diy").style, ...cellBorder }} />
+        <div {...colorBar(ctx, "diy")} className="flex h-[22px] flex-1 items-center justify-center font-medium" style={{ ...colorBar(ctx, "diy").style, ...cellBorder }}>DIY</div>
       </div>
       <div className="flex flex-wrap bg-white"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); h.drop(dir, { kind: "diy" }, e.dataTransfer.getData("text/plain")); }}>
-        <div className="w-20 shrink-0 self-stretch" style={{ background: SHEET.filler, ...cellBorder }} />
+        <div {...colorBar(ctx, "filler")} className="w-20 shrink-0 self-stretch" style={{ ...colorBar(ctx, "filler").style, ...cellBorder }} />
         {dirSet.diy.map((pid) => (
           <NameCell key={pid} value={opt(riders, pid)} options={[]} onPick={() => {}}
             onClear={() => h.unseat(dir, pid)} dragPayload={`rider:${pid}:${dir}`} className="w-[100px]" />

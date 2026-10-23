@@ -15,13 +15,7 @@
 // (everything below shifts down / right); every formula follows the cells it describes.
 
 import type { Car, CarpoolDataV2, DirSet } from './types'
-
-const C = {
-  banner: '#2f2f2f', direction: '#e80b0b', band: '#ffefbf', bandBack: '#ffeebf', driver: '#ffc6a9', filler: '#d9d9d9',
-  white: '#ffffff', diy: '#d6ccfe', sep: '#666666', highlight: '#c9daf8', teal: '#46bdc6', notice: '#ff7c3a',
-  total: '#76a5af', count: '#d0e0e3', drivers: '#a2dde0', needRide: '#ffd966', offCampus: '#cc0000', onCampus: '#3c78d8',
-  keyword: '#a2c4c9', question: '#ffff00',
-} as const
+import { sheetColors, textOn } from './colors'
 
 export const ERROR_NOTICE = 'IF YOU SEE AN ERROR ("I only have a ride there!") DM BLUM IMMEDIATELY'
 
@@ -61,6 +55,9 @@ export function a1(row: number, col: number): string {
 }
 
 export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, highlight = new Set() }: RidesSheetInput): SheetGrid {
+  // The layout's colour scheme (the Master Sheet's unless the builder changed some).
+  const C = { ...sheetColors(d.colors), white: '#ffffff' }
+  const custom = new Set(Object.values(d.colors ?? {}))
   const N = Math.max(MIN_CAR_COLS, ...[d.going, d.back].flatMap((x) => [x.onCampus.length, x.offCampus.length]))
   const SEP = N + 1, T = N + 2, SEP2 = N + 6, Q = N + 7
   const lastCar = N // column of the last car (J by default)
@@ -211,7 +208,12 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
   // get unformatted blanks so its formulas can spill.
   const width = funFact ? Q + 2 : T + 4
   for (let row = 0; row < grid.length; row++) {
-    for (let c = 0; c < width; c++) if (grid[row][c] === undefined) grid[row][c] = row <= bottom ? { bg: C.white } : {}
+    for (let c = 0; c < width; c++) {
+      if (grid[row][c] === undefined) grid[row][c] = row <= bottom ? { bg: C.white } : {}
+      // Text on a custom colour turns black or white, whichever reads.
+      const cell = grid[row][c]
+      if (cell?.v && cell.bg && custom.has(cell.bg)) cell.fg = textOn(cell.bg)
+    }
   }
   return grid
 }
