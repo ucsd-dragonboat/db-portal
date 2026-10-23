@@ -253,7 +253,12 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
 
   const copyGoingToBack = () => {
     if (placedSet(data.back).size && !confirm("Overwrite the BACK section with a copy of GOING?")) return;
-    setData((s) => ({ ...s, back: mirrorDirSet(s.going) }));
+    // BACK takes GOING's role changes too, so the TOTAL panel's change markers match the copied cars.
+    setData((s) => {
+      const roles = { ...s.roles };
+      if (roles.going) roles.back = { ...roles.going }; else delete roles.back;
+      return { ...s, back: mirrorDirSet(s.going), roles: Object.keys(roles).length ? roles : undefined };
+    });
     setMsg("Copied Going → Back — edit Back freely, they're independent now");
   };
 
