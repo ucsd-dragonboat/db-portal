@@ -180,6 +180,14 @@ describe('discrepancies', () => {
     expect(out.find((r) => r.id === 'p1')).toBeUndefined()                      // both directions
     expect(out.find((r) => r.id === 'd1')).toBeUndefined()                      // driver
   })
+  it('a needs-ride person made a driver is covered in each direction they drive', () => {
+    // p4 rode GOING as a passenger, then was made BACK's driver (e.g. Copy Going → Back, or a swap).
+    const g = dir({ onCampus: [car('d1', 5, ['p4'])] })
+    const b = dir({ onCampus: [car('p4', 5, [], 'b')] })
+    expect(discrepancies(['p4'], g, b).find((r) => r.id === 'p4')).toBeUndefined()
+    // Driving GOING only: still needs a way back.
+    expect(discrepancies(['p5'], dir({ offCampus: [car('p5')] }), dir())).toContainEqual({ id: 'p5', needGoing: false, needBack: true })
+  })
 })
 
 describe('layoutMembers', () => {

@@ -217,11 +217,13 @@ export function groupNeedsRide(needsRide: string[], matchText: MatchText, keywor
   }
 }
 
+/** Everyone with a way there in this direction: driving a car, seated in one, or DIY.
+ * Driving counts whatever the role bookkeeping says (a car copied Going → Back, or a
+ * passenger made a driver in one direction, still has its driver covered). */
 const placedIn = (dir: DirSet): Set<string> =>
-  new Set([...[...dir.onCampus, ...dir.offCampus].flatMap((c) => c.passengerIds), ...dir.diy])
+  new Set([...[...dir.onCampus, ...dir.offCampus].flatMap((c) => [c.driverId, ...c.passengerIds]), ...dir.diy])
 
-/** Discrepancy tracker rows. Placed = seated in a car or DIY. Drivers are excluded
- * (a driver "has a ride" by definition — flagging them is noise). People placed in
+/** Discrepancy tracker rows. Placed = driving, seated in a car, or DIY. People placed in
  * both directions are covered and excluded; one direction only → flag the missing
  * side; needs-ride people placed nowhere → flag both. */
 export function discrepancies(needsRide: string[], going: DirSet, back: DirSet): { id: string; needGoing: boolean; needBack: boolean }[] {
