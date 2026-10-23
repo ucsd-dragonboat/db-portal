@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { textOn } from "@db/carpool";
+import { colorBar, useSheetColors } from "./sheet-colors";
 import type { CarpoolGuest, FormChange, GuestCol, Rider } from "@db/carpool";
 
 const GRID = "#e0e0e0";
@@ -77,6 +79,7 @@ export function TotalPanel({ riders, drivers, driverSeats, grouped, diy, guests,
   onRemoveGuest: (id: string) => void;
   onRevert: (changes: FormChange[]) => void;
 }) {
+  const ctx = useSheetColors();
   const name = (id: string) => riders[id]?.name ?? "?";
   const guestsIn = (col: GuestCol) => guests.filter((g) => g.col === col);
   // Counts are this layout's: someone moved out of a column in both directions isn't counted there.
@@ -126,23 +129,23 @@ export function TotalPanel({ riders, drivers, driverSeats, grouped, diy, guests,
       onDrop={(e) => { e.preventDefault(); onUnseatDrop(e.dataTransfer.getData("text/plain")); }}
       className="flex flex-col self-stretch text-[13px]" style={{ borderLeft: `1px solid ${GRID}`, borderTop: `1px solid ${GRID}` }}>
       <div className="flex">
-        <div className={`${cell} w-[220px] shrink-0 justify-center font-medium`} style={{ background: "#76a5af", ...cellBorder }}>TOTAL</div>
-        <div className={`${cell} w-[110px] shrink-0`} style={{ background: "#76a5af", ...cellBorder }} />
-        <div className={`${cell} w-[110px] shrink-0 justify-center font-medium`} style={{ background: "#76a5af", ...cellBorder }}>{Object.keys(riders).length}</div>
+        <div {...colorBar(ctx, "total")} className={`${cell} w-[220px] shrink-0 justify-center font-medium`} style={{ ...colorBar(ctx, "total").style, ...cellBorder }}>TOTAL</div>
+        <div {...colorBar(ctx, "total")} className={`${cell} w-[110px] shrink-0`} style={{ ...colorBar(ctx, "total").style, ...cellBorder }} />
+        <div {...colorBar(ctx, "total")} className={`${cell} w-[110px] shrink-0 justify-center font-medium`} style={{ ...colorBar(ctx, "total").style, ...cellBorder }}>{Object.keys(riders).length}</div>
       </div>
       <div className="flex">
-        {counts.map((n, i) => <div key={i} className={`${cell} w-[110px] shrink-0 justify-end`} style={{ background: "#d0e0e3", ...cellBorder }}>{n}</div>)}
+        {counts.map((n, i) => <div key={i} className={`${cell} w-[110px] shrink-0 justify-end`} {...colorBar(ctx, "count")} style={{ ...colorBar(ctx, "count").style, ...cellBorder }}>{n}</div>)}
       </div>
       <div className="flex">
-        <div className={`${cell} w-[110px] shrink-0 font-medium`} style={{ background: "#a2dde0", ...cellBorder }}>DRIVERS</div>
-        <div className={`${cell} w-[110px] shrink-0 font-medium`} style={{ background: "#ffd966", ...cellBorder }}>NEED RIDE</div>
-        <div className={`${cell} w-[110px] shrink-0 font-medium`} style={{ background: "#ffd966", ...cellBorder }}>NEED RIDE</div>
-        <div className={`${cell} w-[110px] shrink-0 font-medium`} style={{ background: "#d6ccfe", ...cellBorder }}>DIY</div>
+        <div className={`${cell} w-[110px] shrink-0 font-medium`} {...colorBar(ctx, "drivers")} style={{ ...colorBar(ctx, "drivers").style, ...cellBorder }}>DRIVERS</div>
+        <div className={`${cell} w-[110px] shrink-0 font-medium`} {...colorBar(ctx, "needRide")} style={{ ...colorBar(ctx, "needRide").style, ...cellBorder }}>NEED RIDE</div>
+        <div className={`${cell} w-[110px] shrink-0 font-medium`} {...colorBar(ctx, "needRide")} style={{ ...colorBar(ctx, "needRide").style, ...cellBorder }}>NEED RIDE</div>
+        <div className={`${cell} w-[110px] shrink-0 font-medium`} {...colorBar(ctx, "diy")} style={{ ...colorBar(ctx, "diy").style, ...cellBorder }}>DIY</div>
       </div>
       <div className="flex">
         <div className={`${cell} w-[110px] shrink-0 bg-white`} style={cellBorder} />
-        <div className={`${cell} w-[110px] shrink-0 font-medium text-white`} style={{ background: "#cc0000", ...cellBorder }}>OFF CAMPUS</div>
-        <div className={`${cell} w-[110px] shrink-0 font-medium text-white`} style={{ background: "#3c78d8", ...cellBorder }}>ON CAMPUS</div>
+        <div {...colorBar(ctx, "offCampus")} className={`${cell} w-[110px] shrink-0 font-medium`} style={{ ...colorBar(ctx, "offCampus").style, ...cellBorder }}>OFF CAMPUS</div>
+        <div {...colorBar(ctx, "onCampus")} className={`${cell} w-[110px] shrink-0 font-medium`} style={{ ...colorBar(ctx, "onCampus").style, ...cellBorder }}>ON CAMPUS</div>
         <div className={`${cell} w-[110px] shrink-0 bg-white`} style={cellBorder} />
       </div>
       <div className="flex flex-1 items-stretch">
@@ -157,7 +160,7 @@ export function TotalPanel({ riders, drivers, driverSeats, grouped, diy, guests,
         <div {...dropCol("onCampus")}>
           {grouped.onCampus.map((g) => (
             <div key={g.keyword}>
-              <div className={`${cell} font-medium uppercase`} style={{ background: "#a2c4c9", ...cellBorder }}>{g.keyword}</div>
+              <div className={`${cell} font-medium uppercase`} {...colorBar(ctx, "keyword")} style={{ ...colorBar(ctx, "keyword").style, ...cellBorder }}>{g.keyword}</div>
               {g.chips.map((c) => chip(c))}
             </div>
           ))}
@@ -203,6 +206,7 @@ export function FunFactPanel({ questions, answers, questionId, onPickQuestion }:
   questionId: string | null;
   onPickQuestion: (id: string | null) => void;
 }) {
+  const ctx = useSheetColors();
   if (!questions.length) return null;
   const rows = questionId ? answers[questionId] ?? [] : [];
   return (
@@ -212,8 +216,9 @@ export function FunFactPanel({ questions, answers, questionId, onPickQuestion }:
         <option value="">Fun fact: pick a form question…</option>
         {questions.map((q) => <option key={q.id} value={q.id}>{q.label}</option>)}
       </select>
+      {questionId && <button type="button" onClick={(e) => ctx.pick("question", e)} className="block w-full px-1 text-left text-[10px] underline" style={{ color: "var(--g-grey-600)" }}>Panel colour</button>}
       {questionId && rows.map((r) => (
-        <div key={r.userId} className="flex" style={{ background: "#ffff00" }}>
+        <div key={r.userId} className="flex" style={{ background: ctx.c.question, color: textOn(ctx.c.question) }}>
           <div className={`${cell} w-[110px] shrink-0 truncate`} style={cellBorder} title={r.name}>{r.name}</div>
           <div className="min-w-0 flex-1 whitespace-pre-wrap px-1 py-0.5 text-[13px]" style={cellBorder}>{r.text}</div>
         </div>

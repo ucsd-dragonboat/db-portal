@@ -5,6 +5,7 @@
 import type { Car, CarpoolDataV2, CarpoolGuest, DirSet, LatLon, RideRole } from './types'
 import { locationKey } from './geo'
 import { DEFAULT_CARPOOL_HEADER, DEFAULT_COLLEGE_KEYWORDS } from './types'
+import { cleanSheetColors } from './colors'
 
 const GUEST_COLS = new Set(['drivers', 'offCampus', 'onCampus', 'diy'])
 const isGuest = (x: unknown): x is CarpoolGuest => {
@@ -91,6 +92,7 @@ export function upgradeCarpoolData(raw: unknown, matchText: MatchText): CarpoolD
       going: cleanDir(r.going, 'g'),
       back: cleanDir(r.back, 'b'),
       ...cleanRoles(r.roles),
+      ...(cleanSheetColors(r.colors) ? { colors: cleanSheetColors(r.colors) } : {}),
       ...(r.seatedAt && typeof r.seatedAt === 'object'
         ? { seatedAt: Object.fromEntries(Object.entries(r.seatedAt as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string')) }
         : {}),

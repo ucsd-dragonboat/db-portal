@@ -9,9 +9,11 @@ import {
   removeFromDirSet, upgradeCarpoolData,
   DIRS, driversIn, matchKeyword, moveCar, spotOf, swapDriver, formChanges, formRole, revertAll, revertChange, ridersIn, roleIn, setRole,
   type CarpoolDataV2, type CarpoolGuest, type Destination, type FormChange, type FormRides, type MatchText, type OsrmRoute, type RideRole, type Rider,
+  DEFAULT_SHEET_COLORS, sheetColors, textOn, type SheetColorKey,
 } from "@db/carpool";
 import { optimizeLayout, routeCar, saveCarpool } from "./actions";
-import { CarGrid, DiyRow, SHEET, parseDrag, type DirKey, type GridHandlers } from "./car-grid";
+import { ColorPicker, SheetColorsProvider, colorBar } from "./sheet-colors";
+import { CarGrid, DiyRow, parseDrag, type DirKey, type GridHandlers } from "./car-grid";
 import { DiscrepancyTracker, FunFactPanel, NotesPanel, TotalPanel, type DiffChip } from "./side-panels";
 
 const RouteMap = dynamic(() => import("@/components/route-map"), { ssr: false });
@@ -63,6 +65,11 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   );
   const [routes, setRoutes] = useState<Record<string, OsrmRoute | null>>({});
   const [msg, setMsg] = useState<string | null>(null);
+  // The layout's colours (Master Sheet defaults + its overrides) and the open colour picker.
+  const colors = useMemo(() => sheetColors(data.colors), [data.colors]);
+  const [colorPick, setColorPick] = useState<{ key: SheetColorKey; x: number; y: number } | null>(null);
+  const pickColor = (key: SheetColorKey, e: React.MouseEvent) => setColorPick({ key, x: e.clientX, y: e.clientY });
+  const colorCtx = { c: colors, pick: pickColor };
   // The keywords box text as typed (so commas and spaces survive); null = show the list
   // in use. Enter, Apply or leaving the box puts it into use, regrouping the TOTAL
   // panel's people. Cars stay in whichever grid they're in.
@@ -369,6 +376,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   };
 
   return (
+    <SheetColorsProvider value={colorCtx}>
     <div className="space-y-3">
       <div className="card flex flex-wrap items-center gap-2 text-sm">
         <input value={name} onChange={(e) => setName(e.target.value)} className="input w-40 py-1 text-sm font-medium" title="Layout name — members see it above this sheet" aria-label="Layout name" />
@@ -402,24 +410,51 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
       )}
       {!destination && <p className="card !p-3 text-xs text-amber-700">This day has no location coordinates, so Optimize and the route map are off — you can still build the sheet by hand.</p>}
 
-      {/* The sheet — laid out like the Google Sheets template, horizontally scrollable. */}
+      {/* The sheet — laid out like the Google Sheets template, horizontally scrollable.
+          Clicking a coloured bar opens the colour picker; colours are saved with the layout. */}
+      <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: "var(--g-grey-600)" }}>
+        <span>Click any coloured bar to change its colour.</span>
+        <button type="button" onClick={(e) => pickColor("highlight", e)} className="flex items-center gap-1 underline">
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ background: colors.highlight, border: "1px solid #0000002a" }} /> Off-campus rider in an on-campus car
+        </button>
+        <button type="button" onClick={(e) => pickColor("teal", e)} className="flex items-center gap-1 underline">
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ background: colors.teal, border: "1px solid #0000002a" }} /> Teal bar (Copy for Sheets)
+        </button>
+        {data.colors && <button type="button" onClick={() => setData((s) => ({ ...s, colors: undefined }))} className="underline">Reset all colours</button>}
+      </div>
+      {colorPick && (
+        <ColorPicker key={colorPick.key} colorKey={colorPick.key} value={colors[colorPick.key]} x={colorPick.x} y={colorPick.y}
+          onClose={() => setColorPick(null)}
+          onPick={(hex) => {
+            setData((s) => {
+              const next = { ...s.colors };
+              if (hex && hex !== DEFAULT_SHEET_COLORS[colorPick.key]) next[colorPick.key] = hex; else delete next[colorPick.key];
+              return { ...s, colors: Object.keys(next).length ? next : undefined };
+            });
+            setColorPick(null);
+          }} />
+      )}
       <div className="-mx-4 overflow-x-auto px-4 pb-2 md:-mx-6 md:px-6" style={{ background: "#fff" }}>
         <div className="w-max">
           <div className="flex items-start">
             {/* banner + grids + TOTAL (the banner spans both, like rows 1-2 of the sheet) */}
             <div>
-              <input value={data.header} onChange={(e) => setData((s) => ({ ...s, header: e.target.value }))}
-                className="w-full px-3 py-1.5 text-center text-[18px] font-medium text-white outline-none" style={{ background: SHEET.banner }} />
+              <div className="relative">
+                <input value={data.header} onChange={(e) => setData((s) => ({ ...s, header: e.target.value }))}
+                  className="w-full px-3 py-1.5 text-center text-[18px] font-medium outline-none" style={{ background: colors.banner, color: textOn(colors.banner) }} />
+                <button type="button" onClick={(e) => pickColor("banner", e)} title="Banner colour" aria-label="Banner colour"
+                  className="absolute right-1.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full" style={{ background: colors.banner, border: `2px solid ${textOn(colors.banner)}` }} />
+              </div>
               <div className="flex items-stretch">
                 <div className="min-w-[420px]">
                   {dirSection("going", "GOING ➡️")}
                   <div className="h-[22px]" />
                   {dirSection("back", "BACK ⬅️")}
-                  <div className="mt-[22px] flex h-[44px] w-full items-center justify-center px-3 text-center text-[14px] font-medium text-white" style={{ background: SHEET.warn }}>
+                  <div {...colorBar(colorCtx, "notice")} className="mt-[22px] flex h-[44px] w-full items-center justify-center px-3 text-center text-[14px] font-medium">
                     IF YOU SEE AN ERROR (&quot;I only have a ride there!&quot;) DM BLUM IMMEDIATELY
                   </div>
                 </div>
-                <div className="w-[14px] shrink-0 self-stretch" style={{ background: SHEET.sep }} />
+                <div {...colorBar(colorCtx, "sep")} className="w-[14px] shrink-0 self-stretch" />
                 <TotalPanel riders={effRiders} drivers={diff.drivers} driverSeats={new Map(drivers.map((d) => [d.id, d.seats]))} grouped={diff.grouped} diy={diff.diy} guests={data.guests}
                   placedNote={placedNote} onUnseatDrop={unseatDrop} onRoleDrop={roleDrop} onAddGuest={addGuest} onRemoveGuest={removeGuest} onRevert={revert} />
               </div>
@@ -443,6 +478,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
         </div>
       </div>
     </div>
+    </SheetColorsProvider>
   );
 }
 
