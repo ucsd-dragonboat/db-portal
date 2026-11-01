@@ -12,6 +12,9 @@ import Icon from "@/components/icon";
 import DayCardGrid from "@/components/day-cards";
 import ConfirmForm from "@/components/confirm-form";
 import { createCarpoolLayout, deleteCarpoolLayout } from "./actions";
+import CarpoolSheetLink from "./carpool-sheet-link";
+import { getGoogleConnection, sheetViewUrl } from "@/lib/google-sheets";
+import { getCarpoolSheetLink } from "@/lib/carpool-sheet";
 import AutoRefresh from "@/components/auto-refresh";
 import CarpoolStatusBadge from "@/components/carpool-status";
 import { latestRuns, queuedDays, runLabel } from "@/lib/carpool-runs";
@@ -25,9 +28,9 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   return { title: tabTitle("Carpool", ...dayParts(day)) };
 }
 
-export default async function AdminCarpoolPage({ searchParams }: { searchParams: Promise<{ event?: string; carpool?: string }> }) {
-  const { event: eventId, carpool: carpoolParam } = await searchParams;
-  const { org } = await requireAdmin();
+export default async function AdminCarpoolPage({ searchParams }: { searchParams: Promise<{ event?: string; carpool?: string; google?: string }> }) {
+  const { event: eventId, carpool: carpoolParam, google: googleReturn } = await searchParams;
+  const { org, userId } = await requireAdmin();
   const supabase = await createClient();
   const { data: events } = await supabase.from("events").select("*, group:event_groups(id, name)").eq("org_id", org.id).order("starts_at", { ascending: false }).limit(60);
   const event = events?.find((p) => p.id === eventId) ?? null;
@@ -101,7 +104,7 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
   // Riders whose answer was an on-campus spot → its name: they're on campus in the TOTAL
   // panel whether or not a campus keyword matches the name.
   const campusSpots: Record<string, string> = {};
-  const [{ data: rs }, { data: layouts }, { data: pickups }, { data: formLinks }, runBy, queued, { data: savedLocs }] = await Promise.all([
+  const [{ data: rs }, { data: layouts }, { data: pickups }, { data: formLinks }, runBy, queued, { data: savedLocs }, google, sheetLink] = await Promise.all([
     // Yes only — a Maybe isn't attending until they change it (see lib/attendees.ts).
     supabase.from("rsvps").select("*, profile:profiles(*)").eq("event_id", event.id).eq("status", "yes"),
     supabase.from("carpools").select("*").eq("event_id", event.id).order("sort_order").order("created_at"),
@@ -110,6 +113,8 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
     latestRuns(supabase, [event.id]),
     queuedDays(supabase, [event.id]),
     supabase.from("saved_locations").select("name").eq("org_id", org.id),
+    org.is_demo ? null : getGoogleConnection(userId).catch(() => null), // demo teams don't link Google
+    org.is_demo ? null : getCarpoolSheetLink(org.id),
   ]);
   // A saved-location spot is stored on the RSVP as the location's name (attachPickupCoords).
   const savedSpotNames = new Set((savedLocs ?? []).map((s) => s.name.trim().toLowerCase()));
@@ -187,6 +192,12 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
         <form action={createCarpoolLayout}><input type="hidden" name="event_id" value={event.id} />
           <button className="btn-text py-1 text-xs" title="Another layout for this day, with different people"><Icon name="plus" /> New layout</button></form>
         <span className="flex-1" />
+        {!org.is_demo && (
+          <CarpoolSheetLink connected={!!google} googleEmail={google?.googleEmail ?? null} autoOpen={!!googleReturn}
+            returnTo={`/admin/carpool?event=${event.id}${current ? `&carpool=${current.id}` : ""}`}
+            sheetUrl={sheetLink ? sheetViewUrl(sheetLink.spreadsheetId, null) : null}
+            tabUrl={sheetLink && current?.sheet_spreadsheet_id === sheetLink.spreadsheetId && current.sheet_tab_id != null ? sheetViewUrl(sheetLink.spreadsheetId, current.sheet_tab_id) : null} />
+        )}
         {current && (
           <ConfirmForm action={deleteCarpoolLayout} message={`Delete the “${current.name}” layout? Its riders become free to place in another layout.`}>
             <input type="hidden" name="id" value={current.id} /><button className="btn-danger-text py-1 text-xs">Delete layout</button>

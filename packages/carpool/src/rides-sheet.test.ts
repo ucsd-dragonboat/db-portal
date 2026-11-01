@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { a1, buildRidesGrid, buildRidesSheet, gridToTsv, trackerCell, type RidesPeople, type SheetCell, type SheetGrid } from './rides-sheet'
+import { a1, buildRidesGrid, buildRidesSheet, gridToSheetRequests, gridToTsv, trackerCell, type RidesPeople, type SheetCell, type SheetGrid } from './rides-sheet'
 import { upgradeCarpoolData } from './sheet'
 import type { Car, DirSet } from './types'
 
@@ -217,5 +217,44 @@ describe('layout colours', () => {
     expect(cell(g8, 'A48')).toMatchObject({ bg: '#000000', fg: '#ffffff' })
     expect(cell(g8, 'B24')).toMatchObject({ bg: '#ffeebf' }) // untouched colours stay default
     expect(buildRidesSheet(d, { nameOf, people }).html).toContain('background-color:#1155cc;color:#ffffff')
+  })
+})
+
+describe('gridToSheetRequests: publishing writes the same tab as the paste', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type Req = Record<string, any>
+  const rowsOf = (rs: Req[]) => rs.find((r) => r.updateCells?.start)!.updateCells.rows as { values: Req[] }[]
+  const reqs = gridToSheetRequests(g, { sheetId: 7, rowCount: 1000, columnCount: 26 }) as Req[]
+  const written = rowsOf(reqs)
+  const at = (ref: string) => {
+    const m = ref.match(/^([A-Z]+)(\d+)$/)!
+    return written[Number(m[2]) - 1].values[m[1].charCodeAt(0) - 65]
+  }
+
+  it('wipes the tab first, then writes every merge the paste has', () => {
+    expect(reqs[0]).toEqual({ unmergeCells: { range: { sheetId: 7 } } })
+    expect(reqs[1].updateCells.range).toEqual({ sheetId: 7 })
+    const ranges = reqs.filter((r) => r.mergeCells).map((r) => r.mergeCells.range)
+    expect(ranges).toHaveLength(merges(g).length)
+    expect(ranges).toContainEqual({ sheetId: 7, startRowIndex: 0, endRowIndex: 2, startColumnIndex: 0, endColumnIndex: 15 }) // A1:O2
+  })
+
+  it('writes template formulas as formulas and names as text', () => {
+    expect(at('L4').userEnteredValue).toEqual({ formulaValue: '=COUNTA(L6:L66)' })
+    expect(at('A67').userEnteredValue.formulaValue).toMatch(/^=QUERY\(/)
+    const evil = buildRidesGrid(sample(), { nameOf: () => '=IMPORTXML("x")', people })
+    const w = rowsOf(gridToSheetRequests(evil, { sheetId: 1, rowCount: 1000, columnCount: 26 }) as Req[])
+    expect(w[4].values[1].userEnteredValue).toEqual({ stringValue: '=IMPORTXML("x")' }) // B5, a passenger
+  })
+
+  it('keeps colours and bold', () => {
+    expect(at('B4').userEnteredFormat.textFormat.bold).toBe(true) // driver
+    expect(at('B3').userEnteredFormat.backgroundColorStyle.rgbColor).toEqual(expect.objectContaining({ red: expect.any(Number) }))
+  })
+
+  it('grows a tab that is too small, and leaves a big enough one alone', () => {
+    expect(reqs.some((r) => r.updateSheetProperties)).toBe(false)
+    const small = gridToSheetRequests(g, { sheetId: 7, rowCount: 50, columnCount: 10 }) as Req[]
+    expect(small.find((r) => r.updateSheetProperties)!.updateSheetProperties.properties.gridProperties).toEqual({ rowCount: g.length, columnCount: 18 })
   })
 })

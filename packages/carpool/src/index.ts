@@ -55,7 +55,7 @@ export type { Trip, DriverStats, PairStat } from './stats'
 
 export { DIRS, formRole, roleIn, setRole, driversIn, ridersIn, formChanges, revertChange, revertAll } from './roles'
 export type { Dir, FormRides, FormChange } from './roles'
-export { a1, buildRidesSheet, buildRidesGrid, gridToHtml, gridToTsv, trackerCell, ERROR_NOTICE } from './rides-sheet'
+export { a1, buildRidesSheet, buildRidesGrid, gridToHtml, gridToTsv, gridToSheetRequests, trackerCell, ERROR_NOTICE } from './rides-sheet'
 export type { RidesPeople, RidesSheetInput, SheetCell, SheetGrid } from './rides-sheet'
 export { SHEET_COLOR_DEFS, DEFAULT_SHEET_COLORS, cleanSheetColors, sheetColors, textOn } from './colors'
 export type { SheetColorKey, SheetColors } from './colors'

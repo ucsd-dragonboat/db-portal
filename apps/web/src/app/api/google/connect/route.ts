@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const next = safeNext(searchParams.get("next"));
   // Demo sandboxes don't link real Google accounts.
-  if (org.is_demo) return NextResponse.redirect(`${origin}${next}?google=error`);
+  if (org.is_demo) return NextResponse.redirect(`${origin}${next}${next.includes("?") ? "&" : "?"}google=error`);
   const nonce = randomBytes(16).toString("hex");
 
   const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");

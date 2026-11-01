@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
-  addDriverToDirSet, buildRidesSheet, carRoutePoints, discrepancies, groupNeedsRide,
+  addDriverToDirSet, buildRidesGrid, buildRidesSheet, carRoutePoints, discrepancies, groupNeedsRide,
   locationKey, mirrorDirSet, movedRiders, placeInDirSet, reconcileDirSet, removeCarFromDirSet,
   removeFromDirSet, upgradeCarpoolData,
   DIRS, driversIn, matchKeyword, moveCar, spotOf, swapDriver, formChanges, formRole, revertAll, revertChange, ridersIn, roleIn, setRole,
@@ -281,27 +281,33 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     ...data.guests.filter((g) => g.col === "offCampus").map((g) => g.id),
   ]), [diff, data.guests]);
 
+  /** What Copy for Sheets (and publishing to the linked sheet) lays out. */
+  const sheetInput = () => {
+    // Same rows the fun-fact panel shows: answers from people in this layout's roster.
+    const q = funFactQuestions.find((x) => x.id === data.funFactQuestionId);
+    const funFact = q ? { question: q.label, rows: (funFactAnswers[q.id] ?? []).map((r) => ({ name: r.name, text: r.text })) } : undefined;
+    // The TOTAL panel as shown: names, without people moved out of a column in both directions.
+    const nameOf = (id: string) => effRiders[id]?.name ?? "?";
+    const live = (cs: { id: string; state: string; partial: boolean }[]) => cs.filter((c) => !(c.state === "removed" && !c.partial)).map((c) => nameOf(c.id));
+    const guestNames = (col: CarpoolGuest["col"]) => data.guests.filter((g) => g.col === col).map((g) => g.name);
+    const people = {
+      drivers: [...live(diff.drivers), ...guestNames("drivers")],
+      offCampus: [...live(diff.grouped.offCampus), ...guestNames("offCampus")],
+      onCampus: [
+        ...diff.grouped.onCampus.map((g) => ({ keyword: g.keyword, names: live(g.chips) })).filter((g) => g.names.length),
+        ...(guestNames("onCampus").length ? [{ keyword: "", names: guestNames("onCampus") }] : []), // write-ins: no heading, like on screen
+      ],
+      diy: [...live(diff.diy), ...guestNames("diy")],
+    };
+    return { nameOf, people, funFact, highlight: offCampusIds };
+  };
+
   // Copies the Master Sheet ride tab's layout as an HTML table — Google Sheets keeps its
   // colours and merged cells — with the same grid as plain text for other apps.
   const copyForSheets = async () => {
     try {
-      // Same rows the fun-fact panel shows: answers from people in this layout's roster.
-      const q = funFactQuestions.find((x) => x.id === data.funFactQuestionId);
-      const funFact = q ? { question: q.label, rows: (funFactAnswers[q.id] ?? []).map((r) => ({ name: r.name, text: r.text })) } : undefined;
-      // The TOTAL panel as shown: names, without people moved out of a column in both directions.
-      const nameOf = (id: string) => effRiders[id]?.name ?? "?";
-      const live = (cs: { id: string; state: string; partial: boolean }[]) => cs.filter((c) => !(c.state === "removed" && !c.partial)).map((c) => nameOf(c.id));
-      const guestNames = (col: CarpoolGuest["col"]) => data.guests.filter((g) => g.col === col).map((g) => g.name);
-      const people = {
-        drivers: [...live(diff.drivers), ...guestNames("drivers")],
-        offCampus: [...live(diff.grouped.offCampus), ...guestNames("offCampus")],
-        onCampus: [
-          ...diff.grouped.onCampus.map((g) => ({ keyword: g.keyword, names: live(g.chips) })).filter((g) => g.names.length),
-          ...(guestNames("onCampus").length ? [{ keyword: "", names: guestNames("onCampus") }] : []), // write-ins: no heading, like on screen
-        ],
-        diy: [...live(diff.diy), ...guestNames("diy")],
-      };
-      const { html, tsv, tracker } = buildRidesSheet(data, { nameOf, people, funFact, highlight: offCampusIds });
+      const input = sheetInput();
+      const { html, tsv, tracker } = buildRidesSheet(data, input);
       if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
         await navigator.clipboard.write([new ClipboardItem({
           "text/html": new Blob([html], { type: "text/html" }),
@@ -311,19 +317,21 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
         await navigator.clipboard.writeText(tsv);
       }
       const copied = `Copied — click cell A1 of a blank tab in Google Sheets and paste (colours, merges and formulas come with it)${tracker === "A67" ? "" : ` · this layout is bigger than the template, so the discrepancy tracker is at ${tracker} instead of A67`}`
-        + (funFact ? "" : funFactQuestions.length ? " · no fun-fact question picked, so Q/R are empty — pick one in the yellow panel and copy again" : "");
+        + (input.funFact ? "" : funFactQuestions.length ? " · no fun-fact question picked, so Q/R are empty — pick one in the yellow panel and copy again" : "");
       // Copying also saves (keeping the layout's published state), so what was pasted —
       // including the picked question — is what's stored.
       save(published, copied);
     } catch { setMsg("Couldn't copy — your browser blocked clipboard access"); }
   };
 
-  /** Save the layout; `published` true publishes it. `doneMsg` replaces the usual message. */
+  /** Save the layout; `published` true publishes it (and writes its tab in the team's carpool
+   * sheet, when one is linked). `doneMsg` replaces the usual message. */
   const save = (publish: boolean, doneMsg?: string) => start(async () => {
-    const r = await saveCarpool(carpoolId, eventId, name, data, publish);
+    const r = await saveCarpool(carpoolId, eventId, name, data, publish, publish ? buildRidesGrid(data, sheetInput()) : undefined);
     if ("error" in r) { setMsg(doneMsg ? `${doneMsg} — but saving failed: ${r.error}` : r.error); return; }
     setPublished(publish);
-    setMsg(doneMsg ? `${doneMsg} · saved` : publish ? "Saved & published to members" : "Saved draft");
+    const sheet = !r.sheet ? "" : "error" in r.sheet ? ` · couldn't update the carpool sheet: ${r.sheet.error}` : ` · wrote “${r.sheet.tab}” in the carpool sheet`;
+    setMsg((doneMsg ? `${doneMsg} · saved` : publish ? "Saved & published to members" : "Saved draft") + sheet);
     // First save of a brand-new layout: open it by id (and refresh the tabs).
     if (!carpoolId) router.replace(`/admin/carpool?event=${eventId}&carpool=${r.id}`);
     else router.refresh();
