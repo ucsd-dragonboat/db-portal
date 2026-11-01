@@ -58,7 +58,12 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
   // The layout's colour scheme (the Master Sheet's unless the builder changed some).
   const C = { ...sheetColors(d.colors), white: '#ffffff' }
   const custom = new Set(Object.values(d.colors ?? {}))
-  const N = Math.max(MIN_CAR_COLS, ...[d.going, d.back].flatMap((x) => [x.onCampus.length, x.offCampus.length]))
+  // Like the portal's car grid: a car with more than 4 passenger seats takes 2 columns,
+  // its driver cell merged across both and passengers filling left → right, row by row.
+  const seatsOf = (c: Car) => Math.max(c.capacity - 1, c.passengerIds.length)
+  const widthOf = (c: Car) => (seatsOf(c) > 4 ? 2 : 1)
+  const bandCols = (cars: Car[]) => cars.reduce((n, c) => n + widthOf(c), 0)
+  const N = Math.max(MIN_CAR_COLS, ...[d.going, d.back].flatMap((x) => [bandCols(x.onCampus), bandCols(x.offCampus)]))
   const SEP = N + 1, T = N + 2, SEP2 = N + 6, Q = N + 7
   const lastCar = N // column of the last car (J by default)
   const grid: SheetGrid = []
@@ -83,17 +88,24 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
       const list: Car[] = dir[which]
       const driverRow = bar + 1
       set(driverRow, 0, { v: 'Driver', bg: C.driver })
-      for (let i = 0; i < N; i++) set(driverRow, 1 + i, list[i] ? { v: nameOf(list[i].driverId), bg: C.driver, bold: true } : { bg: C.driver })
-      const rows = Math.max(MIN_PASSENGER_ROWS, ...list.map((c) => c.passengerIds.length))
-      for (let p = 0; p < rows; p++) {
-        for (let i = 0; i < N; i++) {
-          const id = list[i]?.passengerIds[p]
-          set(driverRow + 1 + p, 1 + i, id ? { v: nameOf(id), bg: which === 'onCampus' && highlight.has(id) ? C.highlight : C.white } : { bg: C.white })
-        }
-      }
-      // Car comments ("6AM Time Trial", "LEAVE ASAP") on one row under the passengers.
+      const rows = Math.max(MIN_PASSENGER_ROWS, ...list.map((c) => Math.ceil(seatsOf(c) / widthOf(c))))
       const commentRow = driverRow + 1 + rows
-      for (let i = 0; i < N; i++) set(commentRow, 1 + i, { v: list[i]?.comment ?? '', bg: C.white, bold: true })
+      // The empty grid first (peach driver row, white seats, comment row), then each car on top.
+      for (let i = 0; i < N; i++) {
+        set(driverRow, 1 + i, { bg: C.driver })
+        for (let p = 0; p < rows; p++) set(driverRow + 1 + p, 1 + i, { bg: C.white })
+        set(commentRow, 1 + i, { v: '', bg: C.white, bold: true })
+      }
+      let col = 1
+      for (const car of list) {
+        const w = widthOf(car)
+        set(driverRow, col, { v: nameOf(car.driverId), bg: C.driver, bold: true, ...(w > 1 ? { colspan: w } : {}) })
+        car.passengerIds.forEach((id, k) => set(driverRow + 1 + Math.floor(k / w), col + (k % w),
+          { v: nameOf(id), bg: which === 'onCampus' && highlight.has(id) ? C.highlight : C.white }))
+        // Car comments ("6AM Time Trial", "LEAVE ASAP") on one row under the passengers.
+        set(commentRow, col, { v: car.comment ?? '', bg: C.white, bold: true, ...(w > 1 ? { colspan: w } : {}) })
+        col += w
+      }
       nameBlocks.push(range(driverRow, 1, commentRow - 1, lastCar))
       return commentRow
     }
