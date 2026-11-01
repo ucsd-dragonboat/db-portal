@@ -126,15 +126,31 @@ describe('buildRidesGrid: the Master Sheet template, cell for cell', () => {
 })
 
 describe('growing the template', () => {
-  it('a car with 6 passengers adds rows to its band; everything below and the tracker shift', () => {
+  it('a car with more than 4 seats takes 2 columns like the portal — the band keeps 4 rows', () => {
     const d = sample()
-    d.going.onCampus = [car('d1', ['a', 'b', 'c', 'd', 'e', 'f'])]
+    d.going.onCampus = [car('d1', ['a', 'b', 'c', 'd', 'e', 'f'], { capacity: 8, comment: 'van' }), car('d2', ['g'])]
     const g2 = buildRidesGrid(d, { nameOf, people })
-    expect(merges(g2)).toContain('A5:A12') // 6 passengers + comment + OFF CAMPUS bar
-    expect(cell(g2, 'B12')).toMatchObject({ v: 'OFF CAMPUS' })
-    expect(cell(g2, 'J24')?.v).toBe('=COUNTA(B4:J10,B13:J17,B20:J23)')
-    expect(trackerCell(g2)).toBe('A69')
-    expect(cell(g2, 'L4')?.v).toBe('=COUNTA(L6:L68)')
+    expect(cell(g2, 'B4')).toMatchObject({ v: 'Jack (Seventh)', colspan: 2 }) // driver merged B4:C4
+    expect(merges(g2)).toEqual(expect.arrayContaining(['B4:C4', 'B9:C9', 'A5:A10'])) // comment merged; grey block unchanged
+    expect([5, 6, 7].map((r) => [cell(g2, `B${r}`)?.v, cell(g2, `C${r}`)?.v])).toEqual([['a', 'b'], ['c', 'd'], ['e', 'f']])
+    expect(cell(g2, 'D4')?.v).toBe('Kenneth') // next car starts after both columns
+    expect(cell(g2, 'D5')?.v).toBe('g')
+    expect(cell(g2, 'B10')).toMatchObject({ v: 'OFF CAMPUS' }) // nothing below moved
+    expect(trackerCell(g2)).toBe('A67')
+  })
+  it('a 9-passenger car needs 5 rows (ceil 9 / 2), growing just that band', () => {
+    const d = sample()
+    d.going.onCampus = [car('d1', ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'], { capacity: 10 })]
+    const g2 = buildRidesGrid(d, { nameOf, people })
+    expect(merges(g2)).toContain('A5:A11')
+    expect(cell(g2, 'B9')?.v).toBe('i')
+    expect(trackerCell(g2)).toBe('A68')
+  })
+  it('wide cars count 2 columns toward widening the grid', () => {
+    const d = upgradeCarpoolData({ v: 2 }, {})
+    d.going.onCampus = Array.from({ length: 5 }, (_, i) => car(`w${i}`, [], { capacity: 7 })) // 5 × 2 = 10 columns
+    const g3 = buildRidesGrid(d, { nameOf, people })
+    expect(merges(g3)).toEqual(expect.arrayContaining(['B3:K3', 'J4:K4']))
   })
   it('more than 9 cars widens the car grid; TOTAL and the banner move right', () => {
     const d = upgradeCarpoolData({ v: 2 }, {})
