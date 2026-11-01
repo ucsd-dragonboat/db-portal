@@ -138,6 +138,19 @@ export async function getSheetTabs(token: string, spreadsheetId: string): Promis
   return (data.sheets ?? []).map((s: { properties: { sheetId: number; title: string } }) => s.properties);
 }
 
+/** Tabs with their grid size (what gridToSheetRequests needs to know whether to grow one). */
+export async function getSheetTabSizes(token: string, spreadsheetId: string): Promise<{ sheetId: number; title: string; rowCount: number; columnCount: number }[]> {
+  const data = await sheetsFetch(token, `${SHEETS_BASE}/${spreadsheetId}?fields=sheets.properties(sheetId,title,gridProperties(rowCount,columnCount))`);
+  return (data.sheets ?? []).map((s: { properties: { sheetId: number; title: string; gridProperties?: { rowCount?: number; columnCount?: number } } }) => ({
+    sheetId: s.properties.sheetId, title: s.properties.title,
+    rowCount: s.properties.gridProperties?.rowCount ?? 1000, columnCount: s.properties.gridProperties?.columnCount ?? 26,
+  }));
+}
+
+export async function batchUpdate(token: string, spreadsheetId: string, requests: object[]) {
+  await sheetsFetch(token, `${SHEETS_BASE}/${spreadsheetId}:batchUpdate`, { method: "POST", body: JSON.stringify({ requests }) });
+}
+
 export async function addTab(token: string, spreadsheetId: string, title: string): Promise<{ sheetId: number; title: string }> {
   const tryAdd = async (t: string) => {
     const data = await sheetsFetch(token, `${SHEETS_BASE}/${spreadsheetId}:batchUpdate`, {

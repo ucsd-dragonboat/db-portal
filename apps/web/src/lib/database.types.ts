@@ -362,6 +362,16 @@ export type CarpoolRow = {
   data: Json;
   published: boolean;
   updated_at: string;
+  /** Where publishing wrote this layout's tab (migration 0044). */
+  sheet_spreadsheet_id: string | null;
+  sheet_tab_id: number | null;
+};
+
+export type CarpoolSheetLink = {
+  org_id: string;
+  spreadsheet_id: string;
+  linked_by: string | null;
+  created_at: string;
 };
 
 export type Database = {
@@ -428,6 +438,12 @@ export type Database = {
         Relationships: [
           { foreignKeyName: "user_calendar_tokens_user_id_fkey"; columns: ["user_id"]; isOneToOne: true; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ];
+      };
+      carpool_sheet_links: {
+        Row: Row<CarpoolSheetLink>;
+        Insert: Insert<CarpoolSheetLink, "linked_by" | "created_at">;
+        Update: Partial<CarpoolSheetLink>;
+        Relationships: [];
       };
       user_google_tokens: {
         Row: Row<UserGoogleToken>;
@@ -521,7 +537,7 @@ export type Database = {
       };
       carpools: {
         Row: Row<CarpoolRow>;
-        Insert: Insert<CarpoolRow, "id" | "name" | "sort_order" | "created_at" | "data" | "published" | "updated_at">;
+        Insert: Insert<CarpoolRow, "id" | "name" | "sort_order" | "created_at" | "data" | "published" | "updated_at" | "sheet_spreadsheet_id" | "sheet_tab_id">;
         Update: Partial<CarpoolRow>;
         Relationships: [
           { foreignKeyName: "carpools_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },

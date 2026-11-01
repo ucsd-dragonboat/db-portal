@@ -10,6 +10,9 @@ import {
 import { requireAdmin } from "@/lib/session";
 import { createClient } from "@/lib/supabase/server";
 import { recordCarpoolTrips } from "@/lib/carpool-trips";
+import { writeCarpoolTab, type SheetWrite } from "@/lib/carpool-sheet";
+import { getAccessToken, getSheetTabs, parseSheetUrl, SheetApiError } from "@/lib/google-sheets";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { driveMatrixWithSource, routeDrive } from "@/lib/routing";
 import { loadDayRiders } from "@/lib/day-riders";
 import { startRun, updateRun } from "@/lib/carpool-runs";
@@ -26,8 +29,10 @@ async function revalidateDay(supabase: Supabase, eventId: string) {
 }
 
 /** Save one layout. `carpoolId` null creates it. A rider can only be in one layout
- * per day, so the save is refused if this layout claims someone a sibling already has. */
-export async function saveCarpool(carpoolId: string | null, eventId: string, name: string, data: CarpoolDataV2, published: boolean): Promise<{ ok: true; id: string } | { error: string }> {
+ * per day, so the save is refused if this layout claims someone a sibling already has.
+ * Publishing with `sheetGrid` (the Copy for Sheets grid) also writes the layout's tab in the
+ * team's carpool sheet, when one is linked; `sheet` reports how that went. */
+export async function saveCarpool(carpoolId: string | null, eventId: string, name: string, data: CarpoolDataV2, published: boolean, sheetGrid?: unknown): Promise<{ ok: true; id: string; sheet?: SheetWrite | null } | { error: string }> {
   const { org } = await requireAdmin();
   const supabase = await createClient();
   // Normalize-as-validation: whatever the client sent becomes a well-formed v2 sheet.
@@ -66,8 +71,10 @@ export async function saveCarpool(carpoolId: string | null, eventId: string, nam
   // it calls rate-limited routing servers (see lib/routing.ts).
   const savedId = id;
   if (published) after(() => recordCarpoolTrips(org.id, eventId, savedId, clean));
+  // Demo sandboxes never link Google, so there's no sheet to write.
+  const sheet = published && sheetGrid && !org.is_demo ? await writeCarpoolTab(org.id, savedId, sheetGrid) : undefined;
   await revalidateDay(supabase, eventId);
-  return { ok: true, id: savedId };
+  return { ok: true, id: savedId, sheet };
 }
 
 /** "+ New layout" on a day: an empty, unpublished layout, opened straight away. */
@@ -167,4 +174,31 @@ export async function optimizeLayout(carpoolId: string | null, eventId: string, 
     + (routed ? ` · drive times via ${routed.provider}` : " · routing unavailable, used straight-line estimates");
   await updateRun(supabase, runId, { status: "done", detail: message.split(" · ")[0], provider: routed?.provider ?? null, carpoolId });
   return { ok: true, going, seatedAt, provider: routed?.provider ?? null, moved, unassigned: res.unassigned.length, message };
+}
+
+/** Link the team's carpool spreadsheet (the default for every layout): publishing a layout
+ * then writes its rides tab there, with this admin's Google connection. */
+export async function linkCarpoolSheet(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
+  const { org, userId } = await requireAdmin();
+  if (org.is_demo) return { error: "Demo teams can't link Google Sheets." };
+  const parsed = parseSheetUrl(String(fd.get("url") ?? ""));
+  if (!parsed) return { error: "That doesn't look like a Google Sheet URL." };
+  try {
+    await getSheetTabs(await getAccessToken(userId), parsed.spreadsheetId); // can this admin open it?
+  } catch (e) {
+    if (e instanceof Error && e.message === "google_unlinked") return { error: "Your Google connection expired — reconnect and try again." };
+    if (e instanceof SheetApiError && (e.status === 403 || e.status === 404)) return { error: "Couldn't open that sheet with your Google account — check the link and sharing." };
+    return { error: "Couldn't reach Google Sheets — try again." };
+  }
+  const { error } = await createAdminClient().from("carpool_sheet_links")
+    .upsert({ org_id: org.id, spreadsheet_id: parsed.spreadsheetId, linked_by: userId }, { onConflict: "org_id" });
+  if (error) return { error: error.message.includes("carpool_sheet_links") ? "Run migration 0044_carpool_sheet.sql first" : error.message };
+  revalidatePath("/admin/carpool");
+  return {};
+}
+
+export async function unlinkCarpoolSheet(): Promise<void> {
+  const { org } = await requireAdmin();
+  await createAdminClient().from("carpool_sheet_links").delete().eq("org_id", org.id);
+  revalidatePath("/admin/carpool");
 }

@@ -36,7 +36,8 @@ export type RidesSheetInput = {
   highlight?: Set<string>
 }
 
-export type SheetCell = { v?: string; bg?: string; fg?: string; bold?: boolean; italic?: boolean; align?: 'left' | 'center' | 'right'; size?: number; colspan?: number; rowspan?: number }
+/** `f`: `v` is one of the template's own formulas (anything else is written as text). */
+export type SheetCell = { v?: string; f?: true; bg?: string; fg?: string; bold?: boolean; italic?: boolean; align?: 'left' | 'center' | 'right'; size?: number; colspan?: number; rowspan?: number }
 /** null = covered by a merged cell (to its left or above). */
 export type SheetGrid = (SheetCell | null)[][]
 
@@ -134,7 +135,7 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
     const countRow = diyBar + diyRows + 1
     set(diyBar + 1, 0, { bg: C.filler, rowspan: diyRows + 1 })
     for (let i = 0; i < N - 1; i++) set(countRow, 1 + i, { bg: C.white })
-    set(countRow, lastCar, { v: `=COUNTA(${nameBlocks.join(',')})`, bg: C.white, align: 'right' })
+    set(countRow, lastCar, { f: true, v: `=COUNTA(${nameBlocks.join(',')})`, bg: C.white, align: 'right' })
     trackerRanges.push(...nameBlocks.map((b) => `FLATTEN(${b})`))
     r = countRow + 1
   }
@@ -169,7 +170,7 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
   const countRow = goingTop + 1
   set(goingTop, T, { v: 'TOTAL', bg: C.total, align: 'center', colspan: 2 })
   set(goingTop, T + 2, { bg: C.total })
-  set(goingTop, T + 3, { v: `=${[0, 1, 2, 3].map((k) => a1(countRow, T + k)).join('+')}`, bg: C.total, align: 'center' }) // O3 =L4+M4+N4+O4
+  set(goingTop, T + 3, { f: true, v: `=${[0, 1, 2, 3].map((k) => a1(countRow, T + k)).join('+')}`, bg: C.total, align: 'center' }) // O3 =L4+M4+N4+O4
   set(countRow + 1, T, { v: 'DRIVERS', bg: C.drivers })
   set(countRow + 1, T + 1, { v: 'NEED RIDE', bg: C.needRide })
   set(countRow + 1, T + 2, { v: 'NEED RIDE', bg: C.needRide })
@@ -193,7 +194,7 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
       if (start >= 0) runs.push(range(start, l.col, row - 1, l.col))
       start = -1
     }
-    set(countRow, l.col, { v: `=COUNTA(${runs.join(',')})`, bg: C.count, align: 'right' }) // L4 =COUNTA(L6:L66) …
+    set(countRow, l.col, { f: true, v: `=COUNTA(${runs.join(',')})`, bg: C.count, align: 'right' }) // L4 =COUNTA(L6:L66) …
     trackerRanges.push(...runs)
   }
 
@@ -210,11 +211,11 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
   // How often each name appears across the car grids and the TOTAL columns. Everyone
   // should be there 3 times (GOING, BACK, TOTAL); Discrepancy lists anyone who isn't.
   const tr = bottom + 1, first = tr + 2 // header row (0-based), first data row (1-based)
-  set(tr, 0, { v: `=QUERY(ARRAYFORMULA(TRIM({${trackerRanges.join(';')}})),"select Col1, count(Col1) where Col1 is not null and Col1 != '' group by Col1 label Col1 'Name', count(Col1) 'Count'",0)`, bold: true })
+  set(tr, 0, { f: true, v: `=QUERY(ARRAYFORMULA(TRIM({${trackerRanges.join(';')}})),"select Col1, count(Col1) where Col1 is not null and Col1 != '' group by Col1 label Col1 'Name', count(Col1) 'Count'",0)`, bold: true })
   set(tr, 2, { v: 'Total', bold: true })
-  set(tr + 1, 2, { v: `=SUM(B${first}:B)/3` })
+  set(tr + 1, 2, { f: true, v: `=SUM(B${first}:B)/3` })
   set(tr, 4, { v: 'Discrepancy', bold: true })
-  set(tr + 1, 4, { v: `=IFERROR(FILTER(A${first}:A, B${first}:B<>3), "")` })
+  set(tr + 1, 4, { f: true, v: `=IFERROR(FILTER(A${first}:A, B${first}:B<>3), "")` })
 
   // Blank white inside the template; the tracker's rows (and answers running past them)
   // get unformatted blanks so its formulas can spill.
@@ -258,4 +259,55 @@ export function gridToTsv(grid: SheetGrid): string {
 export function buildRidesSheet(d: CarpoolDataV2, input: RidesSheetInput): { html: string; tsv: string; tracker: string } {
   const grid = buildRidesGrid(d, input)
   return { html: gridToHtml(grid), tsv: gridToTsv(grid), tracker: trackerCell(grid) }
+}
+
+/** '#rrggbb' (or '#rgb') → a Sheets API colour (0–1 channels). */
+function apiColor(hex: string) {
+  const h = hex.replace('#', '')
+  const full = h.length === 3 ? [...h].map((x) => x + x).join('') : h
+  const n = (k: number) => parseInt(full.slice(k, k + 2), 16) / 255
+  return { red: n(0), green: n(2), blue: n(4) }
+}
+
+/** Sheets API batchUpdate requests that turn tab `sheetId` into the grid, the same as
+ * pasting the Copy for Sheets table into A1 of a blank tab: wipe the tab (values,
+ * formats, merges), grow it when the grid is bigger, then write cells and merges.
+ * Only `f` cells become formulas — names and answers stay text even if they start with "=". */
+export function gridToSheetRequests(grid: SheetGrid, sheet: { sheetId: number; rowCount: number; columnCount: number }): object[] {
+  const { sheetId } = sheet
+  const cols = Math.max(0, ...grid.map((r) => r.length))
+  const requests: object[] = [
+    { unmergeCells: { range: { sheetId } } },
+    { updateCells: { range: { sheetId }, fields: 'userEnteredValue,userEnteredFormat' } },
+  ]
+  if (grid.length > sheet.rowCount || cols > sheet.columnCount) {
+    requests.push({ updateSheetProperties: {
+      properties: { sheetId, gridProperties: { rowCount: Math.max(sheet.rowCount, grid.length), columnCount: Math.max(sheet.columnCount, cols) } },
+      fields: 'gridProperties(rowCount,columnCount)',
+    } })
+  }
+  const merges: object[] = []
+  const rows = grid.map((row, r) => ({
+    values: row.map((c, k) => {
+      if (!c) return {}
+      if ((c.colspan ?? 1) > 1 || (c.rowspan ?? 1) > 1) {
+        merges.push({ mergeCells: { mergeType: 'MERGE_ALL', range: { sheetId, startRowIndex: r, endRowIndex: r + (c.rowspan ?? 1), startColumnIndex: k, endColumnIndex: k + (c.colspan ?? 1) } } })
+      }
+      const v = flat(c.v ?? '')
+      const textFormat = {
+        ...(c.bold && { bold: true }), ...(c.italic && { italic: true }), ...(c.size && { fontSize: c.size }),
+        ...(c.fg && { foregroundColorStyle: { rgbColor: apiColor(c.fg) } }),
+      }
+      return {
+        ...(v && { userEnteredValue: c.f ? { formulaValue: v } : { stringValue: v } }),
+        userEnteredFormat: {
+          ...(c.bg && { backgroundColorStyle: { rgbColor: apiColor(c.bg) } }),
+          ...(c.align && { horizontalAlignment: c.align.toUpperCase() }),
+          ...(Object.keys(textFormat).length && { textFormat }),
+        },
+      }
+    }),
+  }))
+  requests.push({ updateCells: { start: { sheetId, rowIndex: 0, columnIndex: 0 }, rows, fields: 'userEnteredValue,userEnteredFormat' } })
+  return [...requests, ...merges]
 }

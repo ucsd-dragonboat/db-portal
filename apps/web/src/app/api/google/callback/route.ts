@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   try { stored = JSON.parse(request.cookies.get("g_oauth")?.value ?? "{}"); } catch {}
   const next = safeNext(stored.next);
   const fail = () => {
-    const res = NextResponse.redirect(`${origin}${next}?google=error`);
+    const res = NextResponse.redirect(`${origin}${next}${next.includes("?") ? "&" : "?"}google=error`);
     res.cookies.delete("g_oauth");
     return res;
   };
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     accessToken: tok.access_token,
     accessExpiresAt: new Date(Date.now() + (Number(tok.expires_in ?? 3600) - 60) * 1000).toISOString(),
   });
-  const res = NextResponse.redirect(`${origin}${next}?google=connected`);
+  const res = NextResponse.redirect(`${origin}${next}${next.includes("?") ? "&" : "?"}google=connected`);
   res.cookies.delete("g_oauth");
   return res;
 }
