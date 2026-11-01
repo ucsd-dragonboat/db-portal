@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { a1, buildRidesGrid, buildRidesSheet, gridToSheetRequests, gridToTsv, trackerCell, type RidesPeople, type SheetCell, type SheetGrid } from './rides-sheet'
+import { a1, buildRidesGrid, buildRidesSheet, gridToHtml, gridToSheetRequests, gridToTsv, trackerCell, type RidesPeople, type SheetCell, type SheetGrid } from './rides-sheet'
 import { upgradeCarpoolData } from './sheet'
 import type { Car, DirSet } from './types'
 
@@ -137,6 +137,21 @@ describe('growing the template', () => {
     expect(cell(g2, 'D5')?.v).toBe('g')
     expect(cell(g2, 'B10')).toMatchObject({ v: 'OFF CAMPUS' }) // nothing below moved
     expect(trackerCell(g2)).toBe('A67')
+  })
+  it('a 2-column car gets a thick black square like the portal, in the paste and the API write', () => {
+    const d = sample()
+    d.going.onCampus = [car('d1', ['a', 'b', 'c', 'd', 'e', 'f'], { capacity: 8 }), car('d2', ['g'])]
+    const g2 = buildRidesGrid(d, { nameOf, people })
+    expect(cell(g2, 'B4')?.box).toBe('tlr') // merged driver cell: top, both sides
+    expect(cell(g2, 'B5')?.box).toBe('l')
+    expect(cell(g2, 'C8')?.box).toBe('r') // empty seat row still inside the square
+    expect(cell(g2, 'B9')?.box).toBe('blr') // merged comment cell
+    expect(cell(g2, 'D4')?.box).toBeUndefined() // a normal car: no square
+    expect(gridToHtml(g2)).toContain('border-top:2px solid #000000;border-right:2px solid #000000;border-left:2px solid #000000')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const borders = (gridToSheetRequests(g2, { sheetId: 3, rowCount: 1000, columnCount: 26 }) as any[]).filter((r) => r.updateBorders)
+    expect(borders).toHaveLength(10) // driver + 4 seat rows × 2 + comment
+    expect(borders[0].updateBorders).toMatchObject({ range: { sheetId: 3, startRowIndex: 3, endRowIndex: 4, startColumnIndex: 1, endColumnIndex: 3 }, top: { style: 'SOLID_MEDIUM' } })
   })
   it('a 9-passenger car needs 5 rows (ceil 9 / 2), growing just that band', () => {
     const d = sample()

@@ -36,8 +36,9 @@ export type RidesSheetInput = {
   highlight?: Set<string>
 }
 
-/** `f`: `v` is one of the template's own formulas (anything else is written as text). */
-export type SheetCell = { v?: string; f?: true; bg?: string; fg?: string; bold?: boolean; italic?: boolean; align?: 'left' | 'center' | 'right'; size?: number; colspan?: number; rowspan?: number }
+/** `f`: `v` is one of the template's own formulas (anything else is written as text).
+ * `box`: which of the cell's edges get the thick black border ('t', 'r', 'b', 'l'). */
+export type SheetCell = { v?: string; f?: true; box?: string; bg?: string; fg?: string; bold?: boolean; italic?: boolean; align?: 'left' | 'center' | 'right'; size?: number; colspan?: number; rowspan?: number }
 /** null = covered by a merged cell (to its left or above). */
 export type SheetGrid = (SheetCell | null)[][]
 
@@ -105,6 +106,16 @@ export function buildRidesGrid(d: CarpoolDataV2, { nameOf, people, funFact, high
           { v: nameOf(id), bg: which === 'onCampus' && highlight.has(id) ? C.highlight : C.white }))
         // Car comments ("6AM Time Trial", "LEAVE ASAP") on one row under the passengers.
         set(commentRow, col, { v: car.comment ?? '', bg: C.white, bold: true, ...(w > 1 ? { colspan: w } : {}) })
+        // A 2-column car gets the portal's thick black square, driver row through comment row.
+        if (w > 1) {
+          for (let row = driverRow; row <= commentRow; row++) {
+            for (let k = 0; k < w; k++) {
+              const c = grid[row][col + k]
+              if (!c) continue // covered by the merged driver/comment cell
+              c.box = (row === driverRow ? 't' : '') + (row === commentRow ? 'b' : '') + (k === 0 ? 'l' : '') + (k + (c.colspan ?? 1) === w ? 'r' : '')
+            }
+          }
+        }
         col += w
       }
       nameBlocks.push(range(driverRow, 1, commentRow - 1, lastCar))
@@ -239,11 +250,14 @@ export function trackerCell(grid: SheetGrid): string {
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const flat = (s: string) => s.replace(/[\t\r\n]+/g, ' ').trim()
 
+const BOX_SIDES = [['t', 'top'], ['r', 'right'], ['b', 'bottom'], ['l', 'left']] as const
+
 export function gridToHtml(grid: SheetGrid): string {
   const td = (c: SheetCell) => {
     const style = [
       c.bg && `background-color:${c.bg}`, c.fg && `color:${c.fg}`, c.bold && 'font-weight:bold', c.italic && 'font-style:italic',
       c.align && `text-align:${c.align}`, c.size && `font-size:${c.size}pt`, 'border:1px solid #e2e2e2', 'padding:2px 3px', 'white-space:nowrap',
+      ...BOX_SIDES.filter(([k]) => c.box?.includes(k)).map(([, side]) => `border-${side}:2px solid #000000`),
     ].filter(Boolean).join(';')
     return `<td${c.colspan && c.colspan > 1 ? ` colspan="${c.colspan}"` : ''}${c.rowspan && c.rowspan > 1 ? ` rowspan="${c.rowspan}"` : ''} style="${style}">${esc(flat(c.v ?? ''))}</td>`
   }
@@ -271,7 +285,8 @@ function apiColor(hex: string) {
 
 /** Sheets API batchUpdate requests that turn tab `sheetId` into the grid, the same as
  * pasting the Copy for Sheets table into A1 of a blank tab: wipe the tab (values,
- * formats, merges), grow it when the grid is bigger, then write cells and merges.
+ * formats, merges), grow it when the grid is bigger, then write cells, merges and the
+ * big cars' borders.
  * Only `f` cells become formulas — names and answers stay text even if they start with "=". */
 export function gridToSheetRequests(grid: SheetGrid, sheet: { sheetId: number; rowCount: number; columnCount: number }): object[] {
   const { sheetId } = sheet
@@ -287,11 +302,19 @@ export function gridToSheetRequests(grid: SheetGrid, sheet: { sheetId: number; r
     } })
   }
   const merges: object[] = []
+  const boxes: object[] = []
   const rows = grid.map((row, r) => ({
     values: row.map((c, k) => {
       if (!c) return {}
       if ((c.colspan ?? 1) > 1 || (c.rowspan ?? 1) > 1) {
         merges.push({ mergeCells: { mergeType: 'MERGE_ALL', range: { sheetId, startRowIndex: r, endRowIndex: r + (c.rowspan ?? 1), startColumnIndex: k, endColumnIndex: k + (c.colspan ?? 1) } } })
+      }
+      if (c.box) {
+        const black = { style: 'SOLID_MEDIUM', colorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } } }
+        boxes.push({ updateBorders: {
+          range: { sheetId, startRowIndex: r, endRowIndex: r + (c.rowspan ?? 1), startColumnIndex: k, endColumnIndex: k + (c.colspan ?? 1) },
+          ...Object.fromEntries(BOX_SIDES.filter(([e]) => c.box!.includes(e)).map(([, side]) => [side, black])),
+        } })
       }
       const v = flat(c.v ?? '')
       const textFormat = {
@@ -309,5 +332,5 @@ export function gridToSheetRequests(grid: SheetGrid, sheet: { sheetId: number; r
     }),
   }))
   requests.push({ updateCells: { start: { sheetId, rowIndex: 0, columnIndex: 0 }, rows, fields: 'userEnteredValue,userEnteredFormat' } })
-  return [...requests, ...merges]
+  return [...requests, ...merges, ...boxes]
 }

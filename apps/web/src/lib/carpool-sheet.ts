@@ -33,6 +33,7 @@ function cleanGrid(grid: unknown): SheetGrid | null {
     return {
       v: s("v"), f: x.f === true ? true : undefined, bg: hex("bg"), fg: hex("fg"), bold: x.bold === true, italic: x.italic === true,
       align, size: n("size", 36), colspan: n("colspan", 60), rowspan: n("rowspan", 400),
+      box: /^[trbl]{1,4}$/.test(s("box") ?? "") ? s("box") : undefined,
     };
   }));
 }
