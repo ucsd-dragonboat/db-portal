@@ -10,11 +10,14 @@ import {
   DIRS, driversIn, matchKeyword, moveCar, spotOf, swapDriver, formChanges, formRole, revertAll, revertChange, ridersIn, roleIn, setRole,
   type CarpoolDataV2, type CarpoolGuest, type Destination, type FormChange, type FormRides, type MatchText, type OsrmRoute, type RideRole, type Rider,
   DEFAULT_SHEET_COLORS, sheetColors, textOn, type SheetColorKey,
+  applySheetImport, guestMatchText, layoutRiders, linkGuest, removeGuest as dropGuest, setGuestCol, setOrigin, type SheetEntry,
 } from "@db/carpool";
 import { optimizeLayout, routeCar, saveCarpool } from "./actions";
 import { ColorPicker, SheetColorsProvider, colorBar } from "./sheet-colors";
 import { CarGrid, DiyRow, parseDrag, type DirKey, type GridHandlers } from "./car-grid";
 import { DiscrepancyTracker, FunFactPanel, NotesPanel, TotalPanel, type DiffChip } from "./side-panels";
+import { GuestsPanel, OriginsPanel, SheetImportButton, type OriginRow } from "./guest-panels";
+import { findOrigin } from "./sheet-import-actions";
 
 const RouteMap = dynamic(() => import("@/components/route-map"), { ssr: false });
 
@@ -24,7 +27,7 @@ const COLORS = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#7c3aed", "#db2777"
 /** Sheets-style rides workspace: GOING/BACK sections of ON/OFF-CAMPUS car columns
  * + DIY, TOTAL roster with campus grouping, fun-fact column, discrepancy tracker.
  * destination === null → Optimize and the route map are disabled. */
-export default function CarpoolBuilder({ eventId, carpoolId, initialName, destination, riders, drivers, needsRide, saved, pickupNames, campusSpots, funFactQuestions, funFactAnswers }: {
+export default function CarpoolBuilder({ eventId, carpoolId, initialName, destination, riders, drivers, needsRide, saved, pickupNames, campusSpots, funFactQuestions, funFactAnswers, sheetImport }: {
   eventId: string; carpoolId: string | null; initialName: string; destination: Destination | null; riders: Record<string, Rider>;
   drivers: { id: string; seats: number }[]; needsRide: string[]; saved: SavedCarpool | null;
   pickupNames: Record<string, string>;
@@ -32,6 +35,8 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   campusSpots: Record<string, string>;
   funFactQuestions: { id: string; label: string }[];
   funFactAnswers: Record<string, { userId: string; name: string; text: string }[]>;
+  /** Response-sheet import (null on demo teams, which don't link Google). */
+  sheetImport: { connected: boolean } | null;
 }) {
   // What the form responses say. Changes to it live on this layout only (data.roles).
   const form = useMemo<FormRides>(() => ({ drivers, needsRide }), [drivers, needsRide]);
@@ -54,15 +59,12 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   const [published, setPublished] = useState(saved?.published ?? false);
   const router = useRouter();
 
-  // Roster members + write-ins, one lookup for every cell/panel.
-  const effRiders = useMemo<Record<string, Rider>>(() => ({
-    ...riders,
-    ...Object.fromEntries(data.guests.map((g) => [g.id, { id: g.id, name: g.name, location: null } as Rider])),
-  }), [riders, data.guests]);
-  const matchText = useMemo<MatchText>(
-    () => Object.fromEntries(Object.values(effRiders).map((r) => [r.id, `${r.name} ${pickupNames[r.id] ?? ""}`])),
-    [effRiders, pickupNames],
-  );
+  // Roster members (with this layout's origin overrides) + guests, one lookup for every cell/panel.
+  const effRiders = useMemo<Record<string, Rider>>(() => layoutRiders(riders, data), [riders, data]);
+  const matchText = useMemo<MatchText>(() => ({
+    ...Object.fromEntries(Object.values(riders).map((r) => [r.id, `${r.name} ${data.origins?.[r.id]?.text ?? pickupNames[r.id] ?? ""}`])),
+    ...guestMatchText(data),
+  }), [riders, data, pickupNames]);
   const [routes, setRoutes] = useState<Record<string, OsrmRoute | null>>({});
   const [msg, setMsg] = useState<string | null>(null);
   // The layout's colours (Master Sheet defaults + its overrides) and the open colour picker.
@@ -160,8 +162,8 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   const roleDrop = (col: CarpoolGuest["col"], payload: string) => {
     const { kind, id, origin } = parseDrag(payload);
     if (kind !== "rider" || !effRiders[id]) return;
-    if (id.startsWith("x:")) { // a write-in just moves to that column
-      setData((s) => ({ ...s, guests: s.guests.map((g) => (g.id === id ? { ...g, col } : g)) }));
+    if (id.startsWith("x:")) { // a guest moves to that column (DRIVERS gives them a car)
+      setData((s) => setGuestCol(s, id, col, matchText));
       return;
     }
     const role: RideRole = col === "drivers" ? "driver" : col === "diy" ? "diy" : "rider";
@@ -189,12 +191,22 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   };
   const addGuest = (col: CarpoolGuest["col"], name: string) =>
     setData((s) => ({ ...s, guests: [...s.guests, { id: `x:${Math.random().toString(36).slice(2, 9)}`, name, col }] }));
-  const removeGuest = (id: string) => setData((s) => ({
-    ...s,
-    guests: s.guests.filter((g) => g.id !== id),
-    going: removeFromDirSet(s.going, id),
-    back: removeFromDirSet(s.back, id),
-  }));
+  const removeGuest = (id: string) => setData((s) => dropGuest(s, id));
+  const linkGuests = (pairs: { guestId: string; memberId: string }[]) => {
+    setData((s) => pairs.reduce((acc, p) => linkGuest(acc, p.guestId, p.memberId, form), s));
+    setMsg(`Linked ${pairs.length === 1 ? `${data.guests.find((g) => g.id === pairs[0].guestId)?.name} → ${riders[pairs[0].memberId]?.name}` : `${pairs.length} guests`} — Save to keep it`);
+  };
+  const importSheet = (r: { entries: SheetEntry[]; notFound: string[]; skipped: number }) => {
+    const res = applySheetImport(data, r.entries, matchText);
+    setData(res.data);
+    setMsg([
+      `Imported: ${res.added} new guest${res.added === 1 ? "" : "s"}, ${res.updated} updated, ${res.removed} removed`,
+      res.linked ? `${res.linked} already linked to members (left alone)` : "",
+      r.notFound.length ? `not found on the map: ${r.notFound.join(", ")} — set them in the Origins panel` : "",
+      r.skipped ? `${r.skipped} not looked up yet (too many at once) — import again for the rest` : "",
+      "Save to keep it",
+    ].filter(Boolean).join(" · "));
+  };
 
   // Real drive times via the server's routing fallback chain — the same optimizer the
   // auto-carpool cron uses. The result replaces GOING in the (unsaved) sheet.
@@ -219,7 +231,7 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
   };
   // Riders in this layout whose pickup spot changed since it was built (never re-seated
   // automatically — the admin decides).
-  const moved = useMemo(() => movedRiders(data, riders), [data, riders]);
+  const moved = useMemo(() => movedRiders(data, effRiders), [data, effRiders]);
 
   // Differences from the form responses, shown as a +/− diff in the TOTAL panel.
   const changes = useMemo(() => formChanges(data, form, new Set(Object.keys(riders))), [data, form, riders]);
@@ -280,6 +292,28 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
     ...diff.grouped.offCampus.filter((c) => !(c.state === "removed" && !c.partial)).map((c) => c.id),
     ...data.guests.filter((g) => g.col === "offCampus").map((g) => g.id),
   ]), [diff, data.guests]);
+
+  // Origins panel: every driver + everyone needing a ride off campus, as this layout has them.
+  const originRows = useMemo<OriginRow[]>(() => {
+    const live = (cs: DiffChip[]) => cs.filter((c) => !(c.state === "removed" && !c.partial)).map((c) => c.id);
+    const member = (id: string, role: OriginRow["role"]): OriginRow => ({
+      id, name: riders[id]?.name ?? "?", role, guest: false,
+      base: { text: pickupNames[id] ?? "", location: riders[id]?.location ?? null }, override: data.origins?.[id] ?? null,
+    });
+    const guest = (g: CarpoolGuest, role: OriginRow["role"]): OriginRow => ({ id: g.id, name: g.name, role, guest: true, base: data.origins?.[g.id] ?? null, override: null });
+    return [
+      ...live(diff.drivers).map((id) => member(id, "Driver")),
+      ...live(diff.grouped.offCampus).map((id) => member(id, "Rider")),
+      ...data.guests.filter((g) => g.col === "drivers").map((g) => guest(g, "Driver")),
+      ...data.guests.filter((g) => g.col === "offCampus").map((g) => guest(g, "Rider")),
+    ];
+  }, [diff, data.guests, data.origins, riders, pickupNames]);
+  const setOriginText = async (id: string, text: string) => {
+    const { location } = await findOrigin(eventId, text).catch(() => ({ location: null }));
+    setData((s) => setOrigin(s, id, { text, location }));
+    setMsg(`${effRiders[id]?.name ?? "?"}: ${location ? "found" : "couldn't find"} “${text}”${location ? "" : " on the map — try a street and city"} · Save to keep it`);
+  };
+  const roster = useMemo(() => Object.values(riders).map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name)), [riders]);
 
   /** What Copy for Sheets (and publishing to the linked sheet) lays out. */
   const sheetInput = () => {
@@ -467,6 +501,13 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
                   placedNote={placedNote} onUnseatDrop={unseatDrop} onRoleDrop={roleDrop} onAddGuest={addGuest} onRemoveGuest={removeGuest} onRevert={revert} />
               </div>
             </div>
+            <div className="ml-3">
+              <GuestsPanel guests={data.guests} origins={data.origins ?? {}} roster={roster} placedNote={placedNote} onLink={linkGuests} onRemove={removeGuest}
+                importButton={sheetImport && (
+                  <SheetImportButton eventId={eventId} connected={sheetImport.connected} known={data.origins ?? {}} onImport={importSheet}
+                    returnTo={`/admin/carpool?event=${eventId}${carpoolId ? `&carpool=${carpoolId}` : ""}`} />
+                )} />
+            </div>
             {destination && (
               <div className="ml-3 w-[480px] shrink-0">
                 <div className="px-1 py-0.5 text-[11px]" style={{ color: "var(--g-grey-600)" }}>Map shows GOING routes.</div>
@@ -475,6 +516,9 @@ export default function CarpoolBuilder({ eventId, carpoolId, initialName, destin
                 </div>
               </div>
             )}
+          </div>
+          <div className="mt-[22px]">
+            <OriginsPanel rows={originRows} onSet={setOriginText} onReset={(id) => setData((s) => setOrigin(s, id, null))} />
           </div>
           {/* bottom row, like the sheet's footer area: discrepancy tracker + fun-fact side by side */}
           <div className="mt-[22px] flex items-start gap-8">

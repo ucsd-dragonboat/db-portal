@@ -21,6 +21,9 @@ import { latestRuns, queuedDays, runLabel } from "@/lib/carpool-runs";
 import type { Metadata } from "next";
 import { dayParts, tabTitle } from "@/lib/tab-title";
 
+// Importing a response sheet looks up to ~40 addresses at Nominatim's 1/s.
+export const maxDuration = 60;
+
 export async function generateMetadata({ searchParams }: { searchParams: Promise<{ event?: string }> }): Promise<Metadata> {
   const { event } = await searchParams;
   if (!event) return { title: "Carpool" };
@@ -212,7 +215,8 @@ export default async function AdminCarpoolPage({ searchParams }: { searchParams:
       <CarpoolBuilder key={current?.id ?? `new:${event.id}`} eventId={event.id} carpoolId={current?.id ?? null} initialName={current?.name ?? "Carpool"}
         destination={event.location_lat != null && event.location_lon != null ? { lat: event.location_lat, lon: event.location_lon, label: event.location_name ?? event.title } : null}
         riders={riders} drivers={drivers} needsRide={needsRide} saved={saved}
-        pickupNames={pickupNames} campusSpots={campusSpots} funFactQuestions={funFactQuestions} funFactAnswers={funFactAnswers} />
+        pickupNames={pickupNames} campusSpots={campusSpots} funFactQuestions={funFactQuestions} funFactAnswers={funFactAnswers}
+        sheetImport={org.is_demo ? null : { connected: !!google }} />
     </div>
   );
 }

@@ -50,7 +50,18 @@ export type GuestCol = 'drivers' | 'offCampus' | 'onCampus' | 'diy'
 
 /** A name typed directly into the TOTAL panel — not a roster member, no location.
  * Ids are namespaced `x:<random>` so they can sit in passengerIds like anyone. */
-export type CarpoolGuest = { id: string; name: string; col: GuestCol }
+export type CarpoolGuest = {
+  id: string
+  name: string
+  col: GuestCol
+  /** Car size including the driver, for a guest who drives (default 5). */
+  seats?: number
+}
+
+/** Where someone starts from in this layout: the text shown, and where it is on the
+ * map (null = couldn't be found). For a guest it's their only location; for a member
+ * it overrides the RSVP's pickup/home for this layout only. */
+export type Origin = { text: string; location: LatLon | null }
 
 /** carpools.data, version 2 — the Sheets-style layout with separate directions.
  * Car ids are namespaced `g:<driverId>` / `b:<driverId>` so map layers stay unique. */
@@ -75,6 +86,11 @@ export type CarpoolDataV2 = {
   roles?: { going?: Record<string, RideRole>; back?: Record<string, RideRole> }
   /** This layout's colour overrides (colors.ts); missing = the Master Sheet's colours. */
   colors?: SheetColors
+  /** Per-person starting points for this layout (guests' locations, members' overrides). */
+  origins?: Record<string, Origin>
+  /** Response-sheet name (normalized) → who it became in this layout: a guest id, or
+   * the member it was linked to — so a re-import updates instead of duplicating. */
+  sheetNames?: Record<string, string>
 }
 
 /** How someone gets there: drives, needs a ride, or gets there themselves. */

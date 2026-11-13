@@ -11,6 +11,7 @@ export type {
   LegacyCarpoolData,
   GuestCol,
   CarpoolGuest,
+  Origin,
   RideRole,
 } from './types'
 export { DEFAULT_CARPOOL_HEADER, DEFAULT_COLLEGE_KEYWORDS } from './types'
@@ -59,3 +60,7 @@ export { a1, buildRidesSheet, buildRidesGrid, gridToHtml, gridToTsv, gridToSheet
 export type { RidesPeople, RidesSheetInput, SheetCell, SheetGrid } from './rides-sheet'
 export { SHEET_COLOR_DEFS, DEFAULT_SHEET_COLORS, cleanSheetColors, sheetColors, textOn } from './colors'
 export type { SheetColorKey, SheetColors } from './colors'
+export { isGuestId, newGuestId, layoutRiders, guestMatchText, guestRiders, setOrigin, setGuestCol, removeGuest, linkGuest, applySheetImport, DEFAULT_GUEST_SEATS } from './guests'
+export type { SheetEntry } from './guests'
+export { parseAttending, detectColumns, parseTimestamp, sheetResponses, suggestMember, matchSpot, sheetNameKey } from './sheet-import'
+export type { SheetColumns, SheetRow } from './sheet-import'
