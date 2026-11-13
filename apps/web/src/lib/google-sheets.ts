@@ -176,3 +176,11 @@ export async function writeGrid(token: string, spreadsheetId: string, title: str
     method: "PUT", body: JSON.stringify({ majorDimension: "ROWS", values }),
   });
 }
+
+/** A tab's cells as shown in the sheet (formatted strings, so a Forms timestamp reads
+ * "11/9/2026 11:55:05"), rows trimmed of trailing blanks by the API. */
+export async function readValues(token: string, spreadsheetId: string, title: string): Promise<string[][]> {
+  const range = encodeURIComponent(`'${title.replace(/'/g, "''")}'`);
+  const data = await sheetsFetch(token, `${SHEETS_BASE}/${spreadsheetId}/values/${range}?valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS`);
+  return ((data.values ?? []) as unknown[][]).map((r) => r.map((c) => String(c ?? "")));
+}

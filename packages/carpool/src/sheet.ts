@@ -2,7 +2,7 @@
 // upgrade, per-direction reconciliation against current RSVPs, placement, the
 // TOTAL-panel campus grouping, and the discrepancy tracker.
 
-import type { Car, CarpoolDataV2, CarpoolGuest, DirSet, LatLon, RideRole } from './types'
+import type { Car, CarpoolDataV2, CarpoolGuest, DirSet, LatLon, Origin, RideRole } from './types'
 import { locationKey } from './geo'
 import { DEFAULT_CARPOOL_HEADER, DEFAULT_COLLEGE_KEYWORDS } from './types'
 import { cleanSheetColors } from './colors'
@@ -11,6 +11,29 @@ const GUEST_COLS = new Set(['drivers', 'offCampus', 'onCampus', 'diy'])
 const isGuest = (x: unknown): x is CarpoolGuest => {
   const g = x as CarpoolGuest
   return !!g && typeof g === 'object' && typeof g.id === 'string' && typeof g.name === 'string' && GUEST_COLS.has(g.col)
+}
+const cleanGuest = (g: CarpoolGuest): CarpoolGuest => ({
+  id: g.id, name: g.name, col: g.col,
+  ...(typeof g.seats === 'number' && g.seats >= 1 ? { seats: Math.min(20, Math.round(g.seats)) } : {}),
+})
+const isLatLon = (x: unknown): x is LatLon => {
+  const l = x as LatLon
+  return !!l && typeof l === 'object' && Number.isFinite(l.lat) && Number.isFinite(l.lon)
+}
+function cleanOrigins(raw: unknown): { origins?: Record<string, Origin> } {
+  if (!raw || typeof raw !== 'object') return {}
+  const out: Record<string, Origin> = {}
+  for (const [id, o] of Object.entries(raw as Record<string, unknown>)) {
+    const v = o as Origin
+    if (!v || typeof v.text !== 'string') continue
+    out[id] = { text: v.text.slice(0, 200), location: isLatLon(v.location) ? { lat: v.location.lat, lon: v.location.lon } : null }
+  }
+  return Object.keys(out).length ? { origins: out } : {}
+}
+function cleanSheetNames(raw: unknown): { sheetNames?: Record<string, string> } {
+  if (!raw || typeof raw !== 'object') return {}
+  const out = Object.fromEntries(Object.entries(raw as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string'))
+  return Object.keys(out).length ? { sheetNames: out } : {}
 }
 
 /** riderId → text the campus keywords match against (name + pickup-location name). */
@@ -88,10 +111,12 @@ export function upgradeCarpoolData(raw: unknown, matchText: MatchText): CarpoolD
       collegeKeywords: Array.isArray(r.collegeKeywords) && r.collegeKeywords.length
         ? r.collegeKeywords.filter((k): k is string => typeof k === 'string')
         : [...DEFAULT_COLLEGE_KEYWORDS],
-      guests: Array.isArray(r.guests) ? r.guests.filter(isGuest) : [],
+      guests: Array.isArray(r.guests) ? r.guests.filter(isGuest).map(cleanGuest) : [],
       going: cleanDir(r.going, 'g'),
       back: cleanDir(r.back, 'b'),
       ...cleanRoles(r.roles),
+      ...cleanOrigins(r.origins),
+      ...cleanSheetNames(r.sheetNames),
       ...(cleanSheetColors(r.colors) ? { colors: cleanSheetColors(r.colors) } : {}),
       ...(r.seatedAt && typeof r.seatedAt === 'object'
         ? { seatedAt: Object.fromEntries(Object.entries(r.seatedAt as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string')) }

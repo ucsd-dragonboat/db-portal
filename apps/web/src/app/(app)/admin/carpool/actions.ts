@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import {
-  layoutMembers, locationKey, movedRiders, optimizeCarpool, ridersIn, seatSnapshot, splitByCampus, upgradeCarpoolData,
+  guestMatchText, guestRiders, layoutMembers, layoutRiders, locationKey, movedRiders, optimizeCarpool, ridersIn, seatSnapshot, splitByCampus, upgradeCarpoolData,
   type CarpoolDataV2, type CostMatrix, type DirSet, type LatLon, type Rider,
 } from "@db/carpool";
 import { requireAdmin } from "@/lib/session";
@@ -40,7 +40,7 @@ export async function saveCarpool(carpoolId: string | null, eventId: string, nam
   const label = name.trim() || "Carpool";
   // Remember where everyone placed is right now, so a later address change shows up
   // in the builder as "moved since this was built".
-  clean.seatedAt = { ...clean.seatedAt, ...seatSnapshot(clean, (await loadDayRiders(supabase, org.id, eventId)).riders) };
+  clean.seatedAt = { ...clean.seatedAt, ...seatSnapshot(clean, layoutRiders((await loadDayRiders(supabase, org.id, eventId)).riders, clean)) };
 
   const { data: siblings, error: sibErr } = await supabase.from("carpools").select("id, name, data, sort_order").eq("event_id", eventId).eq("org_id", org.id);
   if (sibErr) return { error: sibErr.message.includes("sort_order") ? "Run migration 0030_carpool_layouts.sql first" : sibErr.message };
@@ -139,20 +139,26 @@ export async function optimizeLayout(carpoolId: string | null, eventId: string, 
   const { data: siblings } = await supabase.from("carpools").select("id, data").eq("event_id", eventId).eq("org_id", org.id);
   const taken = new Set((siblings ?? []).filter((s) => s.id !== carpoolId).flatMap((s) => [...layoutMembers(upgradeCarpoolData(s.data, {}))]));
 
-  const moved = mode === "moved" ? movedRiders(clean, day.riders) : [];
+  // This layout's view of everyone: origin overrides applied, guests included.
+  const all = layoutRiders(day.riders, clean);
+  const matchText = {
+    ...Object.fromEntries(Object.keys(day.riders).map((id) => [id, clean.origins?.[id] ? `${day.riders[id].name} ${clean.origins[id].text}` : day.matchText[id]])),
+    ...guestMatchText(clean),
+  };
+  const moved = mode === "moved" ? movedRiders(clean, all) : [];
   const movedSet = new Set(moved);
   // Unseat moved passengers from unlocked cars; a driver who moved keeps their car.
   const cars = [...clean.going.onCampus, ...clean.going.offCampus].map((c) =>
     c.locked ? c : { ...c, passengerIds: c.passengerIds.filter((p) => !movedSet.has(p)) });
   const seated = new Set(cars.flatMap((c) => c.passengerIds));
   const pool: Record<string, Rider> = {};
-  for (const c of cars) if (day.riders[c.driverId]) pool[c.driverId] = day.riders[c.driverId];
-  for (const id of seated) if (day.riders[id]) pool[id] = day.riders[id];
+  for (const c of cars) if (all[c.driverId]) pool[c.driverId] = all[c.driverId];
+  for (const id of seated) if (all[id]) pool[id] = all[id];
   const toSeat = mode === "moved"
     ? moved.filter((id) => !cars.some((c) => c.driverId === id))
     // Who needs a ride Going in this layout — the form's answer unless the layout changed it.
-    : ridersIn(clean, "going", day, Object.keys(day.riders)).filter((id) => !seated.has(id) && !clean.going.diy.includes(id) && !taken.has(id));
-  for (const id of toSeat) if (day.riders[id]) pool[id] = day.riders[id];
+    : [...ridersIn(clean, "going", day, Object.keys(day.riders)), ...guestRiders(clean)].filter((id) => !seated.has(id) && !clean.going.diy.includes(id) && !taken.has(id));
+  for (const id of toSeat) if (all[id]) pool[id] = all[id];
 
   const seen = new Set<string>();
   const points: LatLon[] = [];
@@ -166,8 +172,8 @@ export async function optimizeLayout(carpoolId: string | null, eventId: string, 
   const runId = await startRun(supabase, { orgId: org.id, eventId, trigger: "manual" });
   const routed = await driveMatrixWithSource(points, org.id);
   const res = optimizeCarpool(cars, pool, destination, routed?.matrix ?? EMPTY_MATRIX);
-  const going: DirSet = { ...splitByCampus(res.cars, day.matchText, clean.collegeKeywords), diy: clean.going.diy };
-  const seatedAt = { ...clean.seatedAt, ...seatSnapshot({ ...clean, going }, day.riders) };
+  const going: DirSet = { ...splitByCampus(res.cars, matchText, clean.collegeKeywords), diy: clean.going.diy };
+  const seatedAt = { ...clean.seatedAt, ...seatSnapshot({ ...clean, going }, all) };
   const placed = toSeat.filter((id) => res.cars.some((c) => c.passengerIds.includes(id))).length;
   const message = `${mode === "moved" ? `Re-seated ${placed}/${toSeat.length} moved rider${toSeat.length === 1 ? "" : "s"}` : `Seated ${placed}/${toSeat.length} rider${toSeat.length === 1 ? "" : "s"}`}`
     + (res.unassigned.length ? ` · ${res.unassigned.length} couldn't be placed (no address or cars full)` : "")
